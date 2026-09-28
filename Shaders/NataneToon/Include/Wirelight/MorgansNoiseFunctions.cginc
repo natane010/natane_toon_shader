@@ -1,4 +1,9 @@
 // Noise functions for procedural pattern generation
+//
+// The hash/noise functions in this file are adapted from Morgan McGuire's
+// "Noise functions" (https://www.shadertoy.com/view/4dS3Wd),
+// Copyright (c) 2013 Morgan McGuire, BSD 2-Clause License.
+// See THIRD_PARTY_NOTICES.md at the package root for the full notice.
 
 #ifndef MORGANS_NOISE_FUNCTIONS_INCLUDED
 #define MORGANS_NOISE_FUNCTIONS_INCLUDED

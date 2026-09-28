@@ -1,4 +1,9 @@
 // OKLAB color space conversion
+//
+// Conversion matrices from Björn Ottosson, "A perceptual color space for image
+// processing" (https://bottosson.github.io/posts/oklab/), Copyright (c) 2020
+// Björn Ottosson, MIT License (also released into the public domain).
+// See THIRD_PARTY_NOTICES.md at the package root for the full notice.
 // OKLAB is a perceptually uniform color space that provides
 // better hue shifting than RGB or HSV
 
