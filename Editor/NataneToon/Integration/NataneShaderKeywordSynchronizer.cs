@@ -237,6 +237,22 @@ namespace NataneToon.Editor
 
             // Fur (Fur variant only)
             ("_Fur", "_FUR"),
+
+            // Eye Parallax (main shader family)
+            ("_EyeParallax", "_EYE_PARALLAX"),
+
+            // Background variant only
+            ("_EnablePBR", "_PBR"),
+            ("_QuestLite", "_QUEST_LITE"),
+
+            // Natane/Toon Shader Wirelight
+            ("_Wirelight", "_WIRELIGHT"),
+            ("_SpaceSelector", "_USE_VERTEX_COLOR_POS"),
+            ("_CyberScanline", "_CYBER_SCANLINE"),
+            ("_CyberChromaShift", "_CYBER_CHROMA"),
+            ("_CyberGlitch", "_CYBER_GLITCH"),
+            ("_CyberDataStream", "_CYBER_DATASTREAM"),
+            ("_UseWLDistanceFade", "_WL_DISTANCE_FADE"),
         };
 
         // SaveAssets による再インポート→再同期の無限ループを防止

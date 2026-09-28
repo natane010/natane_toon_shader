@@ -27,7 +27,7 @@ namespace NataneToon.Editor
         /// </summary>
         private static readonly string[] ExtraKeywords =
         {
-            "_EYE_PARALLAX",
+            // _EYE_PARALLAX moved into NataneShaderKeywordSynchronizer.KeywordMappings.
         };
 
         // 遅延初期化: static readonly だと AssetDatabase 未準備時に null になる
@@ -104,9 +104,6 @@ namespace NataneToon.Editor
                     }
                 }
 
-                // _EYE_PARALLAX
-                if (material.HasProperty("_EyeParallax") && material.GetFloat("_EyeParallax") >= 0.5f)
-                    usedKeywords.Add("_EYE_PARALLAX");
             }
 
             // 2. AnimationClip スキャン
