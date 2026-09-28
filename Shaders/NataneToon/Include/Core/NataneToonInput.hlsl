@@ -205,6 +205,7 @@ CBUFFER_START(UnityPerMaterial)
     float _MonochromeLighting;
     float _LightMinInfluence;
     float _LightMaxInfluence;
+    float _DirectLightClampMode; // 0 = Legacy normalize-based clamp, 1 = hue-preserving luminance clamp
     float _LightBlend;
     float _HighlightSoftness;
     float _BacklightIntensity;

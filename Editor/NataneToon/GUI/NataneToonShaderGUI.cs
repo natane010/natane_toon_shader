@@ -2124,7 +2124,13 @@ public class NataneToonShaderGUI : ShaderGUI
             DrawSubGroupHeader(L("ライト影響範囲", "Light Influence Range"));
             DrawProperty("_LightMinInfluence", L("ライトの最小影響", "Light Min Influence"));
             DrawProperty("_LightMaxInfluence", L("ライトの最大影響", "Light Max Influence"));
-            DrawHelpToggle("LightInfluenceRange", L("normalize後の輝度値の最小/最大を制御します。最小値は暗くなりすぎを防ぎ、最大値は露出オーバーを防ぎます。", "Controls min/max of luminance after normalize step. Min prevents excessive darkness, max prevents overexposure."), MessageType.Info);
+            DrawHelpToggle("LightInfluenceRange", L("直接光の輝度の最小/最大を制御します。最小値は暗くなりすぎを防ぎ、最大値は露出オーバーを防ぎます。", "Controls min/max luminance of the direct light. Min prevents excessive darkness, max prevents overexposure."), MessageType.Info);
+            DrawProperty("_DirectLightClampMode", L("直接光クランプ方式", "Direct Light Clamp Mode"));
+            DrawHelpToggle("DirectLightClampMode", L(
+                "Legacy: 従来の normalize() ベース。白色光でも輝度が約0.58倍になり、ライトの色によって明るさが変わります。既存マテリアルの見た目を維持する互換モードです。\n" +
+                "HuePreserving: 色相を保ったまま輝度のみをクランプします。白色光は等倍で通り、色付きライトも明るさが揃います。新規マテリアルにはこちらを推奨します。",
+                "Legacy: original normalize()-based clamp. White light comes out at ~0.58x and brightness depends on the light's hue. Compatibility mode that keeps existing materials unchanged.\n" +
+                "HuePreserving: clamps luminance only while keeping the hue. White light passes at 1x and colored lights keep consistent brightness. Recommended for new materials."), MessageType.Info);
 
             EditorGUILayout.Space();
             DrawBlendParameter(

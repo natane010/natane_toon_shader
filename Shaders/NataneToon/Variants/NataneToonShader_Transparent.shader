@@ -225,6 +225,7 @@ Shader "Natane/Toon Shader (Transparent)"
         _MonochromeLighting ("Monochrome Lighting (モノクロライト)", Range(0, 1)) = 0
         _LightMinInfluence ("Light Min Influence", Range(0, 1)) = 0
         _LightMaxInfluence ("Light Max Influence", Range(1, 5)) = 2
+        [Enum(Legacy,0,HuePreserving,1)] _DirectLightClampMode ("Direct Light Clamp Mode", Float) = 0
         _LightBlend ("Light Blend Softness", Range(0, 1)) = 0
         _HighlightSoftness ("Highlight Softness", Range(0, 1)) = 0
         _BacklightIntensity ("Backlight Intensity", Range(0, 2)) = 0

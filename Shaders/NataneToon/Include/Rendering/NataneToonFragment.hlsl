@@ -851,9 +851,22 @@ half4 frag(v2f i) : SV_Target
 
         // Light influence clamping
         half directLum = CALC_LUMINANCE(directResult);
-        directLum = clamp(directLum, _LightMinInfluence, _LightMaxInfluence);
-        half3 directDir = normalize(max(directResult, 0.01));
-        directResult = directDir * directLum;
+        half clampedDirectLum = clamp(directLum, _LightMinInfluence, _LightMaxInfluence);
+        if (_DirectLightClampMode >= 0.5)
+        {
+            // Hue-preserving: rescale so the clamped luminance is reached exactly.
+            // White light stays white at full intensity; colored lights keep consistent brightness.
+            directResult *= clampedDirectLum / max(directLum, 0.0001);
+        }
+        else
+        {
+            // Legacy (default for existing materials): normalize() the color then scale by
+            // luminance. normalize() does not yield unit luminance, so white light comes out
+            // at ~0.58x and brightness depends on the light's hue. Kept because every shipped
+            // preset was tuned against it; new materials should use HuePreserving.
+            half3 directDir = normalize(max(directResult, 0.01));
+            directResult = directDir * clampedDirectLum;
+        }
 
         // ========== STEP 4: Additional Light ==========
         half3 additionalResult = half3(0, 0, 0);
