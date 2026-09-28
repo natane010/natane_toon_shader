@@ -127,7 +127,7 @@ namespace NataneToon.Editor
             keptCount = 0;
         }
 
-        [MenuItem("Tools/Natane/Shader/バリアントストリッピング設定 Variant Stripping Settings", false, 73)]
+        [MenuItem(NataneToolMenuPaths.ShaderVariantStripper, false, 73)]
         public static void ShowSettingsWindow()
         {
             ShaderVariantStripperSettingsWindow.ShowWindow();

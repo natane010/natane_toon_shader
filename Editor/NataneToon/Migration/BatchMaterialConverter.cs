@@ -44,7 +44,7 @@ namespace NataneToon.Editor
             }
         }
 
-        [MenuItem("Tools/Natane/Migration/一括マテリアル変換 Batch Material Converter", false, 53)]
+        [MenuItem(NataneToolMenuPaths.BatchMaterialConverter, false, 53)]
         public static void ShowWindow()
         {
             var window = GetWindow<BatchMaterialConverter>(L("一括マテリアル変換", "Batch Material Converter"));

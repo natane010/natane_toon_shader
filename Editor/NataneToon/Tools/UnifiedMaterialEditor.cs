@@ -87,7 +87,7 @@ namespace NataneToon.Editor
         private const float CompactLayoutWidth = 720f;
         private const float NarrowLayoutWidth = 600f;
 
-        [MenuItem("Tools/Natane/Material/統合マテリアルエディタ Unified Material Editor", false, 12)]
+        [MenuItem(NataneToolMenuPaths.MaterialEditor, false, 12)]
         public static void ShowWindow()
         {
             var window = GetWindow<UnifiedMaterialEditor>(L("統合マテリアルエディタ", "Material Editor"));

@@ -58,13 +58,13 @@ namespace NataneToon.Editor
             // PrewarmShaders(false);
         }
 
-        [MenuItem("Tools/Natane/Shader/シェーダープリウォーム Shader Prewarming/すべてプリウォーム Prewarm All Shaders", false, 72)]
+        [MenuItem("Tools/Natane/シェーダー Shader/シェーダープリウォーム Shader Prewarming/すべてプリウォーム Prewarm All Shaders", false, 72)]
         private static void PrewarmShadersMenu()
         {
             PrewarmShaders(true);
         }
 
-        [MenuItem("Tools/Natane/Shader/シェーダープリウォーム Shader Prewarming/バリアントコレクションをプリウォーム Prewarm Shader Variant Collection", false, 721)]
+        [MenuItem("Tools/Natane/シェーダー Shader/シェーダープリウォーム Shader Prewarming/バリアントコレクションをプリウォーム Prewarm Shader Variant Collection", false, 721)]
         private static void PrewarmShaderVariantCollectionMenu()
         {
             ShaderVariantCollection collection = FindShaderVariantCollection();
@@ -74,7 +74,7 @@ namespace NataneToon.Editor
             }
         }
 
-        [MenuItem("Tools/Natane/Shader/シェーダープリウォーム Shader Prewarming/設定 Settings", false, 722)]
+        [MenuItem(NataneToolMenuPaths.ShaderPrewarming, false, 722)]
         private static void ShowSettings()
         {
             ShaderPrewarmingSettingsWindow.ShowWindow();
