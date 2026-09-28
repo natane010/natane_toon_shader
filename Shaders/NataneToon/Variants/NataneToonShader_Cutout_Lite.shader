@@ -1079,6 +1079,27 @@ CGPROGRAM
             #ifdef _PERSPECTIVE_FLAT
                 float _PerspectiveFlatAmount;
             #endif
+            #ifdef _OUTLINE_HAND_DRAWN
+                sampler2D _OutlineNoiseTex;
+                float _OutlineNoiseTiling;
+                float _OutlineWidthVariation;
+                float _OutlineJitterAmount;
+
+                float GetHandDrawnWidthFactor(float2 uv)
+                {
+                    float2 noiseUV = uv * _OutlineNoiseTiling;
+                    float widthNoise = tex2Dlod(_OutlineNoiseTex, float4(noiseUV, 0, 0)).r;
+                    return lerp(1.0 - _OutlineWidthVariation, 1.0 + _OutlineWidthVariation, widthNoise);
+                }
+
+                float3 GetHandDrawnJitter(float3 objectPos)
+                {
+                    float hash1 = frac(sin(dot(objectPos.xy, float2(12.9898, 78.233))) * 43758.5453);
+                    float hash2 = frac(sin(dot(objectPos.yz, float2(45.164, 93.177))) * 27183.8241);
+                    float hash3 = frac(sin(dot(objectPos.xz, float2(63.419, 17.652))) * 69143.2758);
+                    return (float3(hash1, hash2, hash3) * 2.0 - 1.0) * _OutlineJitterAmount * 0.001;
+                }
+            #endif
 
             v2f vert(appdata v)
             {
