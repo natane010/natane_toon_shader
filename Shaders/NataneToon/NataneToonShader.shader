@@ -1572,44 +1572,23 @@ Shader "Natane/Toon Shader"
             Name "SHADOW_CASTER"
             Tags { "LightMode" = "ShadowCaster" }
 
-            CGPROGRAM
-            #pragma vertex vert
-            #pragma fragment frag
+                        CGPROGRAM
+            #pragma target 3.5
+            #pragma vertex vertShadow
+            #pragma fragment fragShadow
             #pragma multi_compile_shadowcaster
             #pragma multi_compile_instancing
+            // Features that change the silhouette must match the forward passes
+            #pragma shader_feature_local _MAIN_TEX_ANIMATION
+            #pragma shader_feature_local _ALPHA_MASK
+            #pragma shader_feature_local _DISSOLVE
+            #pragma shader_feature_local _DITHERING_ALPHA
+            #pragma shader_feature_local _HASHED_ALPHA
+            #pragma shader_feature_local _BLUE_NOISE_DITHER
+            #pragma shader_feature_local _VAT
+            #pragma shader_feature_local _VAT_NORMAL
             #pragma skip_variants LIGHTMAP_ON DYNAMICLIGHTMAP_ON DIRLIGHTMAP_COMBINED LIGHTMAP_SHADOW_MIXING SHADOWS_SHADOWMASK
-
-            #include "UnityCG.cginc"
-
-            struct appdata
-            {
-                float4 vertex : POSITION;
-                float3 normal : NORMAL;
-                UNITY_VERTEX_INPUT_INSTANCE_ID
-            };
-
-            struct v2f
-            {
-                V2F_SHADOW_CASTER;
-                UNITY_VERTEX_INPUT_INSTANCE_ID
-                UNITY_VERTEX_OUTPUT_STEREO
-            };
-
-            v2f vert(appdata v)
-            {
-                v2f o;
-                UNITY_SETUP_INSTANCE_ID(v);
-                UNITY_INITIALIZE_VERTEX_OUTPUT_STEREO(o);
-                UNITY_TRANSFER_INSTANCE_ID(v, o);
-                TRANSFER_SHADOW_CASTER_NORMALOFFSET(o)
-                return o;
-            }
-
-            float4 frag(v2f i) : SV_Target
-            {
-                UNITY_SETUP_STEREO_EYE_INDEX_POST_VERTEX(i);
-                SHADOW_CASTER_FRAGMENT(i)
-            }
+            #include "Include/Rendering/NataneToonShadowCaster.hlsl"
             ENDCG
         }
     }
