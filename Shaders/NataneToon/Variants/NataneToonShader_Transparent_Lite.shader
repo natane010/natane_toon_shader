@@ -1365,10 +1365,8 @@ Blend [_SrcBlend] [_DstBlend]
 Blend [_SrcBlend] [_DstBlend]
 
             CGPROGRAM
-            #pragma target 4.6
-            #pragma vertex tessVert
-            #pragma hull hull
-            #pragma domain domain
+            #pragma target 3.5
+            #pragma vertex vert
             #pragma fragment frag
             #pragma multi_compile_fwdbase
             #pragma multi_compile_fog
@@ -1457,8 +1455,6 @@ Blend [_SrcBlend] [_DstBlend]
             #pragma shader_feature_local _SMOOTH_NORMAL
             #pragma shader_feature_local _VERTEX_COLOR_SHADOW
             #pragma shader_feature_local _PBR_LIKE
-            #pragma shader_feature_local _TESSELLATION
-            #pragma shader_feature_local _TESS_DISPLACEMENT
             #pragma shader_feature_local _PCSS
             #pragma shader_feature_local _PERSPECTIVE_FLAT
             #pragma shader_feature_local _DEPTH_COLOR_FADE
@@ -1481,10 +1477,8 @@ Blend [_SrcBlend] [_DstBlend]
             Cull [_Cull]
 
             CGPROGRAM
-            #pragma target 4.6
-            #pragma vertex tessVert
-            #pragma hull hull
-            #pragma domain domain
+            #pragma target 3.5
+            #pragma vertex vert
             #pragma fragment frag
             #pragma multi_compile_fwdadd
             #pragma multi_compile_fog
@@ -1529,8 +1523,6 @@ Blend [_SrcBlend] [_DstBlend]
             #pragma shader_feature_local _SMOOTH_NORMAL
             #pragma shader_feature_local _VERTEX_COLOR_SHADOW
             #pragma shader_feature_local _PBR_LIKE
-            #pragma shader_feature_local _TESSELLATION
-            #pragma shader_feature_local _TESS_DISPLACEMENT
             #pragma shader_feature_local _MIRROR_CONTROL
             #pragma skip_variants LIGHTMAP_ON DYNAMICLIGHTMAP_ON DIRLIGHTMAP_COMBINED LIGHTMAP_SHADOW_MIXING SHADOWS_SHADOWMASK
             #define TRANSPARENT_VARIANT

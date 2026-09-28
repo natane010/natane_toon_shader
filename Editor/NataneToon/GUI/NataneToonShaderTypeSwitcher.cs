@@ -29,7 +29,11 @@ namespace NataneToon.Editor
             "Natane/Toon Shader (Lite)",
             "Natane/Toon Shader (Cutout Lite)",
             "Natane/Toon Shader (Transparent Lite)",
-            "Natane/Toon Shader (Fur Lite)"
+            "Natane/Toon Shader (Fur Lite)",
+            // Tessellation variants (hull/domain stages)
+            "Natane/Toon Shader (Tessellation)",
+            "Natane/Toon Shader (Cutout Tessellation)",
+            "Natane/Toon Shader (Transparent Tessellation)"
         };
 
         private const string EyeShaderName = "Natane/Eye";

@@ -5516,11 +5516,106 @@ public class NataneToonShaderGUI : ShaderGUI
         EndBoxedSection(GetFoldout("VAT"));
     }
 
+    // ===== Tessellation variant mapping =====
+    // Only the dedicated Tessellation variants carry hull/domain stages. Regular
+    // variants compile without them so the HS/DS stages are not bound for every
+    // material; the tessellation properties are kept on all variants so values
+    // survive switching back and forth.
+    private static readonly Dictionary<string, string> s_TessellationCounterparts = new Dictionary<string, string>(StringComparer.Ordinal)
+    {
+        { "Natane/Toon Shader", "Natane/Toon Shader (Tessellation)" },
+        { "Natane/Toon Shader (Cutout)", "Natane/Toon Shader (Cutout Tessellation)" },
+        { "Natane/Toon Shader (Transparent)", "Natane/Toon Shader (Transparent Tessellation)" },
+    };
+
+    private static bool ShaderSupportsTessellation(Shader shader)
+    {
+        return shader != null && shader.name.EndsWith(" Tessellation)", StringComparison.Ordinal);
+    }
+
+    private static string GetTessellationCounterpart(string shaderName, bool toTessellation)
+    {
+        if (string.IsNullOrEmpty(shaderName)) return null;
+        if (toTessellation)
+        {
+            return s_TessellationCounterparts.TryGetValue(shaderName, out string tessName) ? tessName : null;
+        }
+        foreach (var pair in s_TessellationCounterparts)
+        {
+            if (pair.Value == shaderName) return pair.Key;
+        }
+        return null;
+    }
+
+    private void SwitchTargetsToShader(string shaderName, string undoName)
+    {
+        Shader newShader = Shader.Find(shaderName);
+        if (newShader == null)
+        {
+            Debug.LogError($"[NataneToonShaderGUI] Shader not found: {shaderName}");
+            NataneToon.Editor.NataneToonErrorDialog.ShowShaderNotFoundError(shaderName);
+            return;
+        }
+
+        foreach (Material mat in GetAllTargetMaterials())
+        {
+            if (mat == null || mat.shader == newShader) continue;
+            Undo.RecordObject(mat, undoName);
+            mat.shader = newShader;
+            EditorUtility.SetDirty(mat);
+        }
+
+        InvalidateInspectorCaches();
+        if (materialEditor != null)
+        {
+            materialEditor.Repaint();
+        }
+    }
+
     private void DrawTessellationSection()
     {
         SetFoldout("Tessellation", DrawBoxedSection(L("テッセレーション（曲面スムージング）", "Tessellation (Surface Smoothing)"), GetFoldout("Tessellation"), SectionCategory.Advanced, "_TESSELLATION"));
         if (GetFoldout("Tessellation"))
         {
+            Shader currentShader = targetMaterial != null ? targetMaterial.shader : null;
+            string currentShaderName = currentShader != null ? currentShader.name : string.Empty;
+            if (!ShaderSupportsTessellation(currentShader))
+            {
+                EditorGUILayout.HelpBox(L(
+                    "テッセレーションは専用の Tessellation バリアントでのみ動作します。\n" +
+                    "通常バリアントは Hull/Domain ステージを持たないため、このセクションの設定は無視されます。",
+                    "Tessellation only runs on the dedicated Tessellation variants.\n" +
+                    "Regular variants have no hull/domain stages, so the settings in this section are ignored."), MessageType.Info);
+
+                string tessShaderName = GetTessellationCounterpart(currentShaderName, true);
+                if (tessShaderName != null)
+                {
+                    if (GUILayout.Button(L($"Tessellation バリアントに切り替え ({tessShaderName})", $"Switch to Tessellation variant ({tessShaderName})"), GUILayout.Height(22)))
+                    {
+                        SwitchTargetsToShader(tessShaderName, "Switch to Tessellation Variant");
+                        GUIUtility.ExitGUI();
+                    }
+                }
+                else
+                {
+                    EditorGUILayout.HelpBox(L(
+                        "このバリアントには Tessellation 版がありません（Opaque / Cutout / Transparent のみ）。",
+                        "This variant has no Tessellation counterpart (Opaque / Cutout / Transparent only)."), MessageType.None);
+                }
+                EditorGUILayout.Space(4);
+            }
+            else
+            {
+                string baseShaderName = GetTessellationCounterpart(currentShaderName, false);
+                if (baseShaderName != null &&
+                    GUILayout.Button(L($"通常バリアントに戻す ({baseShaderName})", $"Switch back to regular variant ({baseShaderName})"), GUILayout.Height(22)))
+                {
+                    SwitchTargetsToShader(baseShaderName, "Switch to Regular Variant");
+                    GUIUtility.ExitGUI();
+                }
+                EditorGUILayout.Space(4);
+            }
+
             bool enableTess = DrawToggle("_TESSELLATION", "_Tessellation", L("テッセレーションを有効化", "Enable Tessellation"));
             if (enableTess)
             {

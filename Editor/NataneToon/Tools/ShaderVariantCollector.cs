@@ -56,6 +56,10 @@ namespace NataneToon.Editor
             new ShaderInfo("Natane/Toon Shader (Fur Lite)",        true,  true),
             // Background (ForwardBase + ForwardAdd + ShadowCaster + Meta)
             new ShaderInfo("Natane/Toon Shader (Background)",      true,  true, true),
+            // Tessellation variants (same passes as their base variant)
+            new ShaderInfo("Natane/Toon Shader (Tessellation)",    true,  true),
+            new ShaderInfo("Natane/Toon Shader (Cutout Tessellation)", true, true),
+            new ShaderInfo("Natane/Toon Shader (Transparent Tessellation)", true, false),
             // Wirelight (ForwardBase only)
             new ShaderInfo("Natane/Toon Shader Wirelight",         false, false),
             // Eye (ForwardBase only)
@@ -564,6 +568,9 @@ namespace NataneToon.Editor
                    shaderName == "Natane/Toon Shader (Fur)" ||
                    shaderName == "Natane/Toon Shader (Fur Lite)" ||
                    shaderName == "Natane/Toon Shader (Background)" ||
+                   shaderName == "Natane/Toon Shader (Tessellation)" ||
+                   shaderName == "Natane/Toon Shader (Cutout Tessellation)" ||
+                   shaderName == "Natane/Toon Shader (Transparent Tessellation)" ||
                    shaderName == "Natane/Toon Shader Wirelight" ||
                    shaderName == "Natane/Eye" ||
                    false;
