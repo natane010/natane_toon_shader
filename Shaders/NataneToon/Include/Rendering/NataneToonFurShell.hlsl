@@ -29,7 +29,9 @@
 
 // Shell parameters
 #define FUR_SHELL_COUNT 16
-#define FUR_LAYER ((float)FUR_SHELL_INDEX / (float)(FUR_SHELL_COUNT - 1))
+// Shell 0 sits one step above the base surface (which FORWARD_BASE already draws)
+// and shell 15 reaches the full fur length: 1/16 .. 16/16.
+#define FUR_LAYER ((float)(FUR_SHELL_INDEX + 1) / (float)FUR_SHELL_COUNT)
 
 struct appdata_fur {
     float4 vertex : POSITION;
@@ -151,7 +153,7 @@ fixed4 furFrag(v2f_fur i) : SV_Target
     float lodFade = saturate(1.0 - max(camDist - _FurLODDistance, 0.0) / max(_FurLODDistance * 0.5, 0.001));
     // Upper layers get clipped first at distance
     float lodThreshold = lerp(_FurLODMinLayers / (float)FUR_SHELL_COUNT, 1.0, lodFade);
-    clip(lodThreshold - layer - 0.001);
+    clip(lodThreshold + 0.001 - layer);
 
     // Noise-based alpha cutoff for fur strand pattern
     // Procedural noise: always generates strand pattern
@@ -165,7 +167,9 @@ fixed4 furFrag(v2f_fur i) : SV_Target
     float furNoise = strandNoise * texMask;
 
     // Height-based alpha: upper layers have less fur
-    float alpha = furNoise * (1.0 - layer);
+    // Taper toward the tip, but keep one shell's worth of alpha on the top shell so
+    // the outermost pass still contributes instead of being clipped entirely.
+    float alpha = furNoise * saturate(1.0 + 1.0 / (float)FUR_SHELL_COUNT - layer);
     clip(alpha - _FurAlphaCutoff);
 
     // Base color from main texture
