@@ -23,7 +23,7 @@ VRChat運用を意識した機能（AudioLink、VRC Light Volumes、LTCGI、最�
 
 ## 動作環境
 
-- Unity: `2022.3+`（Built-in Render Pipeline想定。ローカルキーワード数の上限とテッセレーションの都合で 2021.2 未満では読み込めません）
+- Unity: `2022.3+`（Built-in Render Pipeline想定。ローカルキーワード数の上限の都合で 2021.2 未満では読み込めません）
 - パッケージバージョン: `1.5.13`（`package.json`準拠）
 
 ## 収録シェーダー
@@ -78,6 +78,7 @@ VRChat運用を意識した機能（AudioLink、VRC Light Volumes、LTCGI、最�
 - `Natane/Toon Shader (Fur)` — シェルベースファーレンダリング
 - `Natane/Toon Shader (Fur Lite)` — Fur + Lite
 - `Natane/Toon Shader (ScreenEdge Split)` — Screen Edge を別パスで重ねる分割描画版
+- `Natane/Toon Shader (Tessellation)` / `(Cutout Tessellation)` / `(Transparent Tessellation)` — Phong テッセレーション / ディスプレイスメント対応版。Hull/Domain ステージ（SM 4.6）を持つのはこの3種のみで、通常バリアントはテッセレーションなしで軽量に動作します
 - `Natane/Toon Shader (Background)` — 背景ワールド用（ライトマップ・PBR・Metaパス）
 
 ### Natane/Toon Shader (Background) 専用機能

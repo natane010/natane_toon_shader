@@ -7,7 +7,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 Natane Toon Shader is a Unity package providing a comprehensive cel-shading/NPR toon shader for Unity's Built-in Render Pipeline. It is distributed as a VPM/UPM package and includes extensive editor tooling, material presets, and migration utilities.
 
 **Version**: see `package.json` (1.5.x line)
-**Unity Compatibility**: 2022.3+ (Built-in RP; needs >= 2021.2 for the local keyword count and SM 4.6 tessellation stages)
+**Unity Compatibility**: 2022.3+ (Built-in RP; needs >= 2021.2 for the local keyword count). Regular variants target SM 3.5; the Tessellation variants target SM 4.6.
 **Target Platform**: Built-in Render Pipeline, VRChat PC optimized
 
 ## Architecture Overview
@@ -15,7 +15,7 @@ Natane Toon Shader is a Unity package providing a comprehensive cel-shading/NPR 
 ### Three-Layer Architecture
 
 1. **Shader Layer** (`Shaders/NataneToon/`): Modular HLSL shader system
-   - 10 shader variants sharing one include tree (see below)
+   - 13 shader variants sharing one include tree (see below)
    - Modular include files organized by function (Core/Lighting/Rendering/Utils/Config/Wirelight)
    - Side shaders: `Eye/NataneToonEye.shader` (unlit, standalone), `NataneToonWirelight.shader` (geometry shader, SM 5.0), `Effects/NataneScreenFXOverlay.shader`
    - Unrelated helper shaders live in `Shaders/AutoMat`, `Shaders/ParallaxBox`, `Shaders/Reduction`, `Shaders/Compute`
@@ -31,10 +31,12 @@ Natane Toon Shader is a Unity package providing a comprehensive cel-shading/NPR 
 ### Shader Variants
 
 All variants live in `Shaders/NataneToon/NataneToonShader.shader` (Opaque) and `Shaders/NataneToon/Variants/`:
-Cutout, Cutout Lite, Transparent, Transparent Lite, Lite, Fur, Fur Lite, Background, ScreenEdge Split.
+Cutout, Cutout Lite, Transparent, Transparent Lite, Lite, Fur, Fur Lite, Background, ScreenEdge Split,
+plus the tessellation twins Tessellation, Cutout Tessellation, Transparent Tessellation.
 "Lite" variants have no GrabPass and omit `_REFRACTION`, `_SOFT_FILTER`, `_KUWAHARA_FILTER`, `_COLOR_BLEEDING`, `_CHROMATIC_ABERRATION`.
+Only the three Tessellation variants declare hull/domain stages (`#pragma target 4.6`); every other variant uses `#pragma vertex vert` with `#pragma target 3.5` and ignores `_TESSELLATION`. The inspector's Tessellation section switches materials between the pairs (mapping in `NataneToonShaderGUI.s_TessellationCounterparts`).
 
-Each variant file inlines its own Properties block, an OUTLINE pass (~350 lines, self-contained, includes only UnityCG) and a ShadowCaster pass. **Any change to the OUTLINE pass, the Properties block or the `#pragma shader_feature_local` lists must be replicated to all applicable variants.** Diff the variants after editing; drift here has caused real bugs.
+Each variant file inlines its own Properties block and an OUTLINE pass (~350 lines, self-contained, includes only UnityCG). The ShadowCaster pass is shared through `Include/Rendering/NataneToonShadowCaster.hlsl` (Input + Utils + Vertex, never Fragment) and declares the silhouette-affecting keywords. **Any change to the OUTLINE pass, the Properties block or the `#pragma shader_feature_local` lists must be replicated to all applicable variants, including the Tessellation twins.** Diff the variants after editing; drift here has caused real bugs.
 
 ### Shader Module System
 
@@ -50,8 +52,10 @@ NataneToonCore.hlsl
 ├── Lighting/NataneToonLightmap.hlsl    (Background variant only)
 ├── Lighting/NataneToonPBR.hlsl         (GGX helpers)
 ├── Core/NataneToonVertex.hlsl          (vertex shader, VAT, smear, smooth normal)
-├── Core/NataneToonTessellation.hlsl    (hull/domain; pass-through when _TESSELLATION is off)
+├── Core/NataneToonTessellation.hlsl    (hull/domain; only used by the Tessellation variants)
 └── Rendering/NataneToonFragment.hlsl   (main fragment shader, effect composition)
+
+Rendering/NataneToonShadowCaster.hlsl   (ShadowCaster pass; includes BuildSettings, Unity cgincs, Input, Utils, Vertex)
 ```
 
 Approximate sizes: Fragment ~2.5k lines, Utils ~1.9k, Input ~1.5k, Lighting ~0.7k.
@@ -101,8 +105,8 @@ Textures are declared with `UNITY_DECLARE_TEX2D_NOSAMPLER` and sampled through t
 - **LTCGI**: used only when the package is installed (`Config/NataneToonLTCGIConfig.hlsl` is auto-written by the detector).
 - **AudioLink**: reads `_AudioTexture` directly; band rows follow `ALPASS_AUDIOLINK`.
 - **Mirrors**: `_VRChatMirrorMode` is always declared; view-space XY dependent effects (MatCap, Offset Rim, Angel Ring, Eye Parallax, outline offset) flip X via `NataneMirrorSign()`.
-- **Build hooks**: `IPreprocessBuildWithReport` / `IProcessSceneWithReport` do not run inside the VRChat SDK upload pipeline; only `IPreprocessShaders` (the stripper) does.
-- All forward passes require SM 4.6 (tessellation stages are always bound). Quest/mobile GPUs are not a supported target of the main shader.
+- **Build hooks**: `IPreprocessBuildWithReport` / `IProcessSceneWithReport` do not run inside the VRChat SDK upload pipeline. `Editor/NataneToon/Tools/NataneVRChatBuildCallbacks.cs` (compiled under `VRC_SDK_VRCSDK3`) runs the keyword sync, build preparation and stripper reset from `IVRCSDKBuildRequestedCallback` / `IVRCSDKPreprocessAvatarCallback`; `IPreprocessShaders` (the stripper) runs in both pipelines.
+- Regular variants need SM 3.5; the Tessellation variants need SM 4.6. Quest/mobile GPUs are not a supported target of the main shader.
 
 ## Documentation
 
@@ -114,6 +118,6 @@ Textures are declared with `UNITY_DECLARE_TEX2D_NOSAMPLER` and sampled through t
 
 - Do not modify the include order in `NataneToonCore.hlsl`.
 - Replicate OUTLINE pass / Properties / pragma changes to all applicable variants and diff them.
-- Maintain backward compatibility for existing materials when changing properties or lighting math; look-changing fixes need a compatibility toggle.
+- Maintain backward compatibility for existing materials when changing properties or lighting math; look-changing fixes need a compatibility toggle (example: `_DirectLightClampMode`, whose `Legacy` default preserves the old normalize-based direct light clamp).
 - Editor scripts must handle null materials/shaders gracefully and always implement Undo.
 - `NataneToonBuildSettings.hlsl` is rewritten during builds by `NataneBuildFeatureOptimizer`; do not hand-edit the generated section.

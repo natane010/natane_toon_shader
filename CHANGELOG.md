@@ -7,7 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- **Tessellation バリアント**: `Natane/Toon Shader (Tessellation)` / `(Cutout Tessellation)` / `(Transparent Tessellation)` を追加。Hull/Domain ステージを持つのはこの3種のみになり、インスペクターの Tessellation セクションから相互に切り替えできます。
+- **直接光クランプ方式 `_DirectLightClampMode`**: 従来の `normalize()` ベース（白色光で輝度約0.58倍、ライト色で明るさが変わる）を `Legacy` として維持しつつ、色相を保って輝度のみをクランプする `HuePreserving` を追加。既存マテリアルの見た目を変えないため既定値は `Legacy`。
+- **VRChat SDK ビルドコールバック**: `IVRCSDKBuildRequestedCallback` / `IVRCSDKPreprocessAvatarCallback` でアップロード前にキーワード同期・ビルド準備・ストリッパーのリセットを実行（`VRC_SDK_VRCSDK3` 定義時のみコンパイル）。従来の `IPreprocessBuildWithReport` は VRChat SDK からは呼ばれませんでした。
+- **Eye シェーダー AudioLink トグル**: `_EyeAudioLink`（`_EYE_AUDIOLINK`）を追加。これまで `AUDIOLINK` キーワードを定義する手段がなく機能していませんでした。
+
 ### Fixed
+- **ShadowCaster**: 全バリアント共通の `Include/Rendering/NataneToonShadowCaster.hlsl` に置き換え、Dissolve / Alpha Mask / Hashed・Dithering Alpha / VAT / メインテクスチャUVアニメーションを影のシルエットに反映。Cutout の影は `_Color.a` も考慮するように変更。
+- **キーワード同期表**: `_EYE_PARALLAX`、Background の `_PBR` / `_QUEST_LITE`、Wirelight の7キーワードを `KeywordMappings` に追加。
+- **Fur**: 最上段シェル（index 15）が常に alpha 0 で描画されず、ドローコールだけ消費していた問題を修正。シェル配置を 1/16〜16/16 に変更。
 - **Cutout / Cutout Lite**: `#pragma fragment` がコア側の `frag` を指しており `_Cutoff` によるクリップが実行されていなかった問題を修正。ShadowCaster も `_Color.a` を考慮するように変更。
 - **手描きアウトライン**: Lite / Cutout / Cutout Lite / Transparent / Transparent Lite / ScreenEdge Split でヘルパー関数が未定義でコンパイルエラーになる問題を修正。
 - **3D LUT**: `_LUT3DTex`（NOSAMPLER 宣言）を `sampler2D` 引数で受けていたため D3D11 でコンパイルエラーになる問題を修正。
@@ -21,6 +30,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **エディタ**: 起動時キーワード同期がプロジェクト全体の `SaveAssets()` を呼んでいた問題を、変更マテリアルのみ保存するように修正。
 
 ### Changed
+- **テッセレーション**: 通常バリアント（Opaque / Cutout / Transparent / Lite 系 / Fur 系 / ScreenEdge Split）の FORWARD_BASE / FORWARD_ADD から Hull/Domain ステージと `_TESSELLATION` / `_TESS_DISPLACEMENT` を削除し、`#pragma target 3.5` に変更。テッセレーションが必要なマテリアルは Tessellation バリアントに切り替えてください（プロパティ値は引き継がれます）。
+- **リムライト方向制御**: `_RimDirectionRange` による方向マスクが常時有効だったものを、トグル `_RimDirectionControl` が ON のときのみ適用するように変更。トグルを使っていなかったマテリアルでは下向き面のリム抑制が外れます。
 - **FORWARD_ADD パス**: ForwardBase 専用の `_RIM_LIGHT` / `_RIM_LIGHT_2` / `_OFFSET_RIM_LIGHT` / `_ENV_RIM` / `_SSS` を各バリアントの FORWARD_ADD から削除し、変種数を削減。Fur バリアントの FORWARD_BASE / FORWARD_ADD から `_FUR` を削除。
 - **package.json**: `unity` を `2022.3` に更新（ローカルキーワード上限の都合で 2021.2 未満では動作しないため）。
 - **配布物**: 開発用ファイル（`Whiteboard.md`、`unique_same_l_strings.txt`）、`Tests/`、孤立 `.meta` を VPM zip から除外。
