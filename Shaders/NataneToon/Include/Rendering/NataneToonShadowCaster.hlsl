@@ -21,6 +21,18 @@
 #include "UnityCG.cginc"
 #include "Lighting.cginc"
 #include "AutoLight.cginc"
+
+// multi_compile_shadowcaster defines SHADOWS_DEPTH (directional/spot) or SHADOWS_CUBE
+// (point). AutoLight only provides SHADOW_COORDS / TRANSFER_SHADOW for SHADOWS_DEPTH
+// when SPOT is also defined, and the "shadows off" fallback is skipped whenever
+// SHADOWS_DEPTH is set, so the SHADOWS_DEPTH caster variant would otherwise hit the
+// SHADOW_COORDS(6) in NataneToonInput.hlsl's v2f with the macro undefined.
+#if !defined(SHADOW_COORDS)
+    #define SHADOW_COORDS(idx1)
+    #define TRANSFER_SHADOW(a)
+    #define SHADOW_ATTENUATION(a) 1.0
+#endif
+
 #include "../Core/NataneToonInput.hlsl"
 #include "../Utils/NataneToonUtils.hlsl"
 #include "../Core/NataneToonVertex.hlsl"
