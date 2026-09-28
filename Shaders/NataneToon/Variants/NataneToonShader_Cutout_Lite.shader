@@ -1468,11 +1468,13 @@ CGPROGRAM
             {
                 half4 col = frag(i);
                 #if defined(_HASHED_ALPHA)
-                    float2 hashedScreenUV = i.screenPos.xy / max(i.screenPos.w, 0.0001);
-                    float2 hashedScreenPos = hashedScreenUV * _ScreenParams.xy;
-                    float hashedAlpha = saturate((col.a - _Cutoff) / max(1.0 - _Cutoff, 0.0001));
-                    float hashedCutout = ApplyHashedAlpha(hashedAlpha, hashedScreenPos, i.worldPos.xz, _HashedAlphaScale);
-                    clip(hashedCutout);
+                    // Hashed alpha is already clipped inside frag() (NataneToonFragment.hlsl).
+                    // Clipping again here with a second hash would square the coverage,
+                    // so only fall back to the hard cutoff when the toggle is off.
+                    if (_HashedAlpha < 0.5)
+                    {
+                        clip(col.a - _Cutoff);
+                    }
                 #else
                     clip(col.a - _Cutoff);
                 #endif
@@ -1555,11 +1557,13 @@ CGPROGRAM
             {
                 half4 col = frag(i);
                 #if defined(_HASHED_ALPHA)
-                    float2 hashedScreenUV = i.screenPos.xy / max(i.screenPos.w, 0.0001);
-                    float2 hashedScreenPos = hashedScreenUV * _ScreenParams.xy;
-                    float hashedAlpha = saturate((col.a - _Cutoff) / max(1.0 - _Cutoff, 0.0001));
-                    float hashedCutout = ApplyHashedAlpha(hashedAlpha, hashedScreenPos, i.worldPos.xz, _HashedAlphaScale);
-                    clip(hashedCutout);
+                    // Hashed alpha is already clipped inside frag() (NataneToonFragment.hlsl).
+                    // Clipping again here with a second hash would square the coverage,
+                    // so only fall back to the hard cutoff when the toggle is off.
+                    if (_HashedAlpha < 0.5)
+                    {
+                        clip(col.a - _Cutoff);
+                    }
                 #else
                     clip(col.a - _Cutoff);
                 #endif
