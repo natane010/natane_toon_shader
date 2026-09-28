@@ -590,6 +590,7 @@ namespace NataneToon.Editor
                             suggestion = $"Either assign a texture or disable the feature to save performance",
                             autoFixAction = () =>
                             {
+                                Undo.RecordObject(material, "Natane Auto-Fix: Disable Unused Feature");
                                 material.DisableKeyword(keyword);
                                 EditorUtility.SetDirty(material);
                             }

@@ -1482,6 +1482,7 @@ public class NataneToonShaderGUI : ShaderGUI
                     Material mat = target as Material;
                     if (mat != null && mat.HasProperty("_LookMode"))
                     {
+                        Undo.RecordObject(mat, "Adjust Look Mixer");
                         mat.SetFloat("_LookMode", (float)resolvedLookMode);
                     }
                 }

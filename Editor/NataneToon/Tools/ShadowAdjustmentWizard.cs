@@ -716,6 +716,7 @@ namespace NataneToon.Editor
             }
 
             Texture2D savedRamp = AssetDatabase.LoadAssetAtPath<Texture2D>(path);
+            Undo.RecordObject(targetMaterial, "Natane Generate Ramp Texture");
             targetMaterial.SetTexture("_RampTex", savedRamp);
             SetKeywordWithOptionalToggle("_USE_RAMP", "_UseRamp", savedRamp != null);
             EditorUtility.SetDirty(targetMaterial);
