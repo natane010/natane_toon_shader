@@ -21,6 +21,7 @@ struct TessellationControlPoint
     #if defined(_SMOOTH_NORMAL) || defined(_VERTEX_COLOR_SHADOW)
         float4 color : COLOR;
     #endif
+    UNITY_VERTEX_INPUT_INSTANCE_ID
 };
 
 // ===== Tessellation Factors =====
@@ -35,6 +36,7 @@ TessellationControlPoint tessVert(appdata v)
 {
     TessellationControlPoint o;
     UNITY_SETUP_INSTANCE_ID(v);
+    UNITY_TRANSFER_INSTANCE_ID(v, o);
     o.vertex = v.vertex;
     o.normal = v.normal;
     o.tangent = v.tangent;
@@ -68,6 +70,8 @@ float3 PhongSmoothing(float3 posOS, float3 p0, float3 p1, float3 p2,
 TessellationFactors PatchConstantFunction(InputPatch<TessellationControlPoint, 3> patch)
 {
     TessellationFactors f;
+    // Instancing: select the per-instance matrices before reading unity_ObjectToWorld
+    UNITY_SETUP_INSTANCE_ID(patch[0]);
 
     float3 p0 = mul(unity_ObjectToWorld, patch[0].vertex).xyz;
     float3 p1 = mul(unity_ObjectToWorld, patch[1].vertex).xyz;
@@ -108,6 +112,9 @@ v2f domain(
 {
     // Barycentric interpolation of attributes
     appdata v;
+    UNITY_INITIALIZE_OUTPUT(appdata, v);
+    // Carry the instance ID through so vert() (and its UNITY_SETUP_INSTANCE_ID) sees the right instance
+    UNITY_TRANSFER_INSTANCE_ID(patch[0], v);
     v.vertex = patch[0].vertex * bary.x + patch[1].vertex * bary.y + patch[2].vertex * bary.z;
     float3 flatNormal = patch[0].normal * bary.x + patch[1].normal * bary.y + patch[2].normal * bary.z;
     v.normal = normalize(flatNormal);
