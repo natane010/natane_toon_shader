@@ -196,6 +196,7 @@ Shader "Natane/Eye"
         [Header(___________________________________________________)]
         [Header(Audio Link)]
         [Space(5)]
+        [Toggle(_EYE_AUDIOLINK)] _EyeAudioLink("Enable AudioLink", Float) = 0
         [Enum(Lows,0,Mids,2,Highs,3,Average,4)] _BandSelection("Audio Band", Float) = 0
         _Intensity("Intensity", Range(0, 10)) = 1.0
         _MinValue("Minimum Brightness", Range(0, 1)) = 1
@@ -260,11 +261,13 @@ Shader "Natane/Eye"
             #pragma fragment frag
             #pragma multi_compile_fog
             #pragma multi_compile_instancing
+            // AudioLink reactivity (requires the com.llealloo.audiolink package)
+            #pragma shader_feature_local _EYE_AUDIOLINK
 
             #include "UnityCG.cginc"
 
             // AudioLink integration (optional dependency)
-            #if defined(AUDIOLINK)
+            #if defined(_EYE_AUDIOLINK)
                 #include "Packages/com.llealloo.audiolink/Runtime/Shaders/AudioLink.cginc"
             #endif
 
@@ -818,7 +821,7 @@ Shader "Natane/Eye"
 
             float NTEye_GetAudioLinkBands(int band)
             {
-                #if defined(AUDIOLINK)
+                #if defined(_EYE_AUDIOLINK)
                     return AudioLinkData( ALPASS_AUDIOLINK + int2( 0, band ) ).rrrr;
                 #else
                     return 0.0;
@@ -827,7 +830,7 @@ Shader "Natane/Eye"
 
             float NTEye_AverageOfAudioLinkBands()
             {
-                #if defined(AUDIOLINK)
+                #if defined(_EYE_AUDIOLINK)
                     float final = 0;
                     [unroll]
                     for (int i = 0; i < 4; i++)
@@ -878,7 +881,7 @@ Shader "Natane/Eye"
 
             void DoAudioLink(inout fixed4 col)
             {
-                #if defined(AUDIOLINK)
+                #if defined(_EYE_AUDIOLINK)
                     col.rgb *= (_BandSelection == 4 ? NTEye_AverageOfAudioLinkBands() : AudioLinkData( ALPASS_AUDIOLINK + int2( 0, (int)_BandSelection ) ).rrrr) * _Intensity + _MinValue;
                 #else
                     col.rgb *= _MinValue;

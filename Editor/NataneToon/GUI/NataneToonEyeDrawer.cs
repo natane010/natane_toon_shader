@@ -479,10 +479,15 @@ namespace NataneToon.Editor
         {
             if (!DrawFoldout(ref showAudioLink, L("Audio Link", "Audio Link"))) return;
             EditorGUI.indentLevel++;
+            DrawProperty("_EyeAudioLink", L("AudioLink を有効化", "Enable AudioLink"));
             DrawProperty("_BandSelection", L("Frequency Band", "Frequency Band"));
             DrawProperty("_Intensity", L("Intensity", "Intensity"));
             DrawProperty("_MinValue", L("Minimum Brightness", "Minimum Brightness"));
-            EditorGUILayout.HelpBox(L("VRChat ワールドに AudioLink が入っている場合、音に合わせて変化します。", "Syncs with music when AudioLink is installed in the VRChat world."), MessageType.None);
+            EditorGUILayout.HelpBox(L(
+                "有効にすると VRChat ワールドの AudioLink に合わせて明るさが変化します。\n" +
+                "シェーダーのコンパイルに AudioLink パッケージ（com.llealloo.audiolink）がプロジェクトに必要です。",
+                "When enabled, brightness reacts to AudioLink in the VRChat world.\n" +
+                "The AudioLink package (com.llealloo.audiolink) must be in the project for the shader to compile."), MessageType.None);
             EditorGUI.indentLevel--;
         }
 

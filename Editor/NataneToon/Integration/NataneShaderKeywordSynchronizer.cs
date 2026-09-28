@@ -245,6 +245,9 @@ namespace NataneToon.Editor
             ("_EnablePBR", "_PBR"),
             ("_QuestLite", "_QUEST_LITE"),
 
+            // Natane/Eye
+            ("_EyeAudioLink", "_EYE_AUDIOLINK"),
+
             // Natane/Toon Shader Wirelight
             ("_Wirelight", "_WIRELIGHT"),
             ("_SpaceSelector", "_USE_VERTEX_COLOR_POS"),
