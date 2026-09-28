@@ -1369,6 +1369,7 @@ half4 frag(v2f i) : SV_Target
     #endif
 
     // ===== Rim Light Direction (pre-calculate for both Rim Light 1 & 2) =====
+    // Only applied while the "Rim Direction Control" toggle (_RimDirectionControl) is on.
     #if defined(UNITY_PASS_FORWARDBASE) && (defined(_RIM_LIGHT) || defined(_RIM_LIGHT_2))
         half3 rimDirNormalized = normalize(_RimLightDirection.xyz + float3(0, 0, 0.0001));
     #endif
@@ -1391,7 +1392,7 @@ half4 frag(v2f i) : SV_Target
             rimMask = ApplySoftMask(rimMask); // Smooth mask transitions
             rim *= rimMask;
 
-            if (_RimDirectionRange > 0.001)
+            if (_RimDirectionControl >= 0.5 && _RimDirectionRange > 0.001)
             {
                 half rimDirectionMask1 = smoothstep(-_RimDirectionRange, _RimDirectionRange, dot(worldNormal, rimDirNormalized));
                 rim *= rimDirectionMask1;
@@ -1446,7 +1447,7 @@ half4 frag(v2f i) : SV_Target
         rimMask2 = ApplySoftMask(rimMask2); // Smooth mask transitions
         rim2 *= rimMask2;
 
-        if (_RimDirectionRange > 0.001)
+        if (_RimDirectionControl >= 0.5 && _RimDirectionRange > 0.001)
         {
             half rimDirectionMask2 = smoothstep(-_RimDirectionRange, _RimDirectionRange, dot(worldNormal, rimDirNormalized));
             rim2 *= rimDirectionMask2;

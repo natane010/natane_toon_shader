@@ -530,6 +530,7 @@ CBUFFER_START(UnityPerMaterial)
     #endif
 
     // Rim Direction Control
+    float _RimDirectionControl;
     float4 _RimLightDirection;
     float _RimDirectionRange;
     float _RimDirStrength;
