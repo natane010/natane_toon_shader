@@ -51,7 +51,9 @@ Shader "Natane/Screen FX Overlay"
 
             #include "UnityCG.cginc"
 
-            sampler2D _NataneScreenGrab;
+            // Screen-space texture macros so the GrabPass result also works under
+            // VR Single Pass Instanced (Texture2DArray) rendering.
+            UNITY_DECLARE_SCREENSPACE_TEXTURE(_NataneScreenGrab);
             float4 _NataneScreenGrab_TexelSize;
 
             half _Intensity;
@@ -110,13 +112,14 @@ Shader "Natane/Screen FX Overlay"
 
             inline half Hash12(float2 p)
             {
-                half h = dot(p, float2(127.1, 311.7));
+                // float: the sine argument exceeds half precision range on mobile GPUs
+                float h = dot(p, float2(127.1, 311.7));
                 return frac(sin(h) * 43758.5453);
             }
 
             inline half3 SampleScreen(float2 screenUV)
             {
-                return tex2D(_NataneScreenGrab, screenUV).rgb;
+                return UNITY_SAMPLE_SCREENSPACE_TEXTURE(_NataneScreenGrab, screenUV).rgb;
             }
 
             half4 frag(v2f i) : SV_Target
