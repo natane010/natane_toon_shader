@@ -203,6 +203,15 @@ namespace NataneToon.Editor
             return NataneAssetIndexService.EnumerateMaterialEntries(entry => entry.isNataneShader).Count();
         }
 
+        /// <summary>
+        /// Forget the cached whitelist so the next OnProcessShader call re-reads the
+        /// current material state. Called from the VRChat SDK build-requested callback.
+        /// </summary>
+        public static void ResetForNewBuild()
+        {
+            ResetBuildSessionState();
+        }
+
         [InitializeOnLoadMethod]
         private static void ResetBuildSessionState()
         {
