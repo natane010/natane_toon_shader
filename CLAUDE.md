@@ -4,237 +4,116 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Overview
 
-Natane Toon Shader is a Unity package providing a comprehensive cel-shading/NPR toon shader for Unity's Built-in Render Pipeline. It is distributed as a Unity Package Manager (UPM) compatible package and includes extensive editor tooling, material presets, and migration utilities.
+Natane Toon Shader is a Unity package providing a comprehensive cel-shading/NPR toon shader for Unity's Built-in Render Pipeline. It is distributed as a VPM/UPM package and includes extensive editor tooling, material presets, and migration utilities.
 
-**Version**: 1.2.0 (v1.1.5 branch)
-**Unity Compatibility**: 2019.4+
-**Target Platform**: Built-in Render Pipeline (VRChat optimized)
+**Version**: see `package.json` (1.5.x line)
+**Unity Compatibility**: 2022.3+ (Built-in RP; needs >= 2021.2 for the local keyword count and SM 4.6 tessellation stages)
+**Target Platform**: Built-in Render Pipeline, VRChat PC optimized
 
 ## Architecture Overview
 
 ### Three-Layer Architecture
 
 1. **Shader Layer** (`Shaders/NataneToon/`): Modular HLSL shader system
-   - Main shader variants (Opaque/Cutout/Transparent)
-   - Modular include files organized by function (Core/Lighting/Rendering/Utils)
+   - 10 shader variants sharing one include tree (see below)
+   - Modular include files organized by function (Core/Lighting/Rendering/Utils/Config/Wirelight)
+   - Side shaders: `Eye/NataneToonEye.shader` (unlit, standalone), `NataneToonWirelight.shader` (geometry shader, SM 5.0), `Effects/NataneScreenFXOverlay.shader`
+   - Unrelated helper shaders live in `Shaders/AutoMat`, `Shaders/ParallaxBox`, `Shaders/Reduction`, `Shaders/Compute`
 
-2. **Editor Layer** (`Editor/NataneToon/`): C# editor extensions
-   - Custom ShaderGUI with Japanese localization
-   - Material management tools (validators, processors, presets)
-   - Migration tools for other shader systems
+2. **Editor Layer** (`Editor/`): C# editor extensions (~54k lines)
+   - `Editor/NataneToon/GUI/` custom ShaderGUI (`NataneToonShaderGUI.cs`, ~9.5k lines) with Japanese/English localization
+   - `Editor/NataneToon/Tools/`, `Presets/`, `Migration/`, `Help/`, `Setup/`
+   - `Editor/NataneToon/Integration/` keyword synchronizer, asset index, build hooks, VRC Light Volumes / LTCGI auto-detection
+   - Sibling tools: `Editor/MapGenerator`, `Editor/ParallaxBox`, `Editor/ParticleSystem`, `Editor/Reduction`
 
-3. **Runtime Layer** (`Runtime/`): Runtime support systems
-   - Material preset ScriptableObjects
-   - Particle effect system
-   - Color palette management
+3. **Runtime Layer** (`Runtime/`): ScriptableObject presets, color palettes, particle helpers. Contains a few MonoBehaviours that VRChat strips on upload.
+
+### Shader Variants
+
+All variants live in `Shaders/NataneToon/NataneToonShader.shader` (Opaque) and `Shaders/NataneToon/Variants/`:
+Cutout, Cutout Lite, Transparent, Transparent Lite, Lite, Fur, Fur Lite, Background, ScreenEdge Split.
+"Lite" variants have no GrabPass and omit `_REFRACTION`, `_SOFT_FILTER`, `_KUWAHARA_FILTER`, `_COLOR_BLEEDING`, `_CHROMATIC_ABERRATION`.
+
+Each variant file inlines its own Properties block, an OUTLINE pass (~350 lines, self-contained, includes only UnityCG) and a ShadowCaster pass. **Any change to the OUTLINE pass, the Properties block or the `#pragma shader_feature_local` lists must be replicated to all applicable variants.** Diff the variants after editing; drift here has caused real bugs.
 
 ### Shader Module System
 
-The shader system uses a modular HLSL architecture with a strict include hierarchy:
+Include order in `Include/Core/NataneToonCore.hlsl` (strict, do not reorder):
 
 ```
-NataneToonShader.shader
-└── Include/Core/NataneToonCore.hlsl (main aggregator)
-    ├── Core/NataneToonInput.hlsl (properties, structs, samplers)
-    ├── Utils/NataneToonUtils.hlsl (utility functions: HSV, tone mapping, blending)
-    ├── Lighting/NataneToonLighting.hlsl (lighting calculations: toon shading, specular, SSS)
-    ├── Core/NataneToonVertex.hlsl (vertex processing, outline generation)
-    └── Rendering/NataneToonFragment.hlsl (main fragment shader, effect composition)
+NataneToonCore.hlsl
+├── Core/NataneToonBuildSettings.hlsl   (build-time feature #undef guard, first)
+├── UnityCG.cginc, Lighting.cginc, AutoLight.cginc (SHADOWS_SCREEN undefined for TRANSPARENT_VARIANT)
+├── Core/NataneToonInput.hlsl           (CBUFFER properties, NOSAMPLER textures, appdata/v2f)
+├── Utils/NataneToonUtils.hlsl          (HSV, blending, dithering, AudioLink, effects helpers)
+├── Lighting/NataneToonLighting.hlsl    (toon shading, specular, rim, SSS; includes ThirdPartyLighting + Config/*)
+├── Lighting/NataneToonLightmap.hlsl    (Background variant only)
+├── Lighting/NataneToonPBR.hlsl         (GGX helpers)
+├── Core/NataneToonVertex.hlsl          (vertex shader, VAT, smear, smooth normal)
+├── Core/NataneToonTessellation.hlsl    (hull/domain; pass-through when _TESSELLATION is off)
+└── Rendering/NataneToonFragment.hlsl   (main fragment shader, effect composition)
 ```
 
-**Critical**: This include order must be maintained. `NataneToonInput.hlsl` must come first (defines all properties), followed by Utils, then Lighting, Vertex, and finally Fragment.
+Approximate sizes: Fragment ~2.5k lines, Utils ~1.9k, Input ~1.5k, Lighting ~0.7k.
 
-### Editor Tools Architecture
-
-Editor tools are organized into four categories:
-
-- **GUI/** - Custom inspector UI, tab system, help system
-- **Presets/** - Material preset browser, color palette, default preset generation
-- **Tools/** - Validators, batch processors, optimizers, scene editors, performance tools
-- **Migration/** - Conversion utilities (other shaders, generic batch converter)
-
-All tools are accessible via `Tools > Natane > [Tool Name]` in Unity.
+Textures are declared with `UNITY_DECLARE_TEX2D_NOSAMPLER` and sampled through the `NATANE_SAMPLE_*` macros with two shared sampler states. Functions that take a texture argument must use `NATANE_TEX2D_NS_ARG(name)` and the `NATANE_SAMPLE_*` macros, never `sampler2D` + `tex2D`.
 
 ## Development Workflow
 
 ### Adding a New Shader Feature
 
-When adding a new shader effect (e.g., a new lighting model or visual effect):
-
-1. **Define properties** in `Shaders/NataneToon/Include/Core/NataneToonInput.hlsl`:
-   ```hlsl
-   // Add property declarations
-   float _NewFeatureParam;
-   sampler2D _NewFeatureTex;
-   ```
-
-2. **Add utility functions** (if needed) in `Shaders/NataneToon/Include/Utils/NataneToonUtils.hlsl`:
-   ```hlsl
-   float3 CalculateNewFeature(float3 input, float param) {
-       // Implementation
-   }
-   ```
-
-3. **Implement the effect** in the appropriate file:
-   - Lighting effects → `Lighting/NataneToonLighting.hlsl`
-   - Fragment effects → `Rendering/NataneToonFragment.hlsl`
-   - Vertex effects → `Core/NataneToonVertex.hlsl`
-
-4. **Add shader keyword** in the main shader file:
-   ```hlsl
-   #pragma shader_feature _NEW_FEATURE
-   ```
-
-5. **Add UI controls** in `Editor/NataneToon/GUI/NataneToonShaderGUI.cs`:
-   ```csharp
-   bool enableFeature = DrawToggle("_NEW_FEATURE", "_NewFeature", "Enable New Feature");
-   if (enableFeature) {
-       DrawProperty("_NewFeatureParam", "Parameter");
-   }
-   ```
-
-6. **Update all three shader variants**: Main shader, Cutout variant, Transparent variant must all include the new feature.
+1. **Define properties** in `Include/Core/NataneToonInput.hlsl` (inside the CBUFFER; textures outside it with NOSAMPLER).
+2. **Add utility functions** (if needed) in `Include/Utils/NataneToonUtils.hlsl`.
+3. **Implement the effect**: lighting in `Lighting/NataneToonLighting.hlsl`, fragment composition in `Rendering/NataneToonFragment.hlsl`, vertex work in `Core/NataneToonVertex.hlsl`. Guard ForwardBase-only effects with `UNITY_PASS_FORWARDBASE` and gate on both the keyword and the toggle float (`#ifdef _X` + `if (_X >= 0.5)`).
+4. **Add the property and `#pragma shader_feature_local _NEW_FEATURE`** to every applicable variant's Properties block and FORWARD_BASE pass (FORWARD_ADD only if the effect contributes to additive lights). Add a `NATANE_FEATURE_*` guard in `NataneToonBuildSettings.hlsl`.
+5. **Register the keyword** in `Editor/NataneToon/Integration/NataneShaderKeywordSynchronizer.cs` (`KeywordMappings`) and add the UI in `Editor/NataneToon/GUI/NataneToonShaderGUI.cs` via `DrawToggle`.
+6. Update `README.md` and `CHANGELOG.md`.
 
 ### Adding a New Editor Tool
 
-When creating a new editor utility:
-
-1. **Choose the correct category**: GUI, Presets, Tools, or Migration
-2. **Use the namespace**: `NataneToon.Editor`
-3. **Add Unity menu item**: `[MenuItem("Tools/Natane/Your Tool Name")]`
-4. **Follow naming convention**: `[Feature][Editor|Tool|Manager|Window].cs`
-5. **Implement Japanese localization** for UI strings
-6. **Add Undo support** for all material modifications
-
-### Material Preset System
-
-Material presets use ScriptableObjects stored in `Runtime/Presets/`. When creating presets:
-
-- Use `NataneToonMaterialPreset.cs` as the base class
-- Store in category-based folders (Character, Props, Environment, Effects, Style_Toon, Style_NPR)
-- Include thumbnail preview images
-- Set performance ratings (A/B/C/D based on feature count)
+1. Choose the category folder under `Editor/NataneToon/`.
+2. Namespace `NataneToon.Editor`; asmdef graph is Runtime <- Editor <- Editor.Tools <- Editor.Migration (no cycles; cross-assembly access is via reflection).
+3. Register the menu path as a constant in `Editor/NataneToon/NataneToolMenuPaths.cs` and reference that constant from `[MenuItem]`.
+4. Localize UI strings with `L("日本語", "English")` from `NataneToonLocalization`.
+5. Wrap every material modification with `Undo.RecordObject`.
 
 ## Key Conventions
 
-### Shader Property Naming
-
-- Boolean toggles: `_EnableFeature` (Pascal case with "Enable" prefix)
-- Shader keywords: `_FEATURE_NAME` (uppercase with underscores)
-- Float parameters: `_FeatureParam` (Pascal case)
-- Textures: `_FeatureTex` or `_FeatureMap` (Pascal case with suffix)
-- Colors: `_FeatureColor` (Pascal case with "Color" suffix)
-
-### Performance Optimization
-
-- Use shader keywords (`#pragma shader_feature`) for optional features
-- Disabled features generate zero shader instructions (keyword-based stripping)
-- Performance rating: A (0-3 features), B (4-6), C (7-9), D (10+)
-- VRChat Quest targets: Keep materials at B rating or better
-
-### Shader Compilation
-
-- ShaderVariantCollection is used for build optimization (50-80% size reduction)
-- Prewarming is editor-only for VRChat compatibility (no runtime scripts)
-- Tools: `Tools > Natane > Shader Variant Collector` and `Tools > Natane > Shader Prewarming`
-
-### Git Workflow
-
-Current branch structure:
-- **v1.1.5** - Current stable branch (main development)
-- **v1.2.0** - Future feature branch (AudioLink, multiple MatCaps, vertex animation)
+- Boolean toggles: `_EnableFeature` / `_Feature` float; shader keywords: `_FEATURE_NAME`; textures: `_FeatureTex` / `_FeatureMap`; colors: `_FeatureColor`.
+- Performance rating: A (0-3 features), B (4-6), C (7-9), D (10+).
+- `ShaderVariants/NataneToonShaderVariants.shadervariants` and `Tools > Natane > シェーダー Shader` hold the variant collection / prewarming / stripping tools. Stripping is opt-in.
+- The `[InitializeOnLoad]` keyword synchronizer keeps toggle floats and keywords consistent for materials indexed under `Assets/`; `Tools/Natane/Fix All Material Keywords` runs it manually.
 
 ## Important Files
 
-### Shader Core Files (Most Frequently Modified)
-
-- `Shaders/NataneToon/Include/Rendering/NataneToonFragment.hlsl` (~600 lines) - Main rendering logic
-- `Shaders/NataneToon/Include/Lighting/NataneToonLighting.hlsl` (~300 lines) - Lighting calculations
-- `Shaders/NataneToon/Include/Core/NataneToonInput.hlsl` (~230 lines) - Property definitions
-
-### Editor Core Files
-
-- `Editor/NataneToon/GUI/NataneToonShaderGUI.cs` (~2000 lines) - Main material inspector
-- `Editor/NataneToon/Presets/MaterialPresetBrowser.cs` - Visual preset browser
-- `Editor/NataneToon/Tools/MaterialValidator.cs` - VRChat optimization checker
-
-### Configuration Files
-
-- `package.json` - UPM package manifest (version, dependencies, metadata)
-- `ShaderVariants/NataneToonShaderVariants.shadervariants` - Precompiled shader variants
+- `Shaders/NataneToon/Include/Rendering/NataneToonFragment.hlsl` - main rendering logic
+- `Shaders/NataneToon/Include/Lighting/NataneToonLighting.hlsl` - lighting calculations
+- `Shaders/NataneToon/Include/Core/NataneToonInput.hlsl` - property definitions
+- `Editor/NataneToon/GUI/NataneToonShaderGUI.cs` - material inspector
+- `Editor/NataneToon/Integration/NataneShaderKeywordSynchronizer.cs` - keyword table and sync
+- `Editor/NataneToon/NataneToolMenuPaths.cs` - menu path registry
+- `package.json`, `CHANGELOG.md`, `THIRD_PARTY_NOTICES.md`
+- `.github/workflows/build-listing.yml` - VPM listing build (runs on `v*` tags)
 
 ## VRChat-Specific Considerations
 
-This shader is heavily optimized for VRChat:
+- **VRC Light Volumes**: package version preferred, bundled fallback in `Shaders/NataneToon/ThirdParty/VRCLightVolumes/` (MIT, RED_SIM).
+- **LTCGI**: used only when the package is installed (`Config/NataneToonLTCGIConfig.hlsl` is auto-written by the detector).
+- **AudioLink**: reads `_AudioTexture` directly; band rows follow `ALPASS_AUDIOLINK`.
+- **Mirrors**: `_VRChatMirrorMode` is always declared; view-space XY dependent effects (MatCap, Offset Rim, Angel Ring, Eye Parallax, outline offset) flip X via `NataneMirrorSign()`.
+- **Build hooks**: `IPreprocessBuildWithReport` / `IProcessSceneWithReport` do not run inside the VRChat SDK upload pipeline; only `IPreprocessShaders` (the stripper) does.
+- All forward passes require SM 4.6 (tessellation stages are always bound). Quest/mobile GPUs are not a supported target of the main shader.
 
-- **VRC Light Volumes support**: Voxel-based lighting system (v1.0.1+)
-- **AudioLink support** (v1.2.0): Music-reactive effects for club events
-- **Quest optimization**: Refraction blur reduced from 9 to 5 samples, half-precision where possible
-- **No runtime scripts**: Shader prewarming is editor-only (VRChat script restrictions)
-- **Distance fade system**: Camera-based LOD for performance optimization
+## Documentation
 
-When modifying shaders, always test performance impact on Quest platform (mobile GPU constraints).
-
-## Common Tasks
-
-### Testing Shader Changes
-
-Unity automatically recompiles shaders on save. To test:
-1. Save the modified `.shader` or `.hlsl` file
-2. Unity compiles in background (check Console for errors)
-3. Changes apply immediately to materials using the shader
-4. Use Scene view to preview changes in real-time
-
-### Debugging Shader Issues
-
-Add debug visualizations in Fragment shader:
-```hlsl
-// Visualize normals
-return fixed4(worldNormal * 0.5 + 0.5, 1);
-
-// Visualize NdotL
-return fixed4(ndotl.xxx, 1);
-
-// Visualize shadow attenuation
-return fixed4(atten.xxx, 1);
-```
-
-### Migrating Materials from Other Shaders
-
-Use the migration tools in `Tools > Natane > [Shader] Migration Tool`:
-- **lilToon** → Automatic property mapping
-- **Other VRChat shaders** → VRChat-specific migration with variant detection
-- **Generic** → Manual mapping with batch converter
-
-## Documentation Structure
-
-### Root Directory
-- `README.md` - Main documentation (60k+ characters, comprehensive feature list)
-- `CHANGELOG.md` - Version history
-
-### Documentation~ Directory
-Detailed documentation files (Unity UPM standard, ignored on import):
-- `Documentation~/TECHNICAL.md` - Technical specifications and lighting algorithms
-- `Documentation~/FOLDER_STRUCTURE.md` - Detailed folder organization
-- `Documentation~/MIGRATION_GUIDE.md` - Migration from other shaders
-- `Documentation~/SHADER_VARIANTS.md` - Shader variant optimization guide
-- `Documentation~/PARTICLE_SYSTEM_GUIDE.md` - Particle effect system documentation
-- `Documentation~/QUICK_START.md` - 5-minute getting started guide
-- `Documentation~/RAMP_TEXTURE_GUIDE.md` - Ramp texture creation guide
-- `Documentation~/CONTRIBUTING.md` - Contribution guidelines
-
-## Japanese Localization
-
-All UI text is localized to Japanese. When adding new UI:
-- Property labels: Full Japanese translation
-- Help text: Japanese with technical term explanations
-- Error messages: Japanese with actionable guidance
-- Menu items: Keep English for Unity consistency, Japanese labels in windows
+- `README.md`, `CHANGELOG.md`, `BOOTH_DESCRIPTION.md`
+- `Documentation~/` (excluded from the VPM zip): TECHNICAL, FOLDER_STRUCTURE, MIGRATION_GUIDE, SHADER_VARIANTS, PARTICLE_SYSTEM_GUIDE, QUICK_START, RAMP_TEXTURE_GUIDE, CONTRIBUTING, VRCHAT_PC_UPLOAD_CHECKLIST, VRCHAT_WHITEOUT_CHECKLIST, SHADER_STYLE_AND_OPTIMIZATION_AUDIT
+- `Website/` is the VPM listing site (excluded from packages)
 
 ## Critical Warnings
 
-⚠️ **Do not modify include order** in `NataneToonCore.hlsl` - dependencies are strict
-⚠️ **Test all three shader variants** when adding features (Opaque/Cutout/Transparent)
-⚠️ **Maintain backward compatibility** for existing materials when changing properties
-⚠️ **Editor scripts must handle null materials** gracefully (defensive programming)
-⚠️ **Always implement Undo** for material modifications (Unity editor requirement)
+- Do not modify the include order in `NataneToonCore.hlsl`.
+- Replicate OUTLINE pass / Properties / pragma changes to all applicable variants and diff them.
+- Maintain backward compatibility for existing materials when changing properties or lighting math; look-changing fixes need a compatibility toggle.
+- Editor scripts must handle null materials/shaders gracefully and always implement Undo.
+- `NataneToonBuildSettings.hlsl` is rewritten during builds by `NataneBuildFeatureOptimizer`; do not hand-edit the generated section.
