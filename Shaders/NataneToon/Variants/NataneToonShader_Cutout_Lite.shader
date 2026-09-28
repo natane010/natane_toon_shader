@@ -1363,7 +1363,7 @@ CGPROGRAM
             #pragma vertex tessVert
             #pragma hull hull
             #pragma domain domain
-            #pragma fragment frag
+            #pragma fragment frag_cutout
             #pragma multi_compile_fwdbase
             #pragma multi_compile_fog
             #pragma multi_compile_instancing
@@ -1479,7 +1479,6 @@ CGPROGRAM
                 return col;
             }
 
-            #define frag frag_cutout
 
             ENDCG
         }
@@ -1498,7 +1497,7 @@ CGPROGRAM
             #pragma vertex tessVert
             #pragma hull hull
             #pragma domain domain
-            #pragma fragment frag
+            #pragma fragment frag_cutout
             #pragma multi_compile_fwdadd
             #pragma multi_compile_fog
             #pragma multi_compile_instancing
@@ -1572,7 +1571,6 @@ CGPROGRAM
                 return col;
             }
 
-            #define frag frag_cutout
 
             ENDCG
         }
@@ -1595,6 +1593,7 @@ CGPROGRAM
             sampler2D _MainTex;
             float4 _MainTex_ST;
             float _Cutoff;
+            fixed4 _Color;
 
             struct appdata
             {
@@ -1627,7 +1626,7 @@ CGPROGRAM
             {
                 UNITY_SETUP_STEREO_EYE_INDEX_POST_VERTEX(i);
                 fixed4 texcol = tex2D(_MainTex, i.uv);
-                clip(texcol.a - _Cutoff);
+                clip(texcol.a * _Color.a - _Cutoff);
                 SHADOW_CASTER_FRAGMENT(i)
             }
             ENDCG
