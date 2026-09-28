@@ -5,6 +5,29 @@ All notable changes to Natane Toon Shader will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Fixed
+- **Cutout / Cutout Lite**: `#pragma fragment` がコア側の `frag` を指しており `_Cutoff` によるクリップが実行されていなかった問題を修正。ShadowCaster も `_Color.a` を考慮するように変更。
+- **手描きアウトライン**: Lite / Cutout / Cutout Lite / Transparent / Transparent Lite / ScreenEdge Split でヘルパー関数が未定義でコンパイルエラーになる問題を修正。
+- **3D LUT**: `_LUT3DTex`（NOSAMPLER 宣言）を `sampler2D` 引数で受けていたため D3D11 でコンパイルエラーになる問題を修正。
+- **AudioLink**: 全バンドが Bass の履歴を参照していた座標計算を修正（行 = バンド、列 = 履歴）。Chronotensity の参照位置も `ALPASS_CHRONOTENSITY` に合わせて修正。
+- **テッセレーション**: Hull/Domain ステージでインスタンス ID が伝播せず、GPU インスタンシング時に行列が壊れる問題を修正。
+- **Fur**: 重力と風をワールド空間で適用するように変更（回転したオブジェクトで横方向に垂れていた）。
+- **Screen FX Overlay**: GrabPass テクスチャをスクリーンスペースマクロで参照し、VR Single Pass Instanced で破綻しないように修正。
+- **Shader Variant Stripper**: マテリアルの全キーワード集合とパス単位の変種キーを完全一致で比較していたため、OUTLINE / FORWARD_ADD の変種がほぼ全て除去されていた問題を修正。同一セッション内の2回目以降のビルドでホワイトリストが更新されない問題も修正。
+- **エディタ**: 一部ツールの `[MenuItem]` が旧英語グループのままで、メニューが二重化し Dashboard から開けなかった問題を修正。
+- **エディタ**: Material Validator の自動修正、Shadow Adjustment Wizard のランプ生成、Look Mixer の Legacy 自動移行に Undo を追加。
+- **エディタ**: 起動時キーワード同期がプロジェクト全体の `SaveAssets()` を呼んでいた問題を、変更マテリアルのみ保存するように修正。
+
+### Changed
+- **FORWARD_ADD パス**: ForwardBase 専用の `_RIM_LIGHT` / `_RIM_LIGHT_2` / `_OFFSET_RIM_LIGHT` / `_ENV_RIM` / `_SSS` を各バリアントの FORWARD_ADD から削除し、変種数を削減。Fur バリアントの FORWARD_BASE / FORWARD_ADD から `_FUR` を削除。
+- **package.json**: `unity` を `2022.3` に更新（ローカルキーワード上限の都合で 2021.2 未満では動作しないため）。
+- **配布物**: 開発用ファイル（`Whiteboard.md`、`unique_same_l_strings.txt`）、`Tests/`、孤立 `.meta` を VPM zip から除外。
+- **ライセンス表記**: `THIRD_PARTY_NOTICES.md` を追加し、Morgan McGuire のノイズ関数と Björn Ottosson の OKLab の帰属を明記。
+
+---
+
 ## [1.5.13] - 2026-04-21
 
 ### Fixed

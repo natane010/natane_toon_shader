@@ -1,7 +1,7 @@
 # Natane Toon Shader
 
-[![Version](https://img.shields.io/badge/version-1.5.12-blue)](https://github.com/natane010/natane_toon_shader/releases)
-[![Unity](https://img.shields.io/badge/Unity-2019.4+-black)](https://unity.com/)
+[![Version](https://img.shields.io/badge/version-1.5.13-blue)](https://github.com/natane010/natane_toon_shader/releases)
+[![Unity](https://img.shields.io/badge/Unity-2022.3+-black)](https://unity.com/)
 [![License](https://img.shields.io/badge/license-MIT-green)](LICENSE)
 
 Unity Built-in Render Pipeline向けの、セルルック/NPR表現用シェーダーパッケージです。
@@ -23,8 +23,8 @@ VRChat運用を意識した機能（AudioLink、VRC Light Volumes、LTCGI、最�
 
 ## 動作環境
 
-- Unity: `2019.4+`（Built-in Render Pipeline想定）
-- パッケージバージョン: `1.5.12`（`package.json`準拠）
+- Unity: `2022.3+`（Built-in Render Pipeline想定。ローカルキーワード数の上限とテッセレーションの都合で 2021.2 未満では読み込めません）
+- パッケージバージョン: `1.5.13`（`package.json`準拠）
 
 ## 収録シェーダー
 
@@ -70,13 +70,14 @@ VRChat運用を意識した機能（AudioLink、VRC Light Volumes、LTCGI、最�
 
 ### バリアント
 
-- `Natane/Toon Shader (Cutout)` — Opaque版の軽量バリアント（一部高度機能を省略）
-- `Natane/Toon Shader (Transparent)` — Cutout同等 + Refraction対応
+- `Natane/Toon Shader (Cutout)` — Opaque版と同じ機能セット + `_Cutoff` によるアルファカットアウト
+- `Natane/Toon Shader (Transparent)` — Opaque版と同じ機能セット + 半透明ブレンド（ShadowCasterなし）
 - `Natane/Toon Shader (Lite)` — GrabPassなし軽量版
 - `Natane/Toon Shader (Cutout Lite)` — Cutout + Lite
 - `Natane/Toon Shader (Transparent Lite)` — Transparent + Lite
 - `Natane/Toon Shader (Fur)` — シェルベースファーレンダリング
 - `Natane/Toon Shader (Fur Lite)` — Fur + Lite
+- `Natane/Toon Shader (ScreenEdge Split)` — Screen Edge を別パスで重ねる分割描画版
 - `Natane/Toon Shader (Background)` — 背景ワールド用（ライトマップ・PBR・Metaパス）
 
 ### Natane/Toon Shader (Background) 専用機能
@@ -85,7 +86,6 @@ VRChat運用を意識した機能（AudioLink、VRC Light Volumes、LTCGI、最�
 - Triplanar Mapping
 - Height Fog（高さベースフォグ）
 - Surface Cover（雪/砂カバー）
-- Mirror Control
 - Quest Lite（Quest最適化モード）
 - PBR対応（Metallic/Smoothness）
 
@@ -317,8 +317,8 @@ VRChat運用を意識した機能（AudioLink、VRC Light Volumes、LTCGI、最�
 - 移行: `Documentation~/MIGRATION_GUIDE.md`
 - クイックスタート: `Documentation~/QUICK_START.md`
 - 技術資料: `Documentation~/TECHNICAL.md`
-- Eye詳細: `Shaders/NataneToon/Eye/NataneToonEye使用方法.md`
-- Eyeテクスチャ運用: `Shaders/NataneToon/Eye/NataneToonEye_テクスチャ対応.md`
+- Eye詳細: `Shaders/NataneToon/Eye/NataneToonEye_HowToUse.md`
+- Eyeテクスチャ運用: `Shaders/NataneToon/Eye/NataneToonEye_TextureSupport.md`
 - Wirelight詳細: `Shaders/NataneToon/NataneToonWirelight_README.md`
 - ScreenFX詳細: `Shaders/NataneToon/Effects/NataneScreenFX_README.md`
 - ランプテクスチャ: `Documentation~/RAMP_TEXTURE_GUIDE.md`
