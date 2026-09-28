@@ -350,6 +350,7 @@ namespace NataneToon.Editor
                     .ToList();
 
                 int fixedCount = 0;
+                var changedMaterials = new List<Material>();
 
                 foreach (var entry in nataneEntries)
                 {
@@ -361,13 +362,28 @@ namespace NataneToon.Editor
                     if (SynchronizeMaterialKeywords(material))
                     {
                         EditorUtility.SetDirty(material);
+                        changedMaterials.Add(material);
                         fixedCount++;
                     }
                 }
 
                 if (fixedCount > 0)
                 {
-                    AssetDatabase.SaveAssets();
+                    // Save only the materials this pass modified. AssetDatabase.SaveAssets()
+                    // would also flush every other dirty asset in the project on each
+                    // domain reload, which is surprising and slow in large projects.
+                    try
+                    {
+                        AssetDatabase.StartAssetEditing();
+                        foreach (Material material in changedMaterials)
+                        {
+                            AssetDatabase.SaveAssetIfDirty(material);
+                        }
+                    }
+                    finally
+                    {
+                        AssetDatabase.StopAssetEditing();
+                    }
                     Debug.Log($"[NataneToonShader] キーワード同期完了: {fixedCount}/{nataneEntries.Count} マテリアルを修正しました");
                 }
             }
