@@ -111,15 +111,20 @@ v2f_fur furVert(appdata_fur v)
     o.uv = v.uv;
     o.uv1 = v.uv1;
 
-    // Shell offset along normal
+    // Shell offset along normal (object space)
     float3 offset = v.normal * layer * _FurLength;
 
-    // Gravity (quadratic falloff for natural droop)
-    offset.y -= _FurGravity * layer * layer;
+    // Gravity (quadratic falloff for natural droop).
+    // World-space "down" converted to object space so fur droops toward the
+    // ground even when the object is rotated or tilted.
+    float3 gravityDirOS = mul((float3x3)unity_WorldToObject, float3(0.0, -1.0, 0.0));
+    gravityDirOS = normalize(gravityDirOS + float3(0.0, 0.0, 0.0001));
+    offset += gravityDirOS * (_FurGravity * layer * layer);
 
-    // Wind animation
+    // Wind animation (_FurWindDirection is a world-space direction)
     float windPhase = _Time.y * _FurWindSpeed;
-    float3 windOffset = _FurWindDirection.xyz * sin(windPhase + v.vertex.x * 2.0) * _FurWindStrength * layer;
+    float3 windDirOS = mul((float3x3)unity_WorldToObject, _FurWindDirection.xyz);
+    float3 windOffset = windDirOS * sin(windPhase + v.vertex.x * 2.0) * _FurWindStrength * layer;
     offset += windOffset;
 
     // Apply mask - scale shell offset by mask value
