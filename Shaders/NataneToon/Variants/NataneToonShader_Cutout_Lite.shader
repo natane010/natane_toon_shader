@@ -1531,11 +1531,6 @@ CGPROGRAM
             #pragma shader_feature_local _SPECULAR_AA
             #pragma shader_feature_local _SPECULAR_DITHER
             #pragma shader_feature_local _HAIR_SPECULAR
-            #pragma shader_feature_local _RIM_LIGHT
-            #pragma shader_feature_local _RIM_LIGHT_2
-            #pragma shader_feature_local _OFFSET_RIM_LIGHT
-            #pragma shader_feature_local _ENV_RIM
-            #pragma shader_feature_local _SSS
             #pragma shader_feature_local _NORMALMAP
             #pragma shader_feature_local _DISSOLVE
             #pragma shader_feature_local _ALPHA_MASK

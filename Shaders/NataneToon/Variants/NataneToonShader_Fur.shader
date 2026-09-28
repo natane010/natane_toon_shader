@@ -1307,7 +1307,6 @@ CGPROGRAM
             #pragma shader_feature_local _LTCGI
             #pragma shader_feature_local _WATER_DRIP
             #pragma shader_feature_local _SMEAR
-            #pragma shader_feature_local _FUR
             #pragma shader_feature_local _DITHERING_ALPHA
             #pragma shader_feature_local _HASHED_ALPHA
             #pragma shader_feature_local _VAT
@@ -1371,11 +1370,6 @@ CGPROGRAM
             #pragma shader_feature_local _SPECULAR_AA
             #pragma shader_feature_local _SPECULAR_DITHER
             #pragma shader_feature_local _HAIR_SPECULAR
-            #pragma shader_feature_local _RIM_LIGHT
-            #pragma shader_feature_local _RIM_LIGHT_2
-            #pragma shader_feature_local _OFFSET_RIM_LIGHT
-            #pragma shader_feature_local _ENV_RIM
-            #pragma shader_feature_local _SSS
             #pragma shader_feature_local _NORMALMAP
             #pragma shader_feature_local _DISSOLVE
             #pragma shader_feature_local _ALPHA_MASK
@@ -1384,7 +1378,6 @@ CGPROGRAM
             #pragma shader_feature_local _INTERSECTION_FADE
             #pragma shader_feature_local _DISTANCE_FADE
             #pragma shader_feature_local _SMEAR
-            #pragma shader_feature_local _FUR
             #pragma shader_feature_local _DITHERING_ALPHA
             #pragma shader_feature_local _HASHED_ALPHA
             #pragma shader_feature_local _VAT
