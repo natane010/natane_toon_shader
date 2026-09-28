@@ -18,8 +18,17 @@ namespace NataneToon.Editor
         private const string STRIP_ENABLED_KEY = "NataneToon_VariantStrippingEnabled";
         private const string STRIP_LOG_KEY = "NataneToon_VariantStrippingLog";
 
+        // A build that goes quiet for longer than this is treated as finished, so the
+        // next OnProcessShader call re-reads the whitelist. IPreprocessShaders is also
+        // invoked by AssetBundle builds (VRChat SDK uploads) which never call
+        // IPreprocessBuildWithReport, so we cannot rely on that hook alone for resets.
+        private const double BUILD_SESSION_IDLE_SECONDS = 60.0;
+
         private static HashSet<string> whitelistedKeywordSets;
+        // Same whitelist split into keyword arrays, for per-pass projection.
+        private static List<string[]> whitelistedKeywordArrays;
         private static bool initialized;
+        private static double lastProcessTime;
         private static int strippedCount;
         private static int keptCount;
 
@@ -37,6 +46,15 @@ namespace NataneToon.Editor
                 return;
             }
 
+            double now = EditorApplication.timeSinceStartup;
+            if (initialized && now - lastProcessTime > BUILD_SESSION_IDLE_SECONDS)
+            {
+                // New build in the same editor session: materials may have changed since the
+                // previous build, so refresh the whitelist instead of reusing the stale one.
+                ResetBuildSessionState();
+            }
+            lastProcessTime = now;
+
             if (!initialized)
             {
                 InitializeKeywordWhitelist();
@@ -47,10 +65,19 @@ namespace NataneToon.Editor
 
             bool logEnabled = EditorPrefs.GetBool(STRIP_LOG_KEY, true);
 
+            // The whitelist holds each material's FULL keyword set (all passes merged),
+            // but each pass only declares a subset of the shader's keywords (OUTLINE ~10,
+            // FORWARD_ADD ~40, SHADOW_CASTER 0). Comparing the full set against a per-pass
+            // variant key never matches for those passes and strips e.g. every outline
+            // variant. Project the whitelist onto the keywords this snippet actually
+            // declares before comparing.
+            HashSet<string> passKeywords = CollectPassKeywords(data);
+            HashSet<string> projectedWhitelist = ProjectWhitelist(passKeywords);
+
             for (int i = data.Count - 1; i >= 0; i--)
             {
                 string keywordSetKey = GetKeywordSetKey(data[i].shaderKeywordSet);
-                if (whitelistedKeywordSets.Contains(keywordSetKey))
+                if (projectedWhitelist.Contains(keywordSetKey))
                 {
                     keptCount++;
                 }
@@ -70,7 +97,14 @@ namespace NataneToon.Editor
         private static void InitializeKeywordWhitelist()
         {
             NataneBuildPreparationService.PrepareForBuild(forceRefresh: false, logSummary: false);
-            whitelistedKeywordSets = NataneBuildPreparationService.LoadKeywordWhitelist();
+            whitelistedKeywordSets = NataneBuildPreparationService.LoadKeywordWhitelist() ?? new HashSet<string>();
+            whitelistedKeywordArrays = new List<string[]>(whitelistedKeywordSets.Count);
+            foreach (string key in whitelistedKeywordSets)
+            {
+                whitelistedKeywordArrays.Add(string.IsNullOrEmpty(key)
+                    ? new string[0]
+                    : key.Split(new[] { ';' }, System.StringSplitOptions.RemoveEmptyEntries));
+            }
             AddVariantsFromCollections();
 
             if (EditorPrefs.GetBool(STRIP_LOG_KEY, true))
@@ -98,6 +132,57 @@ namespace NataneToon.Editor
             }
         }
 
+        /// <summary>
+        /// Union of all local ("_"-prefixed) keywords that appear in any variant of this
+        /// snippet, i.e. the keywords the pass declares via shader_feature/multi_compile.
+        /// </summary>
+        private static HashSet<string> CollectPassKeywords(IList<ShaderCompilerData> data)
+        {
+            var passKeywords = new HashSet<string>();
+            for (int i = 0; i < data.Count; i++)
+            {
+                foreach (ShaderKeyword keyword in data[i].shaderKeywordSet.GetShaderKeywords())
+                {
+                    if (!string.IsNullOrEmpty(keyword.name) && keyword.name.StartsWith("_"))
+                    {
+                        passKeywords.Add(keyword.name);
+                    }
+                }
+            }
+            return passKeywords;
+        }
+
+        /// <summary>
+        /// Intersects every whitelisted material keyword set with the pass's declared
+        /// keywords and returns the resulting per-pass variant keys. The empty key (base
+        /// variant) is always included so passes without features survive.
+        /// </summary>
+        private static HashSet<string> ProjectWhitelist(HashSet<string> passKeywords)
+        {
+            var projected = new HashSet<string> { string.Empty };
+            if (whitelistedKeywordArrays == null)
+            {
+                return projected;
+            }
+
+            var buffer = new List<string>();
+            for (int i = 0; i < whitelistedKeywordArrays.Count; i++)
+            {
+                buffer.Clear();
+                string[] materialKeywords = whitelistedKeywordArrays[i];
+                for (int k = 0; k < materialKeywords.Length; k++)
+                {
+                    if (passKeywords.Contains(materialKeywords[k]))
+                    {
+                        buffer.Add(materialKeywords[k]);
+                    }
+                }
+                buffer.Sort(System.StringComparer.Ordinal);
+                projected.Add(string.Join(";", buffer));
+            }
+            return projected;
+        }
+
         private static string GetKeywordSetKey(ShaderKeywordSet keywordSet)
         {
             var keywords = new List<string>();
@@ -109,7 +194,7 @@ namespace NataneToon.Editor
                 }
             }
 
-            keywords.Sort();
+            keywords.Sort(System.StringComparer.Ordinal);
             return string.Join(";", keywords);
         }
 
@@ -123,6 +208,8 @@ namespace NataneToon.Editor
         {
             initialized = false;
             whitelistedKeywordSets = null;
+            whitelistedKeywordArrays = null;
+            lastProcessTime = 0.0;
             strippedCount = 0;
             keptCount = 0;
         }
