@@ -16,3 +16,13 @@ Website.meta
 .claude/
 CLAUDE.md
 CLAUDE.md.meta
+
+# Development notes / scratch files
+Whiteboard.md
+Whiteboard.md.meta
+unique_same_l_strings.txt
+unique_same_l_strings.txt.meta
+
+# Editor tests (not needed by package consumers)
+Tests/
+Tests.meta

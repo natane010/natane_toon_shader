@@ -41,7 +41,12 @@ jobs:
             --exclude _build \
             --exclude .claude \
             --exclude 'Documentation~' \
-            --exclude CLAUDE.md
+            --exclude 'CLAUDE.md*' \
+            --exclude 'Website.meta' \
+            --exclude 'Whiteboard.md*' \
+            --exclude 'unique_same_l_strings.txt*' \
+            --exclude 'Tests' \
+            --exclude 'Tests.meta'
           # VPM requires package.json at zip root (no subdirectory wrapper)
           cd _build
           zip -r ../${{ env.PACKAGE_NAME }}-${VERSION}.zip .
