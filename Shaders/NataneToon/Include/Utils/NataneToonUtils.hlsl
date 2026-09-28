@@ -867,15 +867,14 @@ half3 SampleGrabTextureWithBlur(float2 uv, float blurAmount)
 float SampleAudioLink(int band)
 {
     #ifdef _AUDIOLINK
-        // AudioLink standard texture coordinates
-        // Band data is stored in the first row (y = 0.0 to 0.0625)
-        float2 audioUV = float2(0.0, 0.0);
+        // AudioLink texture layout (128x64): ALPASS_AUDIOLINK = uint2(0, 0), size 128x4.
+        // Rows 0..3 are the four bands (Bass, Low Mid, High Mid, Treble);
+        // the X axis is the history buffer (x = 0 is the current sample).
+        // Sampling texel (0, band) matches AudioLinkData(ALPASS_AUDIOLINK + int2(0, band)).
+        float2 audioUV = float2(0.5 / 128.0, (float(clamp(band, 0, 3)) + 0.5) / 64.0);
 
-        // Map band to x coordinate (0-3 mapped to texture space)
-        audioUV.x = (float(band) + 0.5) / 4.0; // Center of each band quadrant
-
-        // Sample AudioLink texture
-        float audioValue = tex2D(_AudioTexture, audioUV).r;
+        // Sample AudioLink texture (mip 0, no filtering across rows)
+        float audioValue = tex2Dlod(_AudioTexture, float4(audioUV, 0, 0)).r;
         return saturate(audioValue);
     #else
         return 0.0;
@@ -889,11 +888,11 @@ float SampleAudioLinkChronotensity(int band, int mode)
 {
     #ifdef _AUDIOLINK_CHRONOTENSITY
         // AudioLink Chronotensity data layout (standard 128x64 texture):
-        // ALPASS_CHRONOTENSITY = row 16, 4 rows for 4 bands
-        // Columns correspond to chronotensity modes
+        // ALPASS_CHRONOTENSITY = uint2(16, 28), size 8x4.
+        // Columns 16..23 are the chronotensity modes, rows 28..31 are the four bands.
         float2 chronoUV = float2(
-            (float(mode) + 0.5) / 128.0,
-            (16.0 + float(band) + 0.5) / 64.0
+            (16.0 + float(clamp(mode, 0, 7)) + 0.5) / 128.0,
+            (28.0 + float(clamp(band, 0, 3)) + 0.5) / 64.0
         );
         return saturate(tex2Dlod(_AudioTexture, float4(chronoUV, 0, 0)).r);
     #else
@@ -1580,7 +1579,7 @@ half3 QuantizeColorHSV(half3 color, float hueLevels, float satLevels, float valL
 // color:   input linear RGB (should be [0,1])
 // lutTex:  the LUT texture sampler
 // lutSize: number of cells per axis (typically 32)
-half3 ApplyLUT3D(half3 color, sampler2D lutTex, float lutSize)
+half3 ApplyLUT3D(half3 color, NATANE_TEX2D_NS_ARG(lutTex), float lutSize)
 {
     float blue = color.b * (lutSize - 1.0);
     float blueFloor = floor(blue);
@@ -1599,8 +1598,8 @@ half3 ApplyLUT3D(half3 color, sampler2D lutTex, float lutSize)
     uv2.x = (min(blueFloor + 1.0, lutSize - 1.0) * invSize + color.r * invSize * (1.0 - invSize)) + halfTexel * invSize;
     uv2.y = uv1.y;
 
-    half3 lut1 = tex2D(lutTex, uv1).rgb;
-    half3 lut2 = tex2D(lutTex, uv2).rgb;
+    half3 lut1 = NATANE_SAMPLE_CLAMP(lutTex, uv1).rgb;
+    half3 lut2 = NATANE_SAMPLE_CLAMP(lutTex, uv2).rgb;
 
     return lerp(lut1, lut2, blueFrac);
 }
