@@ -188,6 +188,8 @@ CBUFFER_START(UnityPerMaterial)
 
     // Ambient Occlusion
     float _AOIntensity;
+    float _AOMultiBounce;            // 0 = off; coloured multi-bounce AO on indirect light
+    float _AOMicroShadow;            // 0 = off; AO-driven micro shadowing of the main light
     float _AOBlend;
     float _AOBlendMode;
     float _AOBlur;
@@ -245,6 +247,9 @@ CBUFFER_START(UnityPerMaterial)
     float _SpecularAAGeometric;      // widens GGX roughness where the surface curves within a pixel
     float _HighlightCompress;        // hue-preserving roll-off of over-bright lit colour
     float _LightVolumeSHMode;        // 0 = linear L1, 1 = ZH3, 2 = Geomerics
+    float _LightVolumeKeyLight;      // 0 = off; treats the Light Volume's dominant direction as a toon key light
+    float _MatteDiffuse;             // 0 = Lambert; strength of the EON rough-diffuse response
+    float _MatteDiffuseRoughness;
     float _SmoothNormalShadingBlend;
     float _SmoothNormalMode;
     float _LightColorMin;
@@ -369,6 +374,8 @@ CBUFFER_START(UnityPerMaterial)
     half4 _SheenColor;
     float _SheenIntensity;
     float _SheenPower;
+    float _SheenModel;               // 0 = classic Fresnel sheen, 1 = Charlie
+    float _SheenRoughness;
     float _SheenBlend;
     float _SheenBlendMode;
     #endif

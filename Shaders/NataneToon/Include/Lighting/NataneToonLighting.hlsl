@@ -113,6 +113,68 @@ float3 NataneLightVolumeEvaluateMode(float3 n, float3 L0, float3 L1r, float3 L1g
 }
 #endif
 
+// ===== Light Volume key light (toon decomposition of L0 + L1) =====
+// Baked / volume lighting arrives as irradiance SH, which shades like a soft gradient and
+// gives a toon material nothing to put its terminator on. This splits the four
+// coefficients into the pieces a toon pipeline expects:
+//   keyDir    dominant direction d of the L1 band (shared luminance axis, no hue split)
+//   keyColor  irradiance facing d:        E(d)  = L0 + L1.d
+//   fillColor irradiance facing away:     E(-d) = L0 - L1.d   (what really reaches the shade)
+// Feeding keyDir / keyColor to the normal toon path and using fillColor as the ambient
+// floor reproduces E(d) on the lit side exactly, keeps a painted shadow colour from
+// dropping below the light that is physically there, and puts a clean toon boundary
+// where the baked light actually comes from (per pixel, so it follows the avatar
+// through the volume and includes point light volumes).
+// Inputs follow the VRC Light Volumes convention (linear eval = L0 + dot(L1, n)).
+void NataneSHL1KeyLight(float3 L0, float3 L1r, float3 L1g, float3 L1b,
+                        out half3 keyDir, out half3 keyColor, out half3 fillColor)
+{
+    const float3 lumWeights = float3(0.2126, 0.7152, 0.0722);
+    float3 axis = L1r * lumWeights.r + L1g * lumWeights.g + L1b * lumWeights.b;
+    float axisLenSq = dot(axis, axis);
+    // Perfectly uniform ambient has no direction: light from above, like the SH fallback.
+    float3 d = (axisLenSq > 1e-8) ? axis * rsqrt(axisLenSq) : float3(0.0, 1.0, 0.0);
+    float3 l1d = float3(dot(L1r, d), dot(L1g, d), dot(L1b, d));
+    keyDir = d;
+    keyColor = max(0.0, L0 + l1d);
+    fillColor = max(0.0, L0 - l1d);
+}
+
+// ===== Matte diffuse: energy-preserving Oren-Nayar (EON) =====
+// Portsmouth, Kutz, Hill, "EON: A Practical Energy-Preserving Rough Diffuse BRDF"
+// (JCGT 2025). Rough, powdery surfaces (unglazed clay, cotton, dry skin, felt) do not
+// follow Lambert: they stay brighter toward the terminator when lit from the viewer's
+// side and fall off faster when lit from behind, which is the cue that reads as "matte".
+// The multiple-scattering term returns the energy classic Oren-Nayar loses and, because
+// it is tinted by albedo^2, deepens the saturation of coloured matte surfaces.
+// Returns the BRDF relative to Lambert (multiply N.L by it): 1 at roughness 0.
+//   NdotL, NdotV must be > 0;  LdotV = dot(L, V);  r = roughness 0..1;  rho = albedo.
+half3 NataneEONDiffuseRatio(half NdotL, half NdotV, half LdotV, half r, half3 rho)
+{
+    const half c1 = 0.5 - 2.0 / (3.0 * UNITY_PI);
+    const half c2 = 2.0 / 3.0 - 28.0 / (15.0 * UNITY_PI);
+
+    half AF = 1.0 / (1.0 + c1 * r);
+
+    // Single scattering (Fujii's improved Oren-Nayar, the "FON" term)
+    half s = LdotV - NdotL * NdotV;
+    half sOverT = (s > 0.0) ? s / max(max(NdotL, NdotV), 1e-3) : s;
+    half single = AF * (1.0 + r * sOverT);
+
+    // Multiple scattering: analytic fit of the directional albedo E(mu)
+    half mcL = 1.0 - NdotL;
+    half mcV = 1.0 - NdotV;
+    half gL = mcL * (0.0571085289 + mcL * (0.491881867 + mcL * (-0.332181442 + mcL * 0.0714429953)));
+    half gV = mcV * (0.0571085289 + mcV * (0.491881867 + mcV * (-0.332181442 + mcV * 0.0714429953)));
+    half EL = AF * (1.0 + r * gL);
+    half EV = AF * (1.0 + r * gV);
+    half avgE = AF * (1.0 + c2 * r);
+    half3 rhoMsOverRho = rho * avgE / max(1.0 - rho * (1.0 - avgE), 1e-3);
+    half3 multi = rhoMsOverRho * (max(1e-4, 1.0 - EV) * max(1e-4, 1.0 - EL) / max(1e-4, 1.0 - avgE));
+
+    return max(0.0, single) + multi;
+}
+
 // Toon Shading with adjustable steps and sharpness
 // Creates cel-shaded stepped lighting effect
 float ToonShading(float ndotl, float steps, float sharpness)
@@ -494,7 +556,24 @@ half3 SheenHighlight(half3 normal, half3 viewDir, half3 lightDir)
     viewNormal.x *= NataneMirrorSign();
     half NdotV = max(0.0, dot(normalize(viewNormal), float3(0, 0, 1)));
     half NdotL = max(0.0, dot(normal, lightDir));
-    // Charlie sheen approximation: grazing angle fabric luster
+    if (_SheenModel >= 0.5)
+    {
+        // Charlie sheen: inverted-Gaussian NDF of Estevez & Kulla, "Production Friendly
+        // Microfacet Sheen BRDF" (2017) with Neubelt's visibility term (as in Filament).
+        // Unlike the Fresnel-style term below it has a real microfibre lobe: the luster
+        // follows the half vector and widens with roughness, so velvet, wool and fleece
+        // read as different cloths instead of the same rim glow.
+        half3 H = normalize(viewDir + lightDir);
+        half NdotH = saturate(dot(normal, H));
+        half alpha = max(_SheenRoughness * _SheenRoughness, 0.01);
+        half invAlpha = 1.0 / alpha;
+        half sin2h = max(1.0 - NdotH * NdotH, 0.0078125);   // keeps pow() finite on half
+        half D = (2.0 + invAlpha) * pow(sin2h, invAlpha * 0.5) * (0.5 / UNITY_PI);
+        half V = 1.0 / (4.0 * (NdotL + NdotV - NdotL * NdotV) + 1e-3);
+        half charlie = D * V * NdotL * UNITY_PI;
+        return min(charlie, 4.0) * _SheenColor.rgb * _SheenIntensity;
+    }
+    // Classic: grazing angle fabric luster
     half sheen = pow(1.0 - NdotV, _SheenPower) * NdotL;
     return saturate(sheen) * _SheenColor.rgb * _SheenIntensity;
 }
@@ -503,7 +582,10 @@ half3 SheenHighlight(half3 normal, half3 viewDir, half3 lightDir)
 // Subsurface Scattering (Translucency)
 // Simulates light passing through thin or translucent materials
 #if defined(_SSS)
-half3 SubsurfaceScattering(half3 normal, half3 lightDir, half3 viewDir, half thickness, half atten, float powerOverride)
+// lightColor: pass the light the direction came from. This used to read _LightColor0
+// directly, which is black in baked-only worlds where the direction falls back to a
+// vertex light / light probe, so transmission vanished there.
+half3 SubsurfaceScattering(half3 normal, half3 lightDir, half3 viewDir, half thickness, half atten, float powerOverride, half3 lightColor)
 {
     // Distort the normal for more realistic scattering effect
     half3 distortedNormal = normal + normalize(viewDir) * _SSSDistortion;
@@ -521,7 +603,7 @@ half3 SubsurfaceScattering(half3 normal, half3 lightDir, half3 viewDir, half thi
     // Apply intensity, attenuation, and light color
     backLight *= _SSSIntensity * atten;
 
-    return backLight * _SSSColor.rgb * _LightColor0.rgb;
+    return backLight * _SSSColor.rgb * lightColor;
 }
 #endif // _SSS
 

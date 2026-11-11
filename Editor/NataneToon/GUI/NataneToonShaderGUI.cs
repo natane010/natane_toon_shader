@@ -6277,6 +6277,12 @@ public class NataneToonShaderGUI : ShaderGUI
                 }
 
                 DrawProperty("_AOIntensity", L("AO強度", "AO Intensity"));
+                DrawProperty("_AOMultiBounce", L("AOの色かぶり（多重反射）", "AO Multi-Bounce Color"),
+                    "くぼみの中で跳ね返る光を近似し、明るい・彩度の高い面の AO が灰色に沈まず色味を保ちます。肌のしわや白い布に有効。0 で従来どおり。",
+                    "Approximates light bouncing inside creases so AO on bright or saturated surfaces keeps its colour instead of going grey. Good for skin folds and white cloth. 0 = as before.");
+                DrawProperty("_AOMicroShadow", L("AOマイクロシャドウ", "AO Micro Shadow"),
+                    "AO マップをもとに、メインライトの細かな自己影（しわ・織り目・襟元）を足します。影境界そのものが動くのでトゥーンの段と馴染みます。0 で従来どおり。",
+                    "Adds small self-shadows from the main light (creases, weave, collars) driven by the AO map. It moves the shading boundary itself, so it blends with toon steps. 0 = as before.");
                 DrawHelpToggle("AO",
                     L("🌑 アンビエントオクルージョン (AO):\n" +
                     "テクスチャの暗い部分で陰影を追加し、奥行き感を出します。\n" +
@@ -10679,6 +10685,11 @@ public class NataneToonShaderGUI : ShaderGUI
             () => { Undo.RecordObject(targetMaterial, "Apply Semi-Real Toon"); ApplySemiRealToonStyle(targetMaterial); SynchronizeKeywordsAndRefreshInspectorCaches(); });
 
         DrawWizardStyleButton(
+            L("リアル調マット", "Matte Real Toon"),
+            L("セミリアル＋ツヤ消し。マット拡散とLight Volumeキーライトで布・肌の質感を出す", "Semi-real with gloss toned down: matte diffuse + Light Volume key light for cloth and skin"),
+            () => { Undo.RecordObject(targetMaterial, "Apply Matte Real Toon"); ApplyMatteRealToonStyle(targetMaterial); SynchronizeKeywordsAndRefreshInspectorCaches(); });
+
+        DrawWizardStyleButton(
             L("Near PBR", "Near PBR"),
             L("リアルな質感・滑らかなライティング", "Realistic textures, smooth lighting"),
             () => { Undo.RecordObject(targetMaterial, "Apply Near PBR"); ApplyNearPbrStyle(targetMaterial); });
@@ -11036,6 +11047,83 @@ public class NataneToonShaderGUI : ShaderGUI
         DrawProperty("_LightVolumeSHMode", L("ライトボリュームの陰影", "Light Volume Shading"),
             "Light Volumes の明暗の出し方。Linear = 従来、ZH3 / Geomerics = コントラストを復元（VRC Light Volumes 使用時のみ有効）。",
             "How Light Volume lighting is reconstructed. Linear = as before, ZH3 / Geomerics restore contrast (only with VRC Light Volumes).");
+
+        DrawProperty("_LightVolumeKeyLight", L("ライトボリュームをキーライト化", "Light Volume Key Light"),
+            "Light Volumes（ベイク光）の主方向をトゥーンのキーライトとして扱います。リアルタイムライトの無いワールドでも影境界がきれいに出て、影側は実際の環境光より暗くなりません。合成モード Natural で最も効果的。0 で従来どおり。",
+            "Treats the dominant direction of the Light Volume (baked light) as a toon key light. Worlds without a realtime light get a clean shading boundary, and the shade never drops below the real ambient. Works best with the Natural blend mode. 0 = as before.");
+
+        DrawMatteMaterialControls();
+    }
+
+    /// <summary>
+    /// 「マット質感」グループ。マット拡散（EON）と布のシーン（Sheen）。
+    /// どちらも既定値では無効で、既存マテリアルの見た目は変わらない。
+    /// </summary>
+    private void DrawMatteMaterialControls()
+    {
+        EditorGUILayout.Space(10);
+        DrawSubGroupHeader(L("マット質感", "Matte Material"));
+
+        DrawProperty("_MatteDiffuse", L("マット拡散", "Matte Diffuse"),
+            "粉っぽい・ざらついた面（素焼き、コットン、フェルト、乾いた肌）の光の回り方を再現します。順光では境界まで明るく平坦に、逆光では早めに落ちます。色付きの面は彩度が少し深くなります。0 で従来（ランバート）。",
+            "Reproduces how light wraps powdery, rough surfaces (clay, cotton, felt, dry skin): flatter and brighter up to the boundary when front-lit, falling off sooner when back-lit, with slightly deeper saturation on coloured surfaces. 0 = as before (Lambert).");
+        MaterialProperty matteDiffuse = FindProperty("_MatteDiffuse", properties, false);
+        if (matteDiffuse != null && (matteDiffuse.hasMixedValue || matteDiffuse.floatValue > 0.001f))
+        {
+            EditorGUI.indentLevel++;
+            DrawProperty("_MatteDiffuseRoughness", L("ざらつき", "Roughness"),
+                "大きいほど粉っぽく平坦に見えます。布 0.5〜0.8、肌 0.3〜0.5 が目安。",
+                "Higher looks more powdery and flat. Roughly 0.5-0.8 for cloth, 0.3-0.5 for skin.");
+            EditorGUI.indentLevel--;
+        }
+
+        // Sheen はプロパティだけ存在し、これまでインスペクターから有効化できなかった。
+        if (FindProperty("_Sheen", properties, false) != null)
+        {
+            bool enableSheen = DrawToggle("_SHEEN", "_Sheen", L("布のシーン（毛羽立ちの光沢）", "Fabric Sheen"));
+            if (enableSheen)
+            {
+                EditorGUI.indentLevel++;
+                DrawProperty("_SheenModel", L("方式", "Model"),
+                    "Classic = 輪郭に沿う簡易な光沢。Charlie = 繊維の毛羽立ちを再現する物理ベースの光沢（ベルベット・ウール・フリース向き）。",
+                    "Classic = simple grazing-angle luster. Charlie = physically based microfibre luster (velvet, wool, fleece).");
+                DrawColorProperty("_SheenColor", L("シーンの色", "Sheen Color"));
+                DrawProperty("_SheenIntensity", L("強度", "Intensity"));
+                MaterialProperty sheenModel = FindProperty("_SheenModel", properties, false);
+                if (sheenModel != null && !sheenModel.hasMixedValue && sheenModel.floatValue >= 0.5f)
+                    DrawProperty("_SheenRoughness", L("毛羽の粗さ", "Sheen Roughness"),
+                        "小さいほど輪郭に細く鋭く、大きいほど全体にふんわり乗ります。",
+                        "Lower is a thin sharp edge luster, higher spreads softly over the surface.");
+                else
+                    DrawProperty("_SheenPower", L("鋭さ", "Power"));
+                DrawProperty("_SheenMask", L("シーンマスク", "Sheen Mask"));
+                DrawProperty("_SheenBlend", L("ブレンド", "Blend"));
+                DrawProperty("_SheenBlendMode", L("ブレンドモード", "Blend Mode"));
+                EditorGUI.indentLevel--;
+            }
+        }
+    }
+
+    /// <summary>
+    /// リアル調マット プリセット。セミリアル Toon を土台に、ツヤを抑えて
+    /// マット拡散（EON）と Light Volume キーライトを足す。布・肌・マットな小物向け。
+    /// </summary>
+    internal void ApplyMatteRealToonStyle(Material mat)
+    {
+        if (mat == null) return;
+        ApplySemiRealToonStyle(mat);
+
+        SetFloatIfPresent(mat, "_MatteDiffuse", 0.85f);
+        SetFloatIfPresent(mat, "_MatteDiffuseRoughness", 0.65f);
+        SetFloatIfPresent(mat, "_MatteEffect", 0.45f);
+        SetFloatIfPresent(mat, "_Smoothness", 0.25f);
+        SetFloatIfPresent(mat, "_Glossiness", 0.35f);
+        SetFloatIfPresent(mat, "_PbrWeight", 0.25f);
+        SetFloatIfPresent(mat, "_LightVolumeKeyLight", 1f);
+        SetFloatIfPresent(mat, "_LightVolumeBlendMode", 3f);   // Natural
+
+        Undo.SetCurrentGroupName(L("プリセット適用: リアル調マット", "Apply Preset: Matte Real Toon"));
+        EditorUtility.SetDirty(mat);
     }
 
     /// <summary>

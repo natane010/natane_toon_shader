@@ -894,21 +894,33 @@ float SampleAudioLink(int band)
 // mode: 0=MotionIncrease, 1=MotionSpeed, 2=SelfIntensity, 3=ColorChord
 float SampleAudioLinkChronotensity(int band, int mode)
 {
-    #ifdef _AUDIOLINK_CHRONOTENSITY
-        // AudioLink Chronotensity data layout (standard 128x64 texture):
-        // ALPASS_CHRONOTENSITY = row 16, 4 rows for 4 bands
-        // Columns correspond to chronotensity modes
+    #ifdef _AUDIOLINK
+        // No AudioLink in this world (see SampleAudioLink).
+        if (_AudioTexture_TexelSize.z <= 16.0)
+            return 0.0;
+
+        // AudioLink layout (128x64): ALPASS_CHRONOTENSITY starts at pixel (16, 28).
+        // x = 16 + mode (0-7), y = 28 + band (0-3). Each texel is an unsigned integer
+        // split over the channels (r + g * 1024 + b * 1024^2 + a * 1024^3) that keeps
+        // growing while the band is active.
+        // This used to be compiled only under _AUDIOLINK_CHRONOTENSITY, a keyword no pass
+        // declares, and read row 16 (not the chronotensity block) as a 0-1 value, so the
+        // FX Modulator "Chronotensity" source was always 0.
         float2 chronoUV = float2(
-            (float(mode) + 0.5) / 128.0,
-            (16.0 + float(band) + 0.5) / 64.0
+            (16.0 + clamp(float(mode), 0.0, 7.0) + 0.5) / 128.0,
+            (28.0 + clamp(float(band), 0.0, 3.0) + 0.5) / 64.0
         );
-        return saturate(tex2Dlod(_AudioTexture, float4(chronoUV, 0, 0)).r);
+        float4 raw = tex2Dlod(_AudioTexture, float4(chronoUV, 0, 0));
+        // Only the low 20 bits are used: exact in float, and the wrap is seamless because
+        // the upper channels carry. One cycle is 2^20 units (about a million, the scale
+        // AudioLink's own examples use).
+        float phase = frac((raw.r + raw.g * 1024.0) / 1048576.0);
+        // Ping-pong so a modulator driven by it never jumps at the wrap.
+        return 1.0 - abs(phase * 2.0 - 1.0);
     #else
         return 0.0;
     #endif
 }
-
-// Convenience overload: sample chronotensity for a single band (MotionIncrease mode)
 float SampleAudioLinkChronotensity(int band)
 {
     return SampleAudioLinkChronotensity(band, 0);

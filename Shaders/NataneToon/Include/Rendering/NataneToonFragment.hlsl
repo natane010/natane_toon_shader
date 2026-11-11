@@ -494,6 +494,19 @@ half4 frag(v2f i) : SV_Target
     half3 effectiveLightColor;
     int primaryVertexLightIndex = -1;
 
+    // Light Volume SH is sampled once, here, so the fallback chain below can take its
+    // key light from it; the indirect-light step further down reuses the same sample.
+    #if defined(UNITY_PASS_FORWARDBASE) && defined(_USE_LIGHT_VOLUME) && !(defined(_BACKGROUND_MODE) && defined(LIGHTMAP_ON))
+        #define NATANE_LV_SAMPLED 1
+        float3 lvL0, lvL1r, lvL1g, lvL1b;
+        LightVolumeSH(i.worldPos, lvL0, lvL1r, lvL1g, lvL1b);
+        half3 lvKeyDir, lvKeyColor, lvFillColor;
+        NataneSHL1KeyLight(lvL0, lvL1r, lvL1g, lvL1b, lvKeyDir, lvKeyColor, lvFillColor);
+        half lvKeyAmount = saturate(_LightVolumeKeyLight);
+        // 1 while the Light Volume key light is the main light (no realtime light found)
+        half lvKeyIsMain = 0.0;
+    #endif
+
     #ifdef UNITY_PASS_FORWARDBASE
     {
         half dirLightLum = CALC_LUMINANCE(_LightColor0.rgb);
@@ -521,6 +534,18 @@ half4 frag(v2f i) : SV_Target
                 // 3. SH Light Probe から方向を取得
                 lightDir = GetSHDominantLightDirection();
                 effectiveLightColor = GetSHFallbackLightColor();
+                #ifdef NATANE_LV_SAMPLED
+                // 3'. Light Volume key light: per-pixel direction and colour from the
+                // volume itself (the object-level probe above ignores Light Volumes and
+                // point light volumes entirely). Off by default.
+                if (lvKeyAmount > 0.001)
+                {
+                    lightDir = normalize(lerp(lightDir, lvKeyDir, lvKeyAmount));
+                    effectiveLightColor = lerp(effectiveLightColor,
+                        max(half3(0.05, 0.05, 0.05), lvKeyColor * _LightVolumeIntensity), lvKeyAmount);
+                    lvKeyIsMain = 1.0;
+                }
+                #endif
             }
         }
     }
@@ -734,6 +759,23 @@ half4 frag(v2f i) : SV_Target
     }
     #endif
 
+    // ===== Matte diffuse (energy-preserving Oren-Nayar) =====
+    // Reshapes N.L before the toon ramp, so the terminator itself moves the way a rough
+    // surface's does (it works with steps, gradient and ramp alike), and keeps the
+    // albedo-dependent part as a tint for the lit colour. Placed before the SDF / shape
+    // rig so art-directed face shadows still have the last word.
+    half3 matteDiffuseTint = half3(1.0, 1.0, 1.0);
+    if (_MatteDiffuse > 0.001 && ndotl > 0.0)
+    {
+        half matteNdotV = max(dot(shadingNormal, viewDir), 1e-3);
+        half3 matteRatio = NataneEONDiffuseRatio(ndotl, matteNdotV, dot(lightDir, viewDir),
+                                                 saturate(_MatteDiffuseRoughness), saturate(col.rgb));
+        half matteRatioLum = max(CALC_LUMINANCE(matteRatio), 1e-3);
+        half matteAmount = saturate(_MatteDiffuse);
+        ndotl *= lerp(1.0, matteRatioLum, matteAmount);
+        matteDiffuseTint = lerp(half3(1.0, 1.0, 1.0), matteRatio / matteRatioLum, matteAmount);
+    }
+
     // ===== SDF Shadow Map =====
     // Apply SDF shadow to ndotl before lighting calculations
     ndotl = ApplySDFShadow(uv, ndotl, lightDir, i.worldPos);
@@ -835,6 +877,19 @@ half4 frag(v2f i) : SV_Target
         ao = ApplySoftMask(ao);
         aoEffect = lerp(1.0, ao, _AOIntensity);
         aoForIndirect = lerp(1.0, ao, _AOIntensity * AO_INDIRECT_STRENGTH);
+
+        // Micro-shadowing (Chan, "Material Advances in Call of Duty: WWII", SIGGRAPH 2018;
+        // form used by Filament). The AO value is read as the opening of a cone above the
+        // surface, and the main light is cut off once it drops below that cone, so creases,
+        // weave and collar folds get small directional shadows without a shadow map.
+        // Applied to the light term BEFORE the toon ramp so it moves the step instead of
+        // adding a smooth gradient on top of it.
+        if (_AOMicroShadow > 0.001)
+        {
+            half microAperture = rsqrt(1.0 - min(aoEffect, 0.9999));
+            half microShadow = saturate(max(lightTerm, 0.0) * microAperture);
+            lightTerm = lerp(lightTerm, min(lightTerm, lightTerm * microShadow * microShadow), saturate(_AOMicroShadow));
+        }
     #endif
 
     // ===== Procedural AO (Height-based) =====
@@ -1020,8 +1075,8 @@ half4 frag(v2f i) : SV_Target
         #elif defined(_USE_LIGHT_VOLUME)
             half3 preLightVolume = lighting;
             // Sample Light Volume SH coefficients
-            float3 L0, L1r, L1g, L1b;
-            LightVolumeSH(i.worldPos, L0, L1r, L1g, L1b);
+            // (sampled once in the lighting setup above)
+            float3 L0 = lvL0, L1r = lvL1r, L1g = lvL1g, L1b = lvL1b;
 
             // Evaluate direct and indirect lighting from Light Volume
             // _LightVolumeSHMode 0 (default) is the plain linear evaluation, as before.
@@ -1035,6 +1090,13 @@ half4 frag(v2f i) : SV_Target
             // Apply intensity controls
             directLightLV *= _LightVolumeIntensity;
             indirectLightLV *= _LightVolumeIntensity;
+
+            // Light Volume key light: the ambient floor becomes the light that really
+            // reaches the side facing away from the volume's dominant direction, instead
+            // of the opposite-normal irradiance (which lights the shade with the key
+            // light's own energy and washes the toon boundary out).
+            half3 lvFillLight = min(lvFillColor, float3(1.1, 1.1, 1.1)) * _LightVolumeIntensity;
+            indirectLightLV = lerp(indirectLightLV, lvFillLight, lvKeyAmount);
 
             // Apply Shadow Receive Mask to indirect Light Volume
             float lvInfluence = (1.0 - shadowReceiveMask);
@@ -1064,6 +1126,22 @@ half4 frag(v2f i) : SV_Target
         indirectResult = max(indirectResult, _IndirectLightMinColor.rgb);
         indirectResult *= _IndirectLightIntensity * _GIIntensity;
         // AO on indirect light (50% strength to preserve ambient visibility)
+        #ifdef _USE_AO
+        if (_AOMultiBounce > 0.001)
+        {
+            // Multi-bounce AO (Jimenez et al., "Practical Real-Time Strategies for Accurate
+            // Indirect Occlusion", SIGGRAPH 2016). Light bouncing inside a crease picks up
+            // the surface colour, so occluded bright / saturated areas (skin folds, white
+            // cloth) stay warm instead of going grey-black.
+            half3 mbAlbedo = saturate(col.rgb);
+            half3 mbA = 2.0404 * mbAlbedo - 0.3324;
+            half3 mbB = -4.7951 * mbAlbedo + 0.6417;
+            half3 mbC = 2.7552 * mbAlbedo + 0.6903;
+            half3 mbVisibility = max(aoForIndirect, ((aoForIndirect * mbA + mbB) * aoForIndirect + mbC) * aoForIndirect);
+            indirectResult *= lerp(half3(aoForIndirect, aoForIndirect, aoForIndirect), mbVisibility, saturate(_AOMultiBounce));
+        }
+        else
+        #endif
         indirectResult *= aoForIndirect;
 
         // ========== STEP 2: Shadow Environment Color (environment-aware shadow tinting) ==========
@@ -1093,6 +1171,9 @@ half4 frag(v2f i) : SV_Target
             borderMask *= (1.0 - shadowReceiveMask);
             directResult *= lerp(half3(1, 1, 1), _ShadowBorderColor.rgb, borderMask);
         }
+
+        // Matte diffuse: albedo-dependent multiple-scattering tint (1 when the feature is off)
+        directResult *= matteDiffuseTint;
 
         // Light color application (with LightColorInfluence preservation)
         half lightColorLum = CALC_LUMINANCE(effectiveLightColor);
@@ -1274,6 +1355,22 @@ half4 frag(v2f i) : SV_Target
                 // Treat Light Volume as environment fill first, then add only a modest direct contribution.
                 half3 lvIndirectNatural = CompressLightingForSafeRange(indirectLightLV, 0.75, 0.95);
                 half3 lvDirectNatural = CompressLightingForSafeRange(directLightLV, 0.8, 0.9) * 0.35;
+                if (lvKeyAmount > 0.001)
+                {
+                    // Key light mode: the soft 35% irradiance fill is replaced by a toon
+                    // term along the volume's dominant direction. When the volume already
+                    // is the main light it went through the full shading path above, so
+                    // nothing is added twice. With a realtime light it becomes a second,
+                    // softer toon light carrying only the directional part (E(d) - E(-d)).
+                    half lvKeyBorder = max(0.06, NataneShadowNaturalStepBorder());
+                    half lvKeyShade = smoothstep(-lvKeyBorder, lvKeyBorder, dot(worldNormal, lvKeyDir));
+                    half3 lvKeyDirectional = max(0.0, lvKeyColor - lvFillColor) * _LightVolumeIntensity;
+                    // Half strength: it sits on top of a realtime light that already
+                    // carries the scene, so it should model, not double the exposure.
+                    half3 lvKeyToon = CompressLightingForSafeRange(lvKeyDirectional * lvKeyShade, 0.8, 0.9)
+                                      * (0.5 * (1.0 - lvKeyIsMain) * (1.0 - shadowReceiveMask));
+                    lvDirectNatural = lerp(lvDirectNatural, lvKeyToon, lvKeyAmount);
+                }
                 half3 totalIndirect = max(indirectResult, lvIndirectNatural);
                 lighting = CombineDiffuseLightingSafe(totalIndirect, directResult + lvDirectNatural, additionalResult, half3(0, 0, 0));
             }
@@ -1301,7 +1398,7 @@ half4 frag(v2f i) : SV_Target
         // 影色（shadowColor）は ForwardBase で既に処理済みのため、ここでは使用しない。
         // 影色をそのまま使うと、影側でも非ゼロの寄与が加算され、
         // 複数の色付きポイントライトで全身が混色する問題（紫ウォッシュ）が発生する。
-        lighting = half3(shadingValue, shadingValue, shadingValue);
+        lighting = half3(shadingValue, shadingValue, shadingValue) * matteDiffuseTint;
         half lightColorLum_add = CALC_LUMINANCE(_LightColor0.rgb);
         half3 colorMul_add = lighting * _LightColor0.rgb;
         half3 lumOnly_add = lighting * lightColorLum_add;
@@ -1745,7 +1842,10 @@ half4 frag(v2f i) : SV_Target
             half3 sss = SubsurfaceScatteringLUT(ndotl, worldNormal, i.worldPos, thickness);
         #else
             float sssPowerBlurred = max(0.1, _SSSPower * (1.0 - _SSSBlur * 0.8));
-            half3 sss = SubsurfaceScattering(worldNormal, lightDir, viewDir, thickness, atten, sssPowerBlurred);
+            // With a directional light this is _LightColor0 exactly as before; without one
+            // it follows the fallback light the direction was taken from.
+            half3 sssLightColor = (CALC_LUMINANCE(_LightColor0.rgb) > 0.01) ? _LightColor0.rgb : effectiveLightColor;
+            half3 sss = SubsurfaceScattering(worldNormal, lightDir, viewDir, thickness, atten, sssPowerBlurred, sssLightColor);
         #endif
 
         // Apply mask texture with soft blending

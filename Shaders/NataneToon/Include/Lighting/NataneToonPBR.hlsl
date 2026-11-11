@@ -19,20 +19,26 @@ half NataneComputeGSAAKernel(half3 geomNormalWS)
 }
 
 // GGX Normal Distribution Function (Trowbridge-Reitz)
+// Evaluated in float on purpose: with half (16-bit on Quest / mobile) "d * d" underflows
+// for a smooth surface near the highlight centre and the lobe turns into fireflies or a
+// black hole. The result is clamped so it also fits back into a half render path.
 half NataneGGX_D(half NdotH, half roughness)
 {
-    half a2 = roughness * roughness;
-    half d = NdotH * NdotH * (a2 - 1.0) + 1.0;
-    return a2 / (UNITY_PI * d * d + 1e-7);
+    float a2 = max((float)roughness * (float)roughness, 1e-5);
+    float nh = NdotH;
+    float d = nh * nh * (a2 - 1.0) + 1.0;
+    return min(a2 / (UNITY_PI * d * d + 1e-7), 16384.0);
 }
 
 // Smith-GGX Geometry Function (Height-Correlated)
 half NataneGGX_G(half NdotL, half NdotV, half roughness)
 {
-    half a2 = roughness * roughness;
-    half gL = NdotV * sqrt(NdotL * NdotL * (1.0 - a2) + a2);
-    half gV = NdotL * sqrt(NdotV * NdotV * (1.0 - a2) + a2);
-    return 0.5 / (gL + gV + 1e-7);
+    float a2 = (float)roughness * (float)roughness;
+    float nl = NdotL;
+    float nv = NdotV;
+    float gL = nv * sqrt(nl * nl * (1.0 - a2) + a2);
+    float gV = nl * sqrt(nv * nv * (1.0 - a2) + a2);
+    return 0.5 / (gL + gV + 1e-5);
 }
 
 // Schlick Fresnel

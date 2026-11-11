@@ -217,6 +217,8 @@ Shader "Natane/Toon Shader (Background)"
         [Toggle(_USE_AO)] _UseAO ("Use Ambient Occlusion", Float) = 0
         _AOMap ("AO Map", 2D) = "white" {}
         _AOIntensity ("AO Intensity", Range(0, 1)) = 1
+        _AOMultiBounce ("AO Multi-Bounce Color", Range(0, 1)) = 0
+        _AOMicroShadow ("AO Micro Shadow", Range(0, 1)) = 0
         [Enum(Normal,0,Soft,1,Screen,2,Overlay,3)] _AOBlendMode ("AO Blend Mode", Float) = 0
         _AOBlend ("AO Blend", Range(0, 1)) = 1
         _AOBlur ("AO Blur", Range(0, 1)) = 0
@@ -268,6 +270,9 @@ Shader "Natane/Toon Shader (Background)"
         _SpecularAAGeometric ("Geometric Specular AA (GGX)", Range(0, 1)) = 0
         _HighlightCompress ("Highlight Compression (Neutral)", Range(0, 1)) = 0
         [Enum(Linear,0,ZH3,1,Geomerics,2)] _LightVolumeSHMode ("Light Volume SH Mode", Float) = 0
+        _LightVolumeKeyLight ("Light Volume Key Light", Range(0, 1)) = 0
+        _MatteDiffuse ("Matte Diffuse (EON)", Range(0, 1)) = 0
+        _MatteDiffuseRoughness ("Matte Diffuse Roughness", Range(0, 1)) = 0.6
 
         _ShadowNaturalness ("Shadow Naturalness (自然な影)", Range(0, 1)) = 0
         _ShadowMaxDarkness ("Shadow Max Darkness", Range(0, 1)) = 0
@@ -386,6 +391,8 @@ Shader "Natane/Toon Shader (Background)"
         _SheenColor ("Sheen Color", Color) = (1, 1, 0.9, 1)
         _SheenIntensity ("Sheen Intensity", Range(0, 3)) = 1.0
         _SheenPower ("Sheen Power", Range(0.1, 10)) = 2.0
+        [Enum(Classic,0,Charlie,1)] _SheenModel ("Sheen Model", Float) = 0
+        _SheenRoughness ("Sheen Roughness (Charlie)", Range(0.05, 1)) = 0.5
         _SheenMask ("Sheen Mask", 2D) = "white" {}
         _SheenBlend ("Sheen Blend", Range(0, 1)) = 1
         [Enum(Add,0,Multiply,1,Screen,2,Overlay,3)] _SheenBlendMode ("Sheen Blend Mode", Float) = 2
