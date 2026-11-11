@@ -439,7 +439,7 @@ namespace NataneToon.Editor
                 // 数字キー 1〜5 でのタブ切替ショートカットをツールチップで案内する
                 GUIContent tabContent = new GUIContent(
                     visibleLabels[i],
-                    i < 9 ? L($"ショートカット: {i + 1} キー", $"Shortcut: press {i + 1}") : null);
+                    i < 9 ? L($"ショートカット: Ctrl+{i + 1}", $"Shortcut: Ctrl+{i + 1}") : null);
                 if (GUI.Button(tabRect, tabContent, style))
                     newSelected = i;
             }
