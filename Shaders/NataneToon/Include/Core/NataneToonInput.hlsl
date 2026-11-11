@@ -1556,9 +1556,12 @@ UNITY_DECLARE_TEX2D_NOSAMPLER(_PBR_OcclusionMap);
 // Smooth Normal Texture (for Mode 2: Baked Normal Texture)
 #if defined(_SMOOTH_NORMAL)
 UNITY_DECLARE_TEX2D_NOSAMPLER(_SmoothNormalTex);
+#endif
+// Declared on its own: it used to sit inside the _SMOOTH_NORMAL block, so Face Ortho with a
+// mask failed to compile whenever smooth normals were off (and always in the XRay /
+// Ghost prepass / Screen Edge overlay passes, which have no _SMOOTH_NORMAL keyword).
 #if defined(_FACE_ORTHO_MASK)
 UNITY_DECLARE_TEX2D_NOSAMPLER(_FaceOrthoMaskTex);
-#endif
 #endif
 
 // Mirror / Camera Alternate Texture
@@ -1707,6 +1710,7 @@ static const float2 PoissonDisk32[32] = {
 #if defined(_AUDIOLINK)
 sampler2D _AudioTexture;
 sampler2D _AudioTexture2D;
+float4 _AudioTexture_TexelSize;   // z > 16 only when AudioLink is running in the world
 #endif
 
 // Vertex Input Structure

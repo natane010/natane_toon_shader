@@ -206,6 +206,13 @@ namespace NataneToon.Editor
                 // _EYE_PARALLAX
                 if (material.HasProperty("_EyeParallax") && material.GetFloat("_EyeParallax") >= 0.5f)
                     usedKeywords.Add("_EYE_PARALLAX");
+
+                // _PBR / _PBR_LIKE は KeywordMappings に載らない（ExtraKeywords 参照）。
+                // ここで拾わないと「未使用」と判定され、Advanced ガードで常に #undef されていた。
+                if (material.IsKeywordEnabled("_PBR"))
+                    usedKeywords.Add("_PBR");
+                if (material.IsKeywordEnabled("_PBR_LIKE"))
+                    usedKeywords.Add("_PBR_LIKE");
             }
 
             // 2. AnimationClip スキャン

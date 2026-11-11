@@ -1215,6 +1215,7 @@ CGPROGRAM
             #pragma shader_feature_local _SMEAR
             #pragma shader_feature_local _HEIGHT_FADE
             #pragma shader_feature_local _DISTANCE_FADE
+            #pragma shader_feature_local _MIRROR_CONTROL
             #pragma shader_feature_local _OUTLINE_HAND_DRAWN
             #pragma shader_feature_local _PERSPECTIVE_FLAT
             #pragma shader_feature_local _FACE_ORTHO
@@ -1242,7 +1243,9 @@ CGPROGRAM
             #pragma vertex tessVert
             #pragma hull hull
             #pragma domain domain
-            #pragma fragment frag
+            // Entry point is the cutout wrapper below. (A trailing "#define frag frag_cutout"
+            // never renamed the entry point, so the alpha test was silently skipped.)
+            #pragma fragment frag_cutout
             #pragma multi_compile_fwdbase
             #pragma multi_compile _ UNITY_LIGHT_PROBE_PROXY_VOLUME
             #pragma shader_feature_local _QUEST_LITE
@@ -1365,8 +1368,7 @@ CGPROGRAM
             {
                 half4 col = frag(i);
                 #if defined(_HASHED_ALPHA)
-                    float2 hashedScreenUV = i.screenPos.xy / max(i.screenPos.w, 0.0001);
-                    float2 hashedScreenPos = hashedScreenUV * _ScreenParams.xy;
+                    float2 hashedScreenPos = i.pos.xy;
                     float hashedAlpha = saturate((col.a - _Cutoff) / max(1.0 - _Cutoff, 0.0001));
                     float hashedCutout = ApplyHashedAlpha(hashedAlpha, hashedScreenPos, i.worldPos.xz, _HashedAlphaScale);
                     clip(hashedCutout);
@@ -1376,7 +1378,6 @@ CGPROGRAM
                 return col;
             }
 
-            #define frag frag_cutout
 
             ENDCG
         }
@@ -1395,7 +1396,9 @@ CGPROGRAM
             #pragma vertex tessVert
             #pragma hull hull
             #pragma domain domain
-            #pragma fragment frag
+            // Entry point is the cutout wrapper below. (A trailing "#define frag frag_cutout"
+            // never renamed the entry point, so the alpha test was silently skipped.)
+            #pragma fragment frag_cutout
             #pragma multi_compile_fwdadd
             #pragma shader_feature_local _PERSPECTIVE_FLAT
             #pragma shader_feature_local _FACE_ORTHO
@@ -1474,8 +1477,7 @@ CGPROGRAM
             {
                 half4 col = frag(i);
                 #if defined(_HASHED_ALPHA)
-                    float2 hashedScreenUV = i.screenPos.xy / max(i.screenPos.w, 0.0001);
-                    float2 hashedScreenPos = hashedScreenUV * _ScreenParams.xy;
+                    float2 hashedScreenPos = i.pos.xy;
                     float hashedAlpha = saturate((col.a - _Cutoff) / max(1.0 - _Cutoff, 0.0001));
                     float hashedCutout = ApplyHashedAlpha(hashedAlpha, hashedScreenPos, i.worldPos.xz, _HashedAlphaScale);
                     clip(hashedCutout);
@@ -1485,7 +1487,6 @@ CGPROGRAM
                 return col;
             }
 
-            #define frag frag_cutout
 
             ENDCG
         }

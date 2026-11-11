@@ -114,6 +114,7 @@ Shader "Natane/Effects/GPU Particles (Stateless)"
                 // AudioLink global data texture (provided by the AudioLink prefab).
                 // Absent -> samples black -> neutral fallback via max() below.
                 sampler2D _AudioTexture;
+                float4 _AudioTexture_TexelSize;
             #endif
 
             struct appdata
@@ -206,8 +207,11 @@ Shader "Natane/Effects/GPU Particles (Stateless)"
                 // AudioLink modulation (neutral when AudioLink is absent).
                 float audio = 0.0;
                 #ifdef _AUDIOLINK
-                    float2 alUV = float2(0.008, _AudioLinkBand / 4.0);
-                    audio = max(tex2Dlod(_AudioTexture, float4(alUV, 0, 0)).r, 0.0);
+                    // Bands are rows 0-3 of the 128x64 AudioLink texture (x = 0 is "now").
+                    // "band / 4" addressed rows 0 / 16 / 32 / 48, so only Bass worked.
+                    float2 alUV = float2(0.5 / 128.0, (clamp(round(_AudioLinkBand), 0.0, 3.0) + 0.5) / 64.0);
+                    if (_AudioTexture_TexelSize.z > 16.0)
+                        audio = max(tex2Dlod(_AudioTexture, float4(alUV, 0, 0)).r, 0.0);
                 #endif
 
                 float spin;

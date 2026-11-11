@@ -1011,6 +1011,7 @@ CGPROGRAM
             #pragma shader_feature_local _SMOOTH_NORMAL
             #pragma shader_feature_local _HEIGHT_FADE
             #pragma shader_feature_local _DISTANCE_FADE
+            #pragma shader_feature_local _MIRROR_CONTROL
             #pragma shader_feature_local _PERSPECTIVE_FLAT
             #pragma shader_feature_local _FACE_ORTHO
             #pragma shader_feature_local _FACE_ORTHO_MASK
@@ -1037,6 +1038,9 @@ CGPROGRAM
             #pragma fragment frag
             #pragma multi_compile_fwdbase
             #pragma multi_compile _ UNITY_LIGHT_PROBE_PROXY_VOLUME
+            // Shadowmask variants need a lightmap-UV shadow coordinate this pass does not carry
+            // (SHADOW_COORDS is empty there and UNITY_LIGHT_ATTENUATION then fails to compile).
+            #pragma skip_variants LIGHTMAP_SHADOW_MIXING SHADOWS_SHADOWMASK
             #pragma multi_compile_fog
             #pragma multi_compile_instancing
             // Background mode: ライトマップバリアントを有効化

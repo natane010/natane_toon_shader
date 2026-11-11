@@ -469,11 +469,11 @@ half3 SubsurfaceScatteringLUT(half ndotl, half3 normal, half3 worldPos, half thi
 half3 CubemapReflection(half3 worldNormal, half3 viewDir, half smoothness, half metallic)
 {
     // Calculate reflection vector
+    // No mirror compensation: in a mirror the view direction already comes from the
+    // reflected camera position, so the world-space reflection vector is correct as is.
+    // (Flipping it in view space sampled the cubemap from the wrong side in mirrors and
+    // disagreed with the PBR path, which never flipped.)
     half3 reflectDir = reflect(-viewDir, worldNormal);
-    // Mirror compensation: flip reflection X in view space, then back to world
-    float3 viewReflect = mul((float3x3)UNITY_MATRIX_V, reflectDir);
-    viewReflect.x *= NataneMirrorSign();
-    reflectDir = mul(viewReflect, (float3x3)UNITY_MATRIX_V);
 
     // Calculate mip level based on smoothness (roughness = 1 - smoothness)
     half roughness = 1.0 - smoothness;
@@ -515,11 +515,8 @@ half3 CubemapReflection(half3 worldNormal, half3 viewDir, half smoothness, half 
 #if defined(_ENV_RIM)
 half3 EnvironmentalRim(half3 worldNormal, half3 viewDir, float powerOverride)
 {
-    // Calculate reflection vector with mirror compensation
+    // World-space reflection vector; valid in mirrors without compensation (see CubemapReflection).
     half3 reflectDir = reflect(-viewDir, worldNormal);
-    float3 viewReflect = mul((float3x3)UNITY_MATRIX_V, reflectDir);
-    viewReflect.x *= NataneMirrorSign();
-    reflectDir = mul(viewReflect, (float3x3)UNITY_MATRIX_V);
 
     // Sample environment cubemap
     half3 envColor = texCUBE(_EnvRimCube, reflectDir).rgb;
@@ -691,7 +688,9 @@ float ApplyShadowShapeRig(float2 uv, float ndotl, float3 lightDir)
 
     #undef NATANE_RIG_SLOT
 
-    return saturate(ndotl + bias * mask);
+    // Not saturated: callers apply wrap / naturalness to the signed N.L, and clamping here
+    // changed the shading as soon as the keyword was on, even with no rig placed.
+    return ndotl + bias * mask;
 #else
     return ndotl;
 #endif

@@ -95,6 +95,12 @@ sampler2D _OutlineWidthMap;
 #ifdef _PERSPECTIVE_FLAT
     float _PerspectiveFlatAmount;
 #endif
+#ifdef _MIRROR_CONTROL
+    // Same user settings as the forward pass ("mirror only" / "camera only" ...).
+    float _MirrorControl;
+    float _MirrorMode;
+    float _CameraMode;
+#endif
 #ifdef _DISTANCE_FADE
     // Mirrors the forward pass so the hull fades / clips together with the body.
     float _DistanceFade;
@@ -408,6 +414,19 @@ v2f vert(appdata v)
 
 fixed4 frag(v2f i) : SV_Target
 {
+    // Mirror / camera visibility: without this a "mirror only" material kept drawing its
+    // inverted hull in the normal view as a solid outline-coloured shape.
+    #ifdef _MIRROR_CONTROL
+    if (_MirrorControl >= 0.5)
+    {
+        bool inMirror = _VRChatMirrorMode > 0.5;
+        bool inCamera = _VRChatCameraMode > 0.5;
+        if (_MirrorMode > 0.5 && _MirrorMode < 1.5 && !inMirror) discard;
+        if (_MirrorMode > 1.5 && inMirror) discard;
+        if (_CameraMode > 0.5 && _CameraMode < 1.5 && !inCamera) discard;
+        if (_CameraMode > 1.5 && inCamera) discard;
+    }
+    #endif
     UNITY_SETUP_STEREO_EYE_INDEX_POST_VERTEX(i);
 
     #ifdef _OUTLINE

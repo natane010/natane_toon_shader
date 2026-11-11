@@ -821,7 +821,9 @@ float2 ApplyRefractionDistortion(float2 screenUV, float3 worldNormal, float3 vie
 
     // Calculate distortion offset based on refracted direction
     // Project refraction direction to screen space
-    float2 distortion = refractDir.xy * intensity * 0.1;
+    // View space: the offset follows the camera (and the reflected view in mirrors).
+    // World-space XY was only right while looking down the world Z axis.
+    float2 distortion = mul((float3x3)UNITY_MATRIX_V, refractDir).xy * intensity * 0.1;
 
     // Apply distortion to UV
     float2 distortedUV = screenUV + distortion;
@@ -870,15 +872,17 @@ half3 SampleGrabTextureWithBlur(float2 uv, float blurAmount)
 float SampleAudioLink(int band)
 {
     #ifdef _AUDIOLINK
-        // AudioLink standard texture coordinates
-        // Band data is stored in the first row (y = 0.0 to 0.0625)
-        float2 audioUV = float2(0.0, 0.0);
+        // No AudioLink in this world: the global texture is unbound (a 4x4 default), and
+        // sampling it returned a constant that lit every AudioLink effect permanently.
+        if (_AudioTexture_TexelSize.z <= 16.0)
+            return 0.0;
 
-        // Map band to x coordinate (0-3 mapped to texture space)
-        audioUV.x = (float(band) + 0.5) / 4.0; // Center of each band quadrant
-
-        // Sample AudioLink texture
-        float audioValue = tex2D(_AudioTexture, audioUV).r;
+        // AudioLink layout (128x64): ALPASS_AUDIOLINK starts at pixel (0,0). Each of the
+        // four bands is one ROW; x is the history delay, x = 0 being the current value.
+        // The previous mapping put the band on X at y = 0, which read the bass row at
+        // four different delays, so every band reacted to bass.
+        float2 audioUV = float2(0.5 / 128.0, (clamp(float(band), 0.0, 3.0) + 0.5) / 64.0);
+        float audioValue = tex2Dlod(_AudioTexture, float4(audioUV, 0, 0)).r;
         return saturate(audioValue);
     #else
         return 0.0;

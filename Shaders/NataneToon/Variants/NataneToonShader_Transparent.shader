@@ -1218,6 +1218,7 @@ Blend [_SrcBlend] [_DstBlend]
             #pragma shader_feature_local _SMEAR
             #pragma shader_feature_local _HEIGHT_FADE
             #pragma shader_feature_local _DISTANCE_FADE
+            #pragma shader_feature_local _MIRROR_CONTROL
             #pragma shader_feature_local _OUTLINE_HAND_DRAWN
             #pragma shader_feature_local _PERSPECTIVE_FLAT
             #pragma shader_feature_local _FACE_ORTHO

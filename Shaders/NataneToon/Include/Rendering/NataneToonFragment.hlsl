@@ -690,10 +690,13 @@ half4 frag(v2f i) : SV_Target
         if (_ShadowSmoothing > 0.001)
         {
             // --- Point/Spot Light: Adaptive smoothstep ---
+            // Fixed centre. The previous "adaptive" centre was clamp(atten, 0.1, 0.9), i.e. the
+            // input itself, so the smoothstep returned exactly 0.5 for every atten in
+            // [0.1, 0.9]: point / spot lights broke into three flat bands, and unshadowed
+            // surfaces darkened once the width exceeded 0.1.
             half attenDeriv = fwidth(atten);
-            half adaptiveCenter = clamp(atten, 0.1, 0.9);
-            half smoothWidth = max(attenDeriv, _ShadowSmoothing * SMOOTH_WIDTH_SCALE);
-            atten = smoothstep(adaptiveCenter - smoothWidth, adaptiveCenter + smoothWidth, atten);
+            half smoothWidth = min(max(attenDeriv, _ShadowSmoothing * SMOOTH_WIDTH_SCALE), 0.5);
+            atten = smoothstep(0.5 - smoothWidth, 0.5 + smoothWidth, atten);
         }
     #endif
 
@@ -2129,9 +2132,7 @@ half4 frag(v2f i) : SV_Target
     {
         // Reflect view direction around surface normal — mirror-safe
         float3 reflectDir = reflect(-viewDir, worldNormal);
-        float3 viewReflectFake = mul((float3x3)UNITY_MATRIX_V, reflectDir);
-        viewReflectFake.x *= NataneMirrorSign();
-        reflectDir = mul(viewReflectFake, (float3x3)UNITY_MATRIX_V);
+        // World-space reflection vector; valid in mirrors without compensation.
         // Sky-ground gradient based on reflection Y component
         float skyFactor = saturate(reflectDir.y * _FakeReflSmoothness * 5.0 + 0.5);
         half3 fakeRefl = lerp(_FakeReflGroundColor.rgb, _FakeReflSkyColor.rgb, skyFactor);
@@ -2600,7 +2601,9 @@ half4 frag(v2f i) : SV_Target
 
             // Distance fade
             #ifdef _DISTANCE_FADE
-                col.rgb = lerp(col.rgb, preSmearColor, distanceFade * _SmearDistFade);
+                // distanceFade is 1 near and 0 far: keep the smear near, drop it with distance.
+                // (It was inverted and removed the effect up close.)
+                col.rgb = lerp(preSmearColor, col.rgb, lerp(1.0, distanceFade, _SmearDistFade));
             #endif
         }
     }
