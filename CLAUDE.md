@@ -93,7 +93,7 @@ When adding a new shader effect (e.g., a new lighting model or visual effect):
    }
    ```
 
-6. **Update ALL 10 shader variants** (`NataneToonShader.shader` + `Variants/*.shader`): each carries its own copy of the `Properties` block and per-pass `#pragma shader_feature_local` lists. Keep them in sync — drift here has caused real compile bugs.
+6. **Update ALL 12 full shader variants** (`NataneToonShader.shader` + the 11 `Variants/NataneToonShader_*.shader` files that carry the full Properties block; Particle and FakeShadow are separate): each carries its own copy of the `Properties` block and per-pass `#pragma shader_feature_local` lists. Keep them in sync — drift here has caused real compile bugs.
 
 ### Shared pass includes (do NOT re-inline)
 
@@ -101,6 +101,24 @@ The OUTLINE and SHADOW_CASTER passes are shared across all variants via includes
 
 - `Include/Rendering/NataneToonOutlinePass.hlsl` — full outline pass (vert/frag + helpers). Feature blocks are `#ifdef`-guarded; each variant controls availability with its own `#pragma shader_feature_local` list. Changes to outline behavior go HERE, never inline in a `.shader`.
 - `Include/Rendering/NataneToonShadowCasterPass.hlsl` — shadow caster; cutout variants `#define NATANE_SHADOWCASTER_CUTOUT` before including it to get alpha-tested shadows.
+
+### Camera / mirror helpers (use these, do not re-derive)
+
+`Include/Utils/NataneToonCamera.hlsl` (needs only UnityCG; included by Utils and by the outline pass):
+
+- `NataneViewerPos()` / `NataneViewerDistance(worldPos)` — eye-centred, mirror-aware viewer. Use for every DISTANCE-driven effect (fades, LOD, density steps). Never use `_WorldSpaceCameraPos` for those: per-eye distances disagree in VR.
+- `NataneOutlineDepthScale(clipPos, mode)` — the outline width term. Never multiply by `o.pos.z` directly: clip z is invalid under a mirror's oblique projection.
+- `NataneClipToPixel(clipPos)` — clip position to `SV_POSITION` pixels (flip- and stereo-aware). Screen-space patterns use `i.pos.xy`, not `screenUV * _ScreenParams.xy`.
+- `NataneIsObliqueProjection()` / `NataneIsOrthoCamera()` / `NataneIsMirror()` — gate anything that rewrites clip z or reads `_CameraDepthTexture` (mirror cameras have no valid depth texture).
+- World-space vectors (view direction, reflection) need NO mirror compensation: the mirror camera position is already reflected.
+
+### Verifying shader changes
+
+HLSL cannot be compiled outside Unity. After shader edits run, in this order:
+
+1. `python3 Tests/CI/check_shader_parity.py --repo-root .` and `python3 Tests/CI/precommit_check.py --repo-root .`
+2. `Tests/CI/setup-validation-project.sh --unity <Unity executable> --out <dir>` (default variants; fails on warnings)
+3. In the editor: `Tools > Natane > ビルド最適化 Build Optimization > 全検証をまとめて実行` (compiles the keyword sets in `NataneToonBatchVerify.KeywordSetsToCompile`; add a set there for every new keyword-gated code path)
 
 ### VRChat tags
 

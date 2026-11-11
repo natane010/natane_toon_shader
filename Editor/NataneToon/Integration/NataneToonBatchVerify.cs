@@ -207,6 +207,34 @@ namespace NataneToon.Editor
             // 漫画網点。パターン分岐は uniform 分岐なので 1 変種で全経路がコンパイルされる。
             new[] { "_HALFTONE_SHADOW" },
             new[] { "_HALFTONE_SHADOW", "_SHADOW_BOKEH" },
+
+            // ミラー / 距離まわりの修正とセミリアル仕上げが通る経路。
+            // PassType.ForwardBase には OUTLINE パス（LightMode=ForwardBase）も含まれるので、
+            // アウトライン側の距離フェード / ミラー制御もここでコンパイルされる。
+            // バリアントに存在しない組み合わせ（Lite のテッセレーション等）は「登録できず」に回るだけ。
+            new[] { "_DISTANCE_FADE" },                                   // アウトライン OFF でも v2f が初期化される
+            new[] { "_OUTLINE", "_DISTANCE_FADE" },
+            new[] { "_OUTLINE", "_DISTANCE_FADE", "_HEIGHT_FADE", "_MIRROR_CONTROL" },
+            new[] { "_OUTLINE", "_PERSPECTIVE_FLAT", "_FACE_ORTHO", "_FACE_ORTHO_MASK" },
+            new[] { "_FACE_ORTHO", "_FACE_ORTHO_MASK" },                  // _FaceOrthoMaskTex（スムース法線 OFF）
+            new[] { "_NORMALMAP" },                                       // ノーマルマップ境界の補正
+            new[] { "_NORMALMAP", "_SPECULAR", "_PBR_LIKE" },             // GGX の幾何 AA / スペキュラ影マスク
+            new[] { "_USE_LIGHT_VOLUME" },                                // Light Volume SH モード
+            new[] { "_AUDIOLINK", "_EMISSION" },
+            new[] { "_REFLECTION", "_ENV_RIM", "_FAKE_REFLECTION" },
+            new[] { "_REFRACTION" },
+            new[] { "_DITHERING_ALPHA" },
+            new[] { "_HASHED_ALPHA" },
+            new[] { "_SPECULAR", "_SPECULAR_DITHER" },
+            new[] { "_USE_DITHERING", "_BLUE_NOISE_DITHER" },
+            new[] { "_SCREEN_EDGE" },
+            new[] { "_INTERSECTION_FADE" },
+            new[] { "_PCSS" },
+            new[] { "_SMEAR", "_DISTANCE_FADE" },
+            new[] { "_SHADOW_SHAPE_RIG" },
+            new[] { "_LENTICULAR" },
+            new[] { "_FX_MODULATOR" },
+            new[] { "_TESSELLATION" },
         };
 
         /// <summary>
