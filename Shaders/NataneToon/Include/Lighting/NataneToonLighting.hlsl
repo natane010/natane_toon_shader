@@ -182,7 +182,7 @@ float ApplyLightBlend(float lightValue)
 // Creates a dithering effect for softer shadow transitions
 float DitheringPattern(float2 screenPos, float scale)
 {
-    return NataneGetDitherThreshold(StabilizeDitherCoord(screenPos), scale);
+    return NataneGetFadeDitherThreshold(StabilizeDitherCoord(screenPos), scale);
 }
 
 // Specular occlusion approximation based on visibility, view angle, and roughness.

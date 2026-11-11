@@ -491,6 +491,7 @@ Shader "Natane/Toon Shader (Cutout Lite)"
         [Enum(Inverted Hull,0,Back Face,1)] _OutlineMode ("Outline Mode", Float) = 0
         _OutlineWidth ("Outline Width", Range(0, 1)) = 0.1
         _OutlineDistCompMax ("Outline Distance Compensation Max", Range(0, 10)) = 3.0
+        [Enum(Legacy,0,Stable,1)] _OutlineWidthMode ("Outline Width Mode", Float) = 0
         _OutlineColor ("Outline Color", Color) = (0,0,0,1)
         [Toggle(_OUTLINE_MASK)] _UseOutlineMask ("Use Outline Mask", Float) = 0
         _OutlineMask ("Outline Mask", 2D) = "white" {}
@@ -1187,6 +1188,7 @@ CGPROGRAM
             #pragma shader_feature_local _SMOOTH_NORMAL
             #pragma shader_feature_local _SMEAR
             #pragma shader_feature_local _HEIGHT_FADE
+            #pragma shader_feature_local _DISTANCE_FADE
             #pragma shader_feature_local _OUTLINE_HAND_DRAWN
             #pragma shader_feature_local _PERSPECTIVE_FLAT
             #pragma shader_feature_local _FACE_ORTHO

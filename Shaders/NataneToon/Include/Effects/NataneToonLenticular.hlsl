@@ -18,10 +18,10 @@
 // the mono camera position outside single-pass stereo.
 float3 NataneLenticularCameraPos(float stereoMode)
 {
-#if defined(USING_STEREO_MATRICES)
+    // NataneViewerPos is the stereo centre in VR and the centred mirror camera in
+    // VRChat mirrors (rendered by mono cameras), so both eyes resolve the same frame there too.
     if (stereoMode > 0.5)
-        return (unity_StereoWorldSpaceCameraPos[0] + unity_StereoWorldSpaceCameraPos[1]) * 0.5;
-#endif
+        return NataneViewerPos();
     return _WorldSpaceCameraPos;
 }
 

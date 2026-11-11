@@ -151,6 +151,10 @@ v2f vert(appdata v)
 
     // ===== Perspective Flattening (3D → 2D depth compression) =====
     #ifdef _PERSPECTIVE_FLAT
+    // Skipped for oblique (VRChat mirror) and orthographic projections, where
+    // "w * 0.5" is not a mid-depth and the object would sort against the wrong
+    // surfaces (or vanish behind the scene). Must match NataneToonOutlinePass.hlsl.
+    if (!NataneIsObliqueProjection() && !NataneIsOrthoCamera())
     {
         // Compress Z depth toward center to reduce foreshortening
         // This creates a more 2D/illustration-like appearance
@@ -172,6 +176,10 @@ v2f vert(appdata v)
         // own (default: reduced) amount.
         #if defined(USING_STEREO_MATRICES)
             faceOrthoAmount = _FaceOrthoVRAmount;
+        #else
+            // VR mirrors are rendered by mono cameras: use the VR amount there too.
+            if (_VRChatMirrorMode > 0.5 && _VRChatMirrorMode < 1.5)
+                faceOrthoAmount = _FaceOrthoVRAmount;
         #endif
 
         #ifdef _FACE_ORTHO_MASK

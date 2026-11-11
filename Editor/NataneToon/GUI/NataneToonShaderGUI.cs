@@ -4972,6 +4972,13 @@ public class NataneToonShaderGUI : ShaderGUI
                 DrawProperty("_OutlineWidth", L("アウトラインの幅", "Outline Width"),
                     "0.1〜0.3。太すぎると団子っぽくなります。", "0.1 to 0.3. Too thick looks lumpy.");
                 DrawProperty("_OutlineDistCompMax", L("距離補正の上限", "Distance Compensation Max"));
+                DrawProperty("_OutlineWidthMode", L("幅の基準 (Legacy=従来 / Stable=カメラ非依存)", "Width Mode (Legacy / Stable = camera independent)"));
+                if (IsHelpRowVisible)
+                {
+                    EditorGUILayout.HelpBox(L(
+                        "Legacy: 従来どおり。太さがカメラのニアクリップに比例します（ミラー内は自動補正）。\nStable: どのカメラでも同じ太さ。切り替えると太さが変わるので幅を調整し直してください。",
+                        "Legacy: as before; thickness follows the camera's near clip (mirrors are corrected automatically).\nStable: same thickness on every camera. Re-tune the width after switching."), MessageType.None);
+                }
                 DrawHelpToggle("OutlineDistCompMax",
                     L("カメラから離れたときのアウトライン太さの上限を設定します。\n" +
                     "• 値が小さいほど遠距離でのアウトライン膨張を抑えます\n" +

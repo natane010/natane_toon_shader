@@ -81,7 +81,7 @@ TessellationFactors PatchConstantFunction(InputPatch<TessellationControlPoint, 3
     float3 center = (p0 + p1 + p2) / 3.0;
 
     // Distance-based LOD
-    float dist = distance(center, _WorldSpaceCameraPos);
+    float dist = NataneViewerDistance(center);   // same tessellation in both eyes
     float distFactor = saturate(1.0 - (dist - _TessDistanceMin) / max(_TessDistanceMax - _TessDistanceMin, 0.01));
     float factor = max(1.0, distFactor * _TessFactor);
 

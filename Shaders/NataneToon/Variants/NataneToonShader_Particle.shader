@@ -132,6 +132,7 @@ Shader "Natane/Toon Shader (Particle)"
             #ifdef _SOFT_PARTICLES
                 UNITY_DECLARE_DEPTH_TEXTURE(_CameraDepthTexture);
                 float _SoftParticleFadeDistance;
+                float _VRChatMirrorMode;   // VRChat global: >0 while rendering a mirror
             #endif
 
             #ifdef _EMISSION
@@ -248,7 +249,9 @@ Shader "Natane/Toon Shader (Particle)"
                 #endif
 
                 // ----- Soft particles (stereo-correct depth sampling) -----
+                // Skipped in VRChat mirrors: the depth texture there is the main view's.
                 #ifdef _SOFT_PARTICLES
+                if (_VRChatMirrorMode < 0.5)
                 {
                     float sceneZ = LinearEyeDepth(
                         SAMPLE_DEPTH_TEXTURE_PROJ(_CameraDepthTexture, UNITY_PROJ_COORD(i.projPos)));

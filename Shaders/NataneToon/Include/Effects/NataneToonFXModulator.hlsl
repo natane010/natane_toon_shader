@@ -95,7 +95,7 @@ half NataneFXMod_Source(int source, float speed, float offset, float manual,
     #endif
     if (source == 10)                                         // CameraDistance
     {
-        float d = length(_WorldSpaceCameraPos - worldPos);
+        float d = NataneViewerDistance(worldPos);   // eye-centred, mirror-aware
         return saturate((d - distMin) / max(distMax - distMin, 0.0001));
     }
     if (source == 11) return saturate(dot(normalize(worldNormal), normalize(viewDir))); // ViewAngle

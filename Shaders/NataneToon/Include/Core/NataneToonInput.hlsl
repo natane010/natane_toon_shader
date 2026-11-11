@@ -1285,7 +1285,11 @@ float _VRChatFaceMirrorMode;  // Face mirror mode
 float _VRChatCameraMask;      // Camera layer mask
 
 // Camera Positions & Rotations
+// Guarded: also declared by NataneToonCamera.hlsl for standalone passes
+#ifndef NATANE_VRCHAT_MIRRORCAMPOS_DECLARED
+#define NATANE_VRCHAT_MIRRORCAMPOS_DECLARED
 float3 _VRChatMirrorCameraPos;    // Mirror camera world position
+#endif
 float3 _VRChatScreenCameraPos;    // Screen camera world position
 float4 _VRChatScreenCameraRot;    // Screen camera rotation (quaternion)
 float3 _VRChatPhotoCameraPos;     // Photo camera world position

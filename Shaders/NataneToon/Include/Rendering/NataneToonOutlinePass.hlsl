@@ -6,6 +6,7 @@
 #define NATANE_TOON_OUTLINE_PASS_INCLUDED
 
 #include "UnityCG.cginc"
+#include "../Utils/NataneToonCamera.hlsl"
 
 // Inline HSV functions for Outline pass (standalone CGPROGRAM)
 #ifdef _OUTLINE_TEXTURE_COLOR
@@ -41,7 +42,7 @@ struct v2f
     float4 pos : SV_POSITION;
     float2 uv : TEXCOORD0;
     UNITY_FOG_COORDS(1)
-    #ifdef _HEIGHT_FADE
+    #if defined(_HEIGHT_FADE) || defined(_DISTANCE_FADE)
     float3 worldPos : TEXCOORD2;
     #endif
     UNITY_VERTEX_OUTPUT_STEREO
@@ -56,7 +57,8 @@ float _Outline;
 float _OutlineMode;
 float _OutlineCornerSmooth;
 float _OutlineEdgeCompensation;
-float _VRChatMirrorMode;
+float _OutlineWidthMode;   // 0 = Legacy (follows the camera's near clip), 1 = Stable (camera independent)
+// _VRChatMirrorMode is declared by NataneToonCamera.hlsl
 sampler2D _OutlineMask;
 float4 _OutlineMask_ST;
 sampler2D _OutlineWidthMap;
@@ -92,6 +94,18 @@ sampler2D _OutlineWidthMap;
 #endif
 #ifdef _PERSPECTIVE_FLAT
     float _PerspectiveFlatAmount;
+#endif
+#ifdef _DISTANCE_FADE
+    // Mirrors the forward pass so the hull fades / clips together with the body.
+    float _DistanceFade;
+    float _DistanceFadeStart;
+    float _DistanceFadeEnd;
+    float _DistanceFadeMode;
+    float _DistanceFadeBlend;
+    float _DistFadeBlur;
+    float _NearFadeStart;
+    float _NearFadeEnd;
+    float _DistFadeDitherScale;
 #endif
 #ifdef _FACE_ORTHO
     float _FaceOrthoAmount;
@@ -203,7 +217,7 @@ v2f vert(appdata v)
     #ifdef _OUTLINE
         // Calculate distance compensation for consistent outline width
         float3 worldPos = mul(unity_ObjectToWorld, v.vertex).xyz;
-        float distanceToCamera = distance(worldPos, _WorldSpaceCameraPos);
+        float distanceToCamera = NataneViewerDistance(worldPos);   // eye-centred, mirror-aware
         float distanceFactor = min(distanceToCamera * 0.1, _OutlineDistCompMax);
 
         // Get outline width from map if enabled
@@ -278,9 +292,11 @@ v2f vert(appdata v)
         {
             // Mode 0: Inverted Hull - Extrusion along normals in view space
             // Improved for better consistency at different angles
+            // No mirror compensation here: UNITY_MATRIX_IT_MV already yields the true outward
+            // view-space normal under a reflected view matrix, and TransformViewToProjection
+            // uses the same projection as the position. (An X flip pulled the hull inward on
+            // the left/right silhouettes in mirrors; Mode 1 below never had one.)
             float3 norm = normalize(mul((float3x3)UNITY_MATRIX_IT_MV, outlineNormal));
-            // VRChat mirror/camera flips the view matrix, compensate outline normal
-            norm.x *= _VRChatMirrorMode > 0.5 ? -1.0 : 1.0;
             float2 offset = TransformViewToProjection(norm.xy);
 
             o.pos = UnityObjectToClipPos(v.vertex);
@@ -302,7 +318,10 @@ v2f vert(appdata v)
                 outlineWidth *= GetHandDrawnWidthFactor(v.uv);
             #endif
 
-            o.pos.xy += offset * o.pos.z * outlineWidth;
+            // Regular camera: identical to the historical "* o.pos.z". Mirror (oblique) and
+            // orthographic projections get the value a regular projection would have produced.
+            float outlineDepthScale = NataneOutlineDepthScale(o.pos, _OutlineWidthMode);
+            o.pos.xy += offset * outlineDepthScale * outlineWidth;
 
             // Hand-drawn outline: position jitter
             #ifdef _OUTLINE_HAND_DRAWN
@@ -340,6 +359,9 @@ v2f vert(appdata v)
 
         // Perspective Flattening for outline pass
         #ifdef _PERSPECTIVE_FLAT
+        // Skipped for oblique (mirror) and orthographic projections, where "w * 0.5"
+        // is not a mid-depth and the object would sort against the wrong surfaces.
+        if (!NataneIsObliqueProjection() && !NataneIsOrthoCamera())
         {
             float flatZ = lerp(o.pos.z, o.pos.w * 0.5, _PerspectiveFlatAmount);
             o.pos.z = flatZ;
@@ -353,6 +375,10 @@ v2f vert(appdata v)
             float faceOrthoAmount = _FaceOrthoAmount;
             #if defined(USING_STEREO_MATRICES)
                 faceOrthoAmount = _FaceOrthoVRAmount;
+            #else
+                // VR mirrors are rendered by mono cameras: use the VR amount there too.
+                if (_VRChatMirrorMode > 0.5 && _VRChatMirrorMode < 1.5)
+                    faceOrthoAmount = _FaceOrthoVRAmount;
             #endif
             #ifdef _FACE_ORTHO_MASK
                 faceOrthoAmount *= tex2Dlod(_FaceOrthoMaskTex, float4(v.uv, 0, 0)).r;
@@ -369,7 +395,7 @@ v2f vert(appdata v)
         }
         #endif
 
-        #ifdef _HEIGHT_FADE
+        #if defined(_HEIGHT_FADE) || defined(_DISTANCE_FADE)
         o.worldPos = worldPos;
         #endif
     #else
@@ -447,6 +473,43 @@ fixed4 frag(v2f i) : SV_Target
                 float2 spos = i.pos.xy * max(_HeightFadeDitherScale, 1.0) * 0.1;
                 float ditherThreshold = frac(dot(floor(spos), float2(0.067, 0.258)) * 43.0);
                 clip(heightFade - ditherThreshold);
+            }
+        }
+        #endif
+
+        // Distance / near fade: keep the inverted hull in step with the body. Without
+        // this the body faded or clipped while the hull stayed and filled the silhouette
+        // with the outline colour.
+        #ifdef _DISTANCE_FADE
+        if (_DistanceFade >= 0.5)
+        {
+            float outlineViewDist = NataneViewerDistance(i.worldPos);
+            float farBlur = _DistFadeBlur * (_DistanceFadeEnd - _DistanceFadeStart) * 0.5;
+            float farStart = _DistanceFadeStart - farBlur;
+            float farEnd = _DistanceFadeEnd + farBlur;
+            float outlineDistFade = 1.0 - saturate((outlineViewDist - farStart) / max(farEnd - farStart, 0.01));
+
+            if (_NearFadeEnd > _NearFadeStart + 0.001)
+            {
+                float nearBlur = _DistFadeBlur * (_NearFadeEnd - _NearFadeStart) * 0.5;
+                float nearStart = _NearFadeStart - nearBlur;
+                float nearEnd = _NearFadeEnd + nearBlur;
+                outlineDistFade *= saturate((outlineViewDist - nearStart) / max(nearEnd - nearStart, 0.01));
+            }
+
+            if (_DistanceFadeMode < 0.5)
+            {
+                // Alpha mode: only visible where the pass blends (Transparent variants),
+                // exactly like the body.
+                col.a *= lerp(1.0, outlineDistFade, saturate(_DistanceFadeBlend));
+            }
+            else if (_DistanceFadeMode < 1.5)
+            {
+                clip(outlineDistFade - 0.001);
+            }
+            else
+            {
+                clip(outlineDistFade - NataneBayerThreshold4x4(i.pos.xy, NataneFadeDitherScale(_DistFadeDitherScale)));
             }
         }
         #endif

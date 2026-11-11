@@ -36,11 +36,9 @@
 // Declared here so that any file including Utils alone (e.g. FurShell)
 // gets the VRChat globals without needing the full NataneToonInput.hlsl.
 // NataneToonInput.hlsl guards with the same variable names, so no redefinition occurs.
-#ifndef NATANE_VRCHAT_GLOBALS_DECLARED
-#define NATANE_VRCHAT_GLOBALS_DECLARED
-float _VRChatMirrorMode;
-float _VRChatCameraMode;
-#endif
+// The declarations (and the viewer / projection helpers built on them) live in
+// NataneToonCamera.hlsl so the outline pass can share them without pulling in Utils.
+#include "NataneToonCamera.hlsl"
 
 // Returns true if currently rendering in a VRChat mirror
 float NataneIsMirror()
@@ -919,7 +917,8 @@ float SampleAudioLinkChronotensity(int band)
 // Returns 0-1 fade value based on distance
 float CalculateDistanceFade(float3 worldPos, float fadeStart, float fadeEnd)
 {
-    float distance = length(_WorldSpaceCameraPos - worldPos);
+    // Eye-centred / mirror-aware distance: both eyes fade identically.
+    float distance = NataneViewerDistance(worldPos);
     float fade = saturate((distance - fadeStart) / max(fadeEnd - fadeStart, 0.01));
     return 1.0 - fade; // Invert so 1 = visible, 0 = faded
 }
@@ -1324,34 +1323,33 @@ half3 CalculateDripEffectFast(float3 worldPos, float time, half3 dripColor, floa
 #ifndef NATANE_UTILS_STANDALONE
 float2 StabilizeDitherCoord(float2 screenPixelPos)
 {
-    float4 pivotClip = mul(UNITY_MATRIX_VP, float4(unity_ObjectToWorld._m03_m13_m23, 1.0));
-    float2 pivotNDC = pivotClip.xy / pivotClip.w;
-    float2 pivotScreen = (pivotNDC * 0.5 + 0.5) * _ScreenParams.xy;
+    float stabilize = saturate(_DitherStabilize);
+    if (stabilize <= 0.0)
+        return screenPixelPos;   // default: untouched
+
+    float3 pivotWS = unity_ObjectToWorld._m03_m13_m23;
+    float4 pivotClip = mul(UNITY_MATRIX_VP, float4(pivotWS, 1.0));
+    // Pivot beside / behind the camera (your own body in first person): w approaches
+    // zero or goes negative and the projected anchor explodes or mirrors. Keep it in front.
+    if (!NataneIsOrthoCamera())
+        pivotClip.w = max(pivotClip.w, 0.25 * distance(_WorldSpaceCameraPos, pivotWS));
+    // NataneClipToPixel uses the SV_POSITION convention (top-down on D3D, stereo offset),
+    // so the anchor really follows the object instead of sliding at twice its speed vertically.
+    float2 pivotScreen = NataneClipToPixel(pivotClip);
     // pivotScreen を引くと負座標が生じ、fmod() で負のインデックスになる。
     // 十分大きな正のオフセットを加えて常に正を保証する。
     float2 stablePos = screenPixelPos - pivotScreen + 100000.0;
-    return lerp(screenPixelPos, stablePos, saturate(_DitherStabilize));
+    return lerp(screenPixelPos, stablePos, stabilize);
 }
 #endif
 
 // ===== Shared Dithering / Alpha Functions =====
-static const float NataneBayer4x4[16] = {
-    0.0/16.0,  8.0/16.0,  2.0/16.0, 10.0/16.0,
-    12.0/16.0, 4.0/16.0, 14.0/16.0,  6.0/16.0,
-    3.0/16.0, 11.0/16.0,  1.0/16.0,  9.0/16.0,
-    15.0/16.0, 7.0/16.0, 13.0/16.0,  5.0/16.0
-};
+// NataneBayer4x4 / NataneBayerThreshold4x4 / NataneFadeDitherScale are defined in
+// NataneToonCamera.hlsl (shared with the outline pass).
 
 float NataneInterleavedGradientNoise(float2 pixelPos)
 {
     return frac(52.9829189 * frac(dot(pixelPos, float2(0.06711056, 0.00583715))));
-}
-
-float NataneBayerThreshold4x4(float2 screenPos, float scale)
-{
-    float2 scaledPos = screenPos * max(scale, 0.0001);
-    int2 coord = int2(fmod(scaledPos, 4.0));
-    return NataneBayer4x4[coord.y * 4 + coord.x];
 }
 
 #if defined(_BLUE_NOISE_DITHER)
@@ -1381,6 +1379,20 @@ float NataneGetDitherThreshold(float2 screenPos, float scale)
     #endif
 }
 
+// Threshold for sliders that use the "x10" scale convention (distance / height /
+// intersection fade, shadow-boundary dithering, dithering alpha). The Bayer cell size
+// follows NataneFadeDitherScale; the optional blue-noise layer keeps its previous input.
+float NataneGetFadeDitherThreshold(float2 screenPos, float sliderScale)
+{
+    float bayer = NataneBayerThreshold4x4(screenPos, NataneFadeDitherScale(sliderScale));
+    #if defined(_BLUE_NOISE_DITHER)
+        float blue = NataneBlueNoiseThreshold(screenPos, sliderScale);
+        return lerp(bayer, blue, saturate(_BlueNoiseAmount));
+    #else
+        return bayer;
+    #endif
+}
+
 #if defined(_DITHERING_ALPHA)
 float BayerMatrix4x4(float2 screenPos)
 {
@@ -1390,7 +1402,7 @@ float BayerMatrix4x4(float2 screenPos)
 // Apply dithering to alpha channel
 float ApplyDitheringAlpha(float alpha, float2 screenPos, float scale)
 {
-    float threshold = NataneGetDitherThreshold(screenPos, scale);
+    float threshold = NataneGetFadeDitherThreshold(screenPos, scale);
     return alpha - threshold;
 }
 #endif // _DITHERING_ALPHA

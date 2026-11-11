@@ -70,7 +70,7 @@ fixed4 furFrag(v2f_fur i) : SV_Target
     float layer = i.furLayer;
 
     // Distance-based LOD: fade out upper shells at distance
-    float camDist = distance(i.worldPos, _WorldSpaceCameraPos);
+    float camDist = NataneViewerDistance(i.worldPos);   // same shell LOD in both eyes
     float lodFade = saturate(1.0 - max(camDist - _FurLODDistance, 0.0) / max(_FurLODDistance * 0.5, 0.001));
     // Upper layers get clipped first at distance
     float lodThreshold = lerp(_FurLODMinLayers / (float)FUR_SHELL_COUNT, 1.0, lodFade);

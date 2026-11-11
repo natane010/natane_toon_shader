@@ -61,7 +61,7 @@
 float NataneHalftoneScreenLockedDensity(float targetPixels)
 {
     float3 objectOrigin = float3(unity_ObjectToWorld._m03, unity_ObjectToWorld._m13, unity_ObjectToWorld._m23);
-    float dist = max(distance(_WorldSpaceCameraPos, objectOrigin), 1e-3);
+    float dist = max(distance(NataneViewerPos(), objectOrigin), 1e-3);
 
     // UNITY_MATRIX_P._m11 = 1 / tan(fov/2)。画面高さ 1 単位あたりの投影係数。
     float projScale = abs(UNITY_MATRIX_P._m11);
@@ -94,10 +94,14 @@ float2 NataneHalftoneObjectAnchoredScreenCoord(float2 screenPos, float density)
 
     // オブジェクト原点をスクリーン座標（ピクセル）へ。
     float4 clip = mul(UNITY_MATRIX_VP, float4(objectOrigin, 1.0));
-    float safeW = max(abs(clip.w), 1e-5);
-    float2 anchor = (clip.xy / safeW * 0.5 + 0.5) * _ScreenParams.xy;
+    // Origin beside / behind the camera: keep the projected anchor in front instead of
+    // mirroring it through abs(w). Identical while the origin is within ~75 degrees of the view axis.
+    if (!NataneIsOrthoCamera())
+        clip.w = max(clip.w, 0.25 * max(distance(_WorldSpaceCameraPos, objectOrigin), 1e-3));
+    // SV_POSITION convention (top-down on D3D, stereo offset) so the grid follows the object.
+    float2 anchor = NataneClipToPixel(clip);
 
-    float dist = max(distance(_WorldSpaceCameraPos, objectOrigin), 1e-3);
+    float dist = max(distance(NataneViewerPos(), objectOrigin), 1e-3);
     float projScale = abs(UNITY_MATRIX_P._m11);
     float pixelsPerWorldUnit = projScale * _ScreenParams.y * 0.5 / dist;
 

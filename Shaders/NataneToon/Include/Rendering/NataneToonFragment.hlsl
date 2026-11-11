@@ -573,7 +573,7 @@ half4 frag(v2f i) : SV_Target
         // Near fade: camera too close → transparent
         if (_NearFadeEnd > _NearFadeStart + 0.001)
         {
-            float cameraDist = length(_WorldSpaceCameraPos - i.worldPos);
+            float cameraDist = NataneViewerDistance(i.worldPos);   // eye-centred, mirror-aware
             float nearFadeBlurRange = _DistFadeBlur * (_NearFadeEnd - _NearFadeStart) * DIST_FADE_BLUR_SCALE;
             half nearFade = saturate(
                 (cameraDist - (_NearFadeStart - nearFadeBlurRange)) /
@@ -593,7 +593,9 @@ half4 frag(v2f i) : SV_Target
     //   ポイント/スポットライト: fwidth ベースの適応型 smoothstep。
     #if defined(UNITY_PASS_FORWARDBASE) && defined(SHADOWS_SCREEN) && !defined(UNITY_NO_SCREENSPACE_SHADOWS)
         #ifdef _PCSS
-        if (_UsePCSS >= 0.5)
+        // Mirrors: the blocker search linearises _CameraDepthTexture, which is either the
+        // main view's texture or oblique-encoded there. Fall back to the regular shadow term.
+        if (_UsePCSS >= 0.5 && !NataneIsMirror())
         {
             // === PCSS: Percentage Closer Soft Shadows (Screen-Space Approximation) ===
             half pcssOriginalAtten = atten; // 元の atten を保存（Blend 用）
@@ -1494,8 +1496,9 @@ half4 frag(v2f i) : SV_Target
         // Boundary Dithering: apply dither pattern at specular highlight edges
         #if defined(_SPECULAR_DITHER)
         {
-            float2 specDitherScreenUV = i.screenPos.xy / max(i.screenPos.w, 0.0001);
-            float2 specDitherScreenPos = specDitherScreenUV * _ScreenParams.xy;
+            // Pixel coordinates straight from SV_POSITION: identical in mono, and not
+            // stretched 2x in double-wide stereo like "screenUV * _ScreenParams.xy" was.
+            float2 specDitherScreenPos = i.pos.xy;
             float specDitherThreshold = NataneGetDitherThreshold(StabilizeDitherCoord(specDitherScreenPos), _SpecularDitherScale);
             float ditheredSpec = step(specDitherThreshold, spec);
             spec = lerp(spec, ditheredSpec, _SpecularDitherStrength);
@@ -1626,8 +1629,9 @@ half4 frag(v2f i) : SV_Target
         // Boundary Dithering: apply dither pattern at hair specular highlight edges
         #if defined(_SPECULAR_DITHER)
         {
-            float2 hairDitherScreenUV = i.screenPos.xy / max(i.screenPos.w, 0.0001);
-            float2 hairDitherScreenPos = hairDitherScreenUV * _ScreenParams.xy;
+            // Pixel coordinates straight from SV_POSITION: identical in mono, and not
+            // stretched 2x in double-wide stereo like "screenUV * _ScreenParams.xy" was.
+            float2 hairDitherScreenPos = i.pos.xy;
             float hairDitherThreshold = NataneGetDitherThreshold(StabilizeDitherCoord(hairDitherScreenPos), _SpecularDitherScale);
             float hairSpecIntensity = max(max(hairSpec.r, hairSpec.g), hairSpec.b);
             float hairDitherMask = lerp(1.0, step(hairDitherThreshold, hairSpecIntensity), _SpecularDitherStrength);
@@ -2838,6 +2842,9 @@ half4 frag(v2f i) : SV_Target
     {
         float2 illustGrabUV = i.screenPos.xy / max(i.screenPos.w, 0.0001);
         float2 illustScreenUV = i.pos.xy / _ScreenParams.xy;
+        // Depth / depth-normals lookups need the ComputeScreenPos convention
+        // (stereo- and flip-aware); i.pos.xy / _ScreenParams is only right in mono.
+        float2 illustDepthUV = illustGrabUV;
 
         #ifdef _WATERCOLOR
         if (_UseWatercolor >= 0.5)
@@ -2871,9 +2878,10 @@ half4 frag(v2f i) : SV_Target
         #endif
 
         #ifdef _SCREEN_EDGE
-        if (_UseScreenEdge >= 0.5)
+        // Skipped in mirrors: the depth / depth-normals textures belong to the main view there.
+        if (_UseScreenEdge >= 0.5 && !NataneIsMirror())
         {
-            half edgeValue = ApplyScreenEdge(illustScreenUV, _EdgeDepthSensitivity, _EdgeNormalSensitivity, _EdgeWidth);
+            half edgeValue = ApplyScreenEdge(illustDepthUV, _EdgeDepthSensitivity, _EdgeNormalSensitivity, _EdgeWidth);
             col.rgb = lerp(col.rgb, _EdgeColor.rgb, edgeValue * _EdgeBlend * nprWeight);
         }
         #endif
@@ -2948,7 +2956,9 @@ half4 frag(v2f i) : SV_Target
     // ===== Intersection Fade (Object Intersection Transparency) =====
     #ifndef _QUEST_LITE
     #ifdef _INTERSECTION_FADE
-    if (_IntersectionFade >= 0.5)
+    // Skipped in mirrors (no valid depth texture: clip mode could remove the whole
+    // object) and for orthographic cameras (screenPos.w is not the view depth there).
+    if (_IntersectionFade >= 0.5 && !NataneIsMirror() && !NataneIsOrthoCamera())
     {
         float2 intersectScreenUV = i.screenPos.xy / max(i.screenPos.w, 0.0001);
         float sceneDepth = LinearEyeDepth(UNITY_SAMPLE_SCREENSPACE_TEXTURE(_CameraDepthTexture, intersectScreenUV).r);
@@ -3027,7 +3037,7 @@ half4 frag(v2f i) : SV_Target
     #if defined(_DEPTH_COLOR_FADE)
     if (_DepthColorFade >= 0.5)
     {
-        float camDist = length(_WorldSpaceCameraPos - i.worldPos);
+        float camDist = NataneViewerDistance(i.worldPos);   // eye-centred, mirror-aware
         float depthFactor = saturate((camDist - _DepthFadeStart) / max(_DepthFadeEnd - _DepthFadeStart, 0.001));
         // Exponential falloff for more natural aerial perspective
         depthFactor = 1.0 - exp(-depthFactor * 3.0);
@@ -3097,15 +3107,17 @@ half4 frag(v2f i) : SV_Target
     #if defined(_HASHED_ALPHA)
         if (_HashedAlpha >= 0.5)
         {
-            float2 hashedScreenUV = i.screenPos.xy / max(i.screenPos.w, 0.0001);
-            float2 hashedScreenPos = hashedScreenUV * _ScreenParams.xy;
+            // Pixel coordinates straight from SV_POSITION: identical in mono, and not
+            // stretched 2x in double-wide stereo like "screenUV * _ScreenParams.xy" was.
+            float2 hashedScreenPos = i.pos.xy;
             clip(ApplyHashedAlpha(col.a, StabilizeDitherCoord(hashedScreenPos), i.worldPos.xz, _HashedAlphaScale));
         }
     #elif defined(_DITHERING_ALPHA)
         if (_DitheringAlpha >= 0.5)
         {
-            float2 ditherScreenUV = i.screenPos.xy / max(i.screenPos.w, 0.0001);
-            float2 ditherScreenPos = ditherScreenUV * _ScreenParams.xy;
+            // Pixel coordinates straight from SV_POSITION: identical in mono, and not
+            // stretched 2x in double-wide stereo like "screenUV * _ScreenParams.xy" was.
+            float2 ditherScreenPos = i.pos.xy;
             clip(ApplyDitheringAlpha(col.a, StabilizeDitherCoord(ditherScreenPos), max(_DitheringAlphaScale, 1.0)));
         }
     #endif
