@@ -25,12 +25,47 @@ Shader "Natane/Eye"
         [HDR]_LimbalRingColor ("Limbal Ring Color", Color) = (0.2, 0.28, 0.38, 1)
         _LimbalRingWidth ("Limbal Ring Width", Range(0.01, 0.4)) = 0.08
         _LimbalRingIntensity ("Limbal Ring Intensity", Range(0, 3)) = 0
+        _LimbalViewBoost ("Limbal View Angle Boost", Range(0, 2)) = 0
+        _IrisConcavity ("Iris Concavity", Range(0, 1)) = 0
         [HDR]_ScleraTint ("Sclera Tint", Color) = (1, 1, 1, 1)
+        _ScleraTintStrength ("Sclera Tint Strength", Range(0, 1)) = 0
+        _ScleraRedness ("Sclera Corner Redness", Range(0, 1)) = 0
         _ScleraShadowStrength ("Sclera Shadow Strength", Range(0, 1)) = 0
         [HDR]_CorneaSpecColor ("Cornea Spec Color", Color) = (1, 1, 1, 1)
         _CorneaSpecIntensity ("Cornea Spec Intensity", Range(0, 3)) = 0
         _CorneaSpecSmoothness ("Cornea Spec Smoothness", Range(0, 1)) = 0.92
         _CorneaFresnelPower ("Cornea Fresnel Power", Range(0.5, 8)) = 4
+        _CorneaRefraction ("Cornea Refraction", Range(0, 1)) = 0
+        _CorneaIOR ("Cornea IOR", Range(1, 1.6)) = 1.333
+        _CorneaBulge ("Cornea Bulge", Range(0, 1)) = 0.5
+        _LightCausticIntensity ("Light Caustic Intensity", Range(0, 3)) = 0
+        _LidShadowColor ("Lid Shadow Color", Color) = (0.55, 0.5, 0.62, 1)
+        _LidShadowStrength ("Lid Shadow Strength", Range(0, 1)) = 0
+        _LidShadowHeight ("Lid Shadow Height", Range(-1.5, 1.5)) = 0.5
+        _LidShadowSoftness ("Lid Shadow Softness", Range(0.01, 1)) = 0.4
+        _LidShadowCurve ("Lid Shadow Curve", Range(-1, 1)) = 0.3
+        [Toggle] _LidShadowFlip ("Lid Shadow Flip", Float) = 0
+        _LidShadowReflectionOcclusion ("Lid Shadow Reflection Occlusion", Range(0, 1)) = 0
+        _PupilLightResponse ("Pupil Light Response", Range(0, 1)) = 0
+        _PupilLightMin ("Pupil Light Min Scale", Range(0.2, 1)) = 0.6
+        _PupilLightMax ("Pupil Light Max Scale", Range(1, 2.5)) = 1.4
+        _PupilLightBaseRadius ("Pupil Base Radius In Texture (Iris Ratio)", Range(0.05, 0.9)) = 0.35
+        _IrisLayer2Depth ("Iris Layer 2 Depth", Range(0, 1)) = 0
+        _IrisLayer2Blend ("Iris Layer 2 Blend", Range(0, 1)) = 0
+        _SparkleDepth ("Sparkle Layer Depth", Range(0, 1)) = 0
+        [NoScaleOffset] _HighlightLayerTex ("Highlight Layer Texture", 2D) = "black" {}
+        _HighlightLayerIntensity ("Highlight Layer Intensity", Range(0, 3)) = 0
+        [HDR]_HighlightLayerColor ("Highlight Layer Color", Color) = (1, 1, 1, 1)
+        [Enum(Fixed UV,0,Follow View,1,Follow Light,2)] _HighlightLayerFollow ("Highlight Layer Follow", Float) = 0
+        _HighlightLayerFollowAmount ("Highlight Layer Follow Amount", Range(-1, 1)) = 0.5
+        _HighlightWobble ("Highlight Wobble", Range(0, 1)) = 0
+        _HighlightWobbleSpeed ("Highlight Wobble Speed", Range(0, 10)) = 2
+        [NoScaleOffset] _CorneaMatCapTex ("Cornea MatCap", 2D) = "black" {}
+        _CorneaMatCapIntensity ("Cornea MatCap Intensity", Range(0, 3)) = 0
+        [HDR]_CorneaMatCapColor ("Cornea MatCap Color", Color) = (1, 1, 1, 1)
+        _TearLineIntensity ("Tear Line Intensity", Range(0, 3)) = 0
+        _TearLineHeight ("Tear Line Height", Range(0, 1)) = 0.12
+        _TearLineWidth ("Tear Line Width", Range(0.005, 0.2)) = 0.03
 
         [Header(___________________________________________________)]
         [Header(Dual Eye Centers)]
@@ -255,6 +290,9 @@ Shader "Natane/Eye"
 
         Pass
         {
+            // ForwardBase so _WorldSpaceLightPos0 / _LightColor0 / SH are valid for the
+            // light-driven iris caustic. The pass is still drawn exactly once.
+            Tags { "LightMode" = "ForwardBase" }
             CGPROGRAM
             #pragma vertex vert
             #pragma fragment frag
@@ -262,6 +300,8 @@ Shader "Natane/Eye"
             #pragma multi_compile_instancing
 
             #include "UnityCG.cginc"
+            // NataneViewerPos(): eye-centred, mirror-aware viewer (needs only UnityCG).
+            #include "../Include/Utils/NataneToonCamera.hlsl"
 
             // AudioLink integration (optional dependency)
             #if defined(AUDIOLINK)
@@ -283,8 +323,13 @@ Shader "Natane/Eye"
                 float4 vertex : SV_POSITION;
                 float2 viewDir : TEXCOORD2;
                 float3 rawViewDir : TEXCOORD5;
+                float3 lightDirTS : TEXCOORD6;
                 float4 screenPos : TEXCOORD3;
                 float2 screenRatio : TEXCOORD4;
+                // Centre-eye data for the pasted effects (see the stereo policy below).
+                float3 centerViewTS : TEXCOORD1;
+                float3 matcapRightTS : TEXCOORD7;
+                float3 matcapUpTS : TEXCOORD8;
                 UNITY_VERTEX_INPUT_INSTANCE_ID
                 UNITY_VERTEX_OUTPUT_STEREO
             };
@@ -311,6 +356,36 @@ Shader "Natane/Eye"
             float _UseRealisticEye, _IrisDepth, _IrisDepthRadius, _LimbalRingWidth, _LimbalRingIntensity;
             float _ScleraShadowStrength, _CorneaSpecIntensity, _CorneaSpecSmoothness, _CorneaFresnelPower;
             float4 _LimbalRingColor, _ScleraTint, _CorneaSpecColor;
+            float _CorneaRefraction, _CorneaIOR, _CorneaBulge, _LightCausticIntensity;
+            float _LidShadowStrength, _LidShadowHeight, _LidShadowSoftness, _LidShadowCurve, _LidShadowFlip;
+            float4 _LidShadowColor;
+            fixed4 _LightColor0;
+            // Tangent-space direction to the key light for the current pixel (set in frag).
+            static float3 NTEye_LightDirTS = float3(0.0, 0.0, 1.0);
+
+            // ---- Realistic eye extensions (all uniform-only; every default is a no-op) ----
+            sampler2D _HighlightLayerTex;
+            sampler2D _CorneaMatCapTex;
+            float _IrisConcavity, _LimbalViewBoost, _LidShadowReflectionOcclusion;
+            float _PupilLightResponse, _PupilLightMin, _PupilLightMax, _PupilLightBaseRadius;
+            float _HighlightLayerIntensity, _HighlightLayerFollow, _HighlightLayerFollowAmount;
+            float _HighlightWobble, _HighlightWobbleSpeed;
+            float _CorneaMatCapIntensity, _SparkleDepth, _IrisLayer2Depth, _IrisLayer2Blend;
+            float _ScleraTintStrength, _ScleraRedness;
+            float _TearLineIntensity, _TearLineHeight, _TearLineWidth;
+            float4 _HighlightLayerColor, _CorneaMatCapColor;
+            // Per-pixel state shared by the helpers below. All of it is (re)assigned at the
+            // top of frag / DoColor before any helper reads it.
+            static float2 NTEye_UVDx = float2(0.0, 0.0);            // ddx/ddy of the mesh UV, taken outside flow control
+            static float2 NTEye_UVDy = float2(0.0, 0.0);
+            static float NTEye_PupilScale = 1.0;                    // light-linked pupil scale (1 = unchanged)
+            static float2 NTEye_WobbleOffset = float2(0.0, 0.0);    // highlight wobble: UV offset
+            static float NTEye_WobbleScale = 1.0;                   // highlight wobble: scale pulse
+            static float NTEye_MirrorSign = 1.0;                    // -1 on the mirrored right eye
+            static float3 NTEye_CenterViewTS = float3(0.0, 0.0, 1.0);   // centre-eye view dir (true tangent space)
+            static float3 NTEye_MatCapRightTS = float3(1.0, 0.0, 0.0);  // centre-eye matcap basis (true tangent space)
+            static float3 NTEye_MatCapUpTS = float3(0.0, 1.0, 0.0);
+            static float2 NTEye_SurfaceUV = float2(0.0, 0.0);       // working UV before any depth shift
             int _EyeState;
 
             float _DetailBrightness;
@@ -404,7 +479,7 @@ Shader "Natane/Eye"
 
             float NTEye_GetPupilMask(float2 uv, float2 center)
             {
-                float radial = length(NTEye_GetPupilLocal(uv, center));
+                float radial = length(NTEye_GetPupilLocal(uv, center)) / NTEye_PupilScale;
                 return saturate(0.025 / max(saturate(radial - 1.0), 1e-5));
             }
 
@@ -544,7 +619,150 @@ Shader "Natane/Eye"
 
                 float irisMask = NTEye_GetIrisMask(uv, center, _IrisDepthRadius);
                 float2 irisDepthUV = NTEye_GenerateParallaxUV(uv, viewDirection, _IrisDepth);
+
+                // Cornea refraction: refract the view ray at a virtual cornea dome and
+                // intersect the iris plane below it (the refract-then-intersect form used by
+                // Unity HDRP's eye, done here in tangent/UV units so mesh scale does not
+                // matter). Unlike the linear offset above, the shift stays bounded at grazing
+                // angles and both VR eyes agree on the iris depth.
+                if (_CorneaRefraction > 0.001)
+                {
+                    float2 local = NTEye_GetPupilLocal(uv, center);
+                    float irisR = max(_IrisDepthRadius, 0.001);
+                    float dome = saturate(1.0 - dot(local, local) / (irisR * irisR));
+                    float3 viewTS = float3(viewDirection, sqrt(saturate(1.0 - dot(viewDirection, viewDirection))));
+                    // Analytic bulge: the dome's normal tilts outwards towards the limbus and
+                    // the chamber gets shallower there, so the refraction meets the sclera
+                    // without a seam.
+                    float3 corneaN = normalize(float3(local / irisR * (_CorneaBulge * 0.6), 1.0));
+                    float3 refr = refract(-viewTS, corneaN, 1.0 / max(_CorneaIOR, 1.0));
+                    float2 slope = refr.xy / max(-refr.z, 0.25);
+                    float chamber = -_IrisDepth * lerp(1.0, dome, saturate(_CorneaBulge));
+                    float2 refractedUV = uv + slope * chamber * _MainParallax;
+                    irisDepthUV = lerp(irisDepthUV, refractedUV, saturate(_CorneaRefraction));
+                }
                 return lerp(uv, irisDepthUV, irisMask);
+            }
+
+            // =====================================================================
+            // Realistic eye: stereo / mirror policy
+            // =====================================================================
+            //   * DEPTH effects are PER-EYE. Cornea refraction, iris depth, the second
+            //     iris layer, the sparkle depth and the view-angle limbal ring use the
+            //     per-eye tangent view direction (v2f.viewDir, from _WorldSpaceCameraPos),
+            //     so both eyes see a consistent parallax and the brain fuses real depth.
+            //   * PASTED effects are CENTRE-EYE. The cornea matcap and the highlight
+            //     layer are not at a physical depth; evaluated per eye they would sit at
+            //     different places in each eye and swim. They use NataneViewerPos()
+            //     (eye-centred, mirror-aware) through v2f.centerViewTS / matcap*TS and
+            //     are positioned on the un-shifted surface UV (NTEye_SurfaceUV).
+            //   * Light-driven terms (concave iris, pupil response, follow-light) do not
+            //     depend on the camera at all.
+            //   * The mirrored right eye works in an x-flipped tangent space: per-eye
+            //     view dir and light dir are flipped once (PrepareEyeData / frag);
+            //     centre-eye vectors stay in the true tangent space and
+            //     NTEye_MirrorSign converts between the two.
+
+            // Light-linked pupil, ring-preserving remap (after Unity HDRP's eye): the
+            // radius is remapped piecewise-linearly so the pupil edge moves while the
+            // limbus (iris radius) stays fixed; the iris pattern stretches radially.
+            // Returns the UV to SAMPLE for the pixel at `uv`. Purely radial, so it is
+            // independent of the procedural pupil shape (circle / star / heart).
+            float2 NTEye_RemapPupilUV(float2 uv, float2 center)
+            {
+                if (_UseRealisticEye <= 0.5 || _PupilLightResponse <= 0.0)
+                {
+                    return uv;
+                }
+
+                float r = length(NTEye_GetPupilLocal(uv, center));
+                float irisR = max(_IrisDepthRadius, 0.001);
+                float basePupilR = clamp(_PupilLightBaseRadius, 0.02, 0.95) * irisR;
+                float newPupilR = clamp(basePupilR * NTEye_PupilScale, irisR * 0.02, irisR * 0.95);
+                float sourceR = r;
+                if (r < newPupilR)
+                {
+                    sourceR = r * (basePupilR / newPupilR);
+                }
+                else if (r < irisR)
+                {
+                    sourceR = basePupilR + (r - newPupilR) * ((irisR - basePupilR) / (irisR - newPupilR));
+                }
+                return center + (uv - center) * (sourceR / max(r, 0.0001));
+            }
+
+            // State texture with explicit gradients, so it can be sampled inside
+            // uniform branches without gradient-in-flow-control issues.
+            float4 NTEye_SampleStateTexGrad(float2 uv)
+            {
+                float4 s = float4(0.0, 0.0, 0.0, 0.0);
+                if (_EyeState == 0)
+                {
+                    s = tex2Dgrad(_NormalStateTex, uv, NTEye_UVDx, NTEye_UVDy);
+                }
+                else if (_EyeState == 1)
+                {
+                    s = tex2Dgrad(_StarStateTex, uv, NTEye_UVDx, NTEye_UVDy);
+                }
+                else if (_EyeState == 2)
+                {
+                    s = tex2Dgrad(_HeartStateTex, uv, NTEye_UVDx, NTEye_UVDy);
+                }
+                else if (_EyeState == 3)
+                {
+                    s = tex2Dgrad(_DeadStateTex, uv, NTEye_UVDx, NTEye_UVDy);
+                }
+                else
+                {
+                    s = tex2Dgrad(_NervousStateTex, uv, NTEye_UVDx, NTEye_UVDy);
+                }
+                return s;
+            }
+
+            // Second iris parallax layer (depth effect, per-eye): the same texture
+            // sampled deeper and blended in towards the pupil, so the pupil sits
+            // behind the iris pattern.
+            void NTEye_ApplyIrisLayer2(inout fixed4 texCol, float2 irisTexUV, float2 viewDirection, float2 center)
+            {
+                if (_UseRealisticEye <= 0.5 || _UseTexture <= 0.5 || _IrisLayer2Blend <= 0.0 || _IrisLayer2Depth <= 0.0)
+                {
+                    return;
+                }
+
+                float2 layerUV = NTEye_GenerateParallaxUV(irisTexUV, viewDirection, -0.3 * _IrisLayer2Depth);
+                float4 layerCol = NTEye_SampleStateTexGrad(layerUV);
+                float irisR = max(_IrisDepthRadius, 0.001);
+                float basePupilR = clamp(_PupilLightBaseRadius, 0.02, 0.95) * irisR;
+                float r = length(NTEye_GetPupilLocal(irisTexUV, center));
+                // 1 inside the pupil, fading to 0 at the limbus (basePupilR < irisR always).
+                float layerMask = 1.0 - smoothstep(basePupilR, irisR, r);
+                float layerBlend = saturate(layerMask * _IrisLayer2Blend);
+                texCol.rgb = lerp(texCol.rgb, layerCol.rgb, layerBlend);
+                texCol.a = lerp(texCol.a, layerCol.a, layerBlend);
+            }
+
+            // Upper-lid shadow amount for an iris-local position (0 when disabled).
+            float NTEye_GetLidShadow(float2 localUV)
+            {
+                if (_UseRealisticEye <= 0.5 || _LidShadowStrength <= 0.001)
+                {
+                    return 0.0;
+                }
+
+                float lidY = (_LidShadowFlip > 0.5) ? -localUV.y : localUV.y;
+                float lidT = lidY + _LidShadowCurve * localUV.x * localUV.x;
+                float lid = smoothstep(_LidShadowHeight - _LidShadowSoftness, _LidShadowHeight + _LidShadowSoftness, lidT);
+                return saturate(lid * _LidShadowStrength * _LidShadowColor.a);
+            }
+
+            // Multiplier for highlights / reflections / sparkle under the lid (1 = untouched).
+            float NTEye_GetLidReflectionOcclusion(float2 uv, float2 center)
+            {
+                if (_LidShadowReflectionOcclusion <= 0.0)
+                {
+                    return 1.0;
+                }
+                return 1.0 - NTEye_GetLidShadow(NTEye_GetPupilLocal(uv, center)) * saturate(_LidShadowReflectionOcclusion);
             }
 
             float3 NTEye_BlendColors(float3 base, float3 blend, int mode, float blendAmount)
@@ -632,20 +850,132 @@ Shader "Natane/Eye"
                 float radial = length(localUV);
                 float irisMask = NTEye_GetIrisMask(workingUV, eyeCenter, _IrisDepthRadius);
                 float scleraMask = saturate(1.0 - irisMask);
+                float irisRadius = max(_IrisDepthRadius, 0.001);
+                // Iris-local position on the un-shifted surface, for the pasted effects.
+                float2 surfaceLocal = NTEye_GetPupilLocal(NTEye_SurfaceUV, eyeCenter);
 
-                float limbalMask = saturate(1.0 - abs(radial - _IrisDepthRadius) / max(_LimbalRingWidth, 0.001));
-                limbalMask *= limbalMask * _LimbalRingIntensity;
+                // Lid shadow amount, needed early so it can occlude the highlights below.
+                float lid = NTEye_GetLidShadow(localUV);
+                float lidOcc = 1.0 - lid * saturate(_LidShadowReflectionOcclusion);
+
+                // Concave iris normal: the iris is a shallow bowl, so its normal leans
+                // towards the centre and the side OPPOSITE the light faces the light.
+                if (_IrisConcavity > 0.0)
+                {
+                    float3 concaveN = normalize(float3(-localUV / irisRadius * (_IrisConcavity * 1.2), 1.0));
+                    float concaveLit = saturate(dot(concaveN, NTEye_LightDirTS)) - saturate(NTEye_LightDirTS.z);
+                    col.rgb *= max(1.0 + concaveLit * irisMask, 0.0);
+                }
+
+                // View-angle limbal ring (depth effect, per-eye view): wider and darker at
+                // grazing angles, where the line of sight crosses more of the cornea edge.
+                float limbalBoost = _LimbalViewBoost * saturate(dot(workingViewDir, workingViewDir));
+                float limbalMask = saturate(1.0 - abs(radial - _IrisDepthRadius) / (max(_LimbalRingWidth, 0.001) * (1.0 + limbalBoost)));
+                if (limbalBoost > 0.0)
+                {
+                    col.rgb *= 1.0 - saturate(limbalMask * limbalBoost * saturate(_LimbalRingIntensity)) * 0.5;
+                }
+                limbalMask *= limbalMask * _LimbalRingIntensity * (1.0 + limbalBoost);
                 col.rgb += _LimbalRingColor.rgb * limbalMask * _LimbalRingColor.a;
 
                 float scleraShadow = smoothstep(-0.2, 0.75, -localUV.y + radial * 0.25) * _ScleraShadowStrength;
                 col.rgb = lerp(col.rgb, col.rgb * _ScleraTint.rgb, saturate(scleraMask * _ScleraTint.a));
+
+                // Sclera tint / corner redness: only OUTSIDE the iris (scleraMask above
+                // also covers the pupil centre, so a dedicated outer mask is used here).
+                if (_ScleraTintStrength > 0.0 || _ScleraRedness > 0.0)
+                {
+                    float scleraOuter = smoothstep(irisRadius - 0.02, irisRadius + 0.10, radial);
+                    if (_ScleraTintStrength > 0.0)
+                    {
+                        col.rgb = lerp(col.rgb, _ScleraTint.rgb, saturate(scleraOuter * _ScleraTintStrength));
+                    }
+                    if (_ScleraRedness > 0.0)
+                    {
+                        float cornerMask = scleraOuter * smoothstep(irisRadius, irisRadius * 2.2, abs(localUV.x));
+                        col.rgb = lerp(col.rgb, col.rgb * float3(1.0, 0.55, 0.5), saturate(cornerMask * _ScleraRedness));
+                    }
+                }
+
                 col.rgb *= 1.0 - scleraMask * scleraShadow * 0.35;
 
-                float corneaRadius = lerp(0.18, 0.03, saturate(_CorneaSpecSmoothness));
-                float corneaSpark = saturate(0.015 / max(length(glareUV - (eyeCenter + float2(0.05, -0.24))) - corneaRadius, 1e-5));
+                float corneaRadius = lerp(0.18, 0.03, saturate(_CorneaSpecSmoothness)) * NTEye_WobbleScale;
+                float corneaSpark = saturate(0.015 / max(length(glareUV - (eyeCenter + float2(0.05, -0.24) + NTEye_WobbleOffset)) - corneaRadius, 1e-5));
                 float corneaFresnel = pow(saturate(length(workingViewDir)), max(0.5, _CorneaFresnelPower));
                 float corneaMask = saturate((corneaSpark + corneaFresnel * 0.35) * _CorneaSpecIntensity);
-                col.rgb += _CorneaSpecColor.rgb * corneaMask * _CorneaSpecColor.a;
+                col.rgb += _CorneaSpecColor.rgb * corneaMask * _CorneaSpecColor.a * lidOcc;
+
+                // Light-driven iris caustic: the cornea focuses light onto the side of the
+                // iris opposite the light (empirical form from Unity HDRP's eye:
+                // 2 * saturate(dot(-radialDir, lightDir.xy))^2, half weight).
+                if (_LightCausticIntensity > 0.001)
+                {
+                    float2 lightXY = NTEye_LightDirTS.xy;
+                    float lightLen = length(lightXY);
+                    float2 radialDir = localUV / max(radial, 0.0001);
+                    float facing = saturate(dot(-radialDir, lightXY / max(lightLen, 0.0001)));
+                    // Fades out for a light straight in front (no side to focus onto) and
+                    // towards the pupil centre, where the radial direction is undefined.
+                    float caustic = 2.0 * facing * facing * irisMask * saturate(lightLen * 2.0)
+                                  * saturate(radial / max(_IrisDepthRadius, 0.001));
+                    col.rgb *= 1.0 + 0.5 * caustic * _LightCausticIntensity;
+                }
+
+                // Cornea matcap (pasted effect, centre-eye): normal of the analytic cornea
+                // dome expressed in a view basis built from the centre-eye position and
+                // world up, so both VR eyes (and head roll) get the same reflection.
+                if (_CorneaMatCapIntensity > 0.0)
+                {
+                    float2 domeXY = surfaceLocal / irisRadius;
+                    domeXY /= max(length(domeXY), 1.0);
+                    float3 domeN = normalize(float3(domeXY * (0.4 + _CorneaBulge), 1.0));
+                    domeN.x *= NTEye_MirrorSign;   // back to the true tangent space
+                    float2 matcapUV = float2(dot(domeN, NTEye_MatCapRightTS), dot(domeN, NTEye_MatCapUpTS)) * 0.5 + 0.5;
+                    float4 matcapCol = tex2Dgrad(_CorneaMatCapTex, matcapUV, NTEye_UVDx, NTEye_UVDy);
+                    float domeMask = 1.0 - smoothstep(irisRadius - 0.08, irisRadius + 0.10, length(surfaceLocal));
+                    col.rgb += matcapCol.rgb * _CorneaMatCapColor.rgb * (_CorneaMatCapIntensity * _CorneaMatCapColor.a * domeMask * lidOcc);
+                }
+
+                // Separate highlight layer (pasted effect, centre-eye), additive on top of
+                // the cornea. Sampled on the un-shifted surface UV, which already carries
+                // the mirrored-right-eye flip like every state texture.
+                if (_HighlightLayerIntensity > 0.0)
+                {
+                    float2 highlightUV = NTEye_SurfaceUV;
+                    float followScale = _HighlightLayerFollowAmount * 0.5 * _PupilSize;
+                    if (_HighlightLayerFollow > 1.5)
+                    {
+                        // Follows the light: the highlight slides towards the key light.
+                        highlightUV -= NTEye_LightDirTS.xy * followScale;
+                    }
+                    else if (_HighlightLayerFollow > 0.5)
+                    {
+                        // Follows the view: parallax of a layer floating above the cornea
+                        // (opposite sign to the iris depth). Centre-eye view direction.
+                        highlightUV += float2(NTEye_CenterViewTS.x * NTEye_MirrorSign, NTEye_CenterViewTS.y) * followScale;
+                    }
+                    highlightUV = eyeCenter + (highlightUV - eyeCenter) / NTEye_WobbleScale + NTEye_WobbleOffset;
+                    float4 highlightCol = tex2Dgrad(_HighlightLayerTex, highlightUV, NTEye_UVDx, NTEye_UVDy);
+                    col.rgb += highlightCol.rgb * _HighlightLayerColor.rgb * (highlightCol.a * _HighlightLayerIntensity * _HighlightLayerColor.a * lidOcc);
+                }
+
+                // Tear line: thin wet highlight along the LOWER lid edge. Uses the lid
+                // shadow's axis convention inverted (upper lid = lidY, lower lid = -lidY).
+                if (_TearLineIntensity > 0.0)
+                {
+                    float tearY = (_LidShadowFlip > 0.5) ? surfaceLocal.y : -surfaceLocal.y;
+                    float tearT = tearY + _LidShadowCurve * surfaceLocal.x * surfaceLocal.x;
+                    float tearLine = saturate(1.0 - abs(tearT - (1.0 - _TearLineHeight)) / max(_TearLineWidth, 0.001));
+                    tearLine *= tearLine * (1.0 - smoothstep(0.8, 1.8, abs(surfaceLocal.x)));
+                    col.rgb += tearLine * _TearLineIntensity * lidOcc;
+                }
+
+                // Upper-lid shadow band. Applied last so it also dims the cornea highlight
+                // and the caustic above (an eye in the lid's shade should not sparkle).
+                if (_LidShadowStrength > 0.001)
+                {
+                    col.rgb = lerp(col.rgb, col.rgb * _LidShadowColor.rgb, lid);
+                }
             }
 
             void NTEye_ApplyIrisCaustics(inout fixed4 col, float2 workingUV, float2 workingViewDir, float2 eyeCenter)
@@ -860,6 +1190,31 @@ Shader "Natane/Eye"
                 o.viewDir = normalize(rawViewDir);
                 o.rawViewDir = rawViewDir;
 
+                // Key light for the iris caustic: realtime light, else the dominant SH
+                // direction, else a fixed upper-front direction so the eye never goes flat.
+                float3 worldPos = mul(unity_ObjectToWorld, v.vertex).xyz;
+                float3 keyDirWS = _WorldSpaceLightPos0.xyz - worldPos * _WorldSpaceLightPos0.w;
+                float keyAmount = dot(_LightColor0.rgb, float3(1.0, 1.0, 1.0)) * dot(keyDirWS, keyDirWS);
+                float3 shDirWS = unity_SHAr.xyz * 0.3 + unity_SHAg.xyz * 0.59 + unity_SHAb.xyz * 0.11;
+                if (keyAmount < 0.0001)
+                {
+                    keyDirWS = (dot(shDirWS, shDirWS) > 0.000001) ? shDirWS : float3(0.3, 0.8, 0.5);
+                }
+                o.lightDirTS = mul(worldToTangent, normalize(keyDirWS));
+
+                // Centre-eye view vector and matcap basis (pasted effects: identical for
+                // both VR eyes, mirror-aware through NataneViewerPos()). The basis uses
+                // world up, so it is built in world space where handedness is known.
+                float3 centerViewWS = NataneViewerPos() - worldPos;
+                o.centerViewTS = mul(worldToTangent, centerViewWS);
+                float3 centerViewDirWS = centerViewWS / max(length(centerViewWS), 0.0001);
+                float3 matcapRightWS = cross(float3(0.0, 1.0, 0.0), centerViewDirWS);
+                float matcapRightLen = length(matcapRightWS);
+                matcapRightWS = (matcapRightLen > 0.0001) ? (matcapRightWS / matcapRightLen) : float3(1.0, 0.0, 0.0);
+                float3 matcapUpWS = cross(centerViewDirWS, matcapRightWS);
+                o.matcapRightTS = mul(worldToTangent, matcapRightWS);
+                o.matcapUpTS = mul(worldToTangent, matcapUpWS);
+
                 o.screenPos = ComputeScreenPos(o.vertex);
                 o.screenRatio = float2(_ScreenParams.x / _ScreenParams.y, 1);
 
@@ -908,17 +1263,21 @@ Shader "Natane/Eye"
                 float2 workingUV;
                 float2 workingViewDir;
                 NTEye_PrepareEyeData(i.uv, i.viewDir, eyeCenter, workingUV, workingViewDir);
+                NTEye_SurfaceUV = workingUV;
                 float2 irisWorkingUV = NTEye_ApplyIrisDepth(workingUV, workingViewDir, eyeCenter);
 
                 float2 glareUV = NTEye_GenerateParallaxUV(irisWorkingUV, workingViewDir, -.2 * _MainParallax);
                 float2 pupilUV = NTEye_GenerateParallaxUV(irisWorkingUV, workingViewDir, -.25 * _MainParallax);
+                // Texture UV with the light-linked pupil remap (== pupilUV when disabled).
+                float2 irisTexUV = NTEye_RemapPupilUV(pupilUV, eyeCenter);
 
                 if (_EyeState == 3)
                 {
                     float deadPupilMask = NTEye_GetPupilMask(pupilUV, eyeCenter);
                     proceduralCol = lerp(_DeadBottomColor, _DeadTopColor, saturate(pupilUV.y - _DeadGradientOffset)) * saturate(1 - deadPupilMask + .9);
 
-                    texCol = tex2D(_DeadStateTex, pupilUV);
+                    texCol = tex2D(_DeadStateTex, irisTexUV);
+                    NTEye_ApplyIrisLayer2(texCol, irisTexUV, workingViewDir, eyeCenter);
                     if (_UseTexture > 0.5)
                     {
                         proceduralCol = lerp(proceduralCol, texCol * _BackgroundColor, _TextureBlend);
@@ -966,7 +1325,8 @@ Shader "Natane/Eye"
                         }
                     }
 
-                    texCol = tex2D(_NervousStateTex, pupilUV);
+                    texCol = tex2D(_NervousStateTex, irisTexUV);
+                    NTEye_ApplyIrisLayer2(texCol, irisTexUV, workingViewDir, eyeCenter);
                     if (_UseTexture > 0.5)
                     {
                         proceduralCol = lerp(proceduralCol, texCol * _NervousBackgroundColor, _TextureBlend);
@@ -985,12 +1345,13 @@ Shader "Natane/Eye"
                 if (_UseTexture > 0.5)
                 {
                     if (_EyeState == 0)
-                        texCol = tex2D(_NormalStateTex, pupilUV);
+                        texCol = tex2D(_NormalStateTex, irisTexUV);
                     else if (_EyeState == 1)
-                        texCol = tex2D(_StarStateTex, pupilUV);
+                        texCol = tex2D(_StarStateTex, irisTexUV);
                     else if (_EyeState == 2)
-                        texCol = tex2D(_HeartStateTex, pupilUV);
+                        texCol = tex2D(_HeartStateTex, irisTexUV);
 
+                    NTEye_ApplyIrisLayer2(texCol, irisTexUV, workingViewDir, eyeCenter);
                     col.rgb = texCol.rgb * _BackgroundColor.rgb;
                 }
                 else
@@ -1006,6 +1367,7 @@ Shader "Natane/Eye"
                     float2 heartLocal = (NTEye_ApplyPulse(pupilUV, pulseAnim * _HeartPulsePower * 3, eyeCenter) - eyeCenter) * .5;
                     heartLocal /= max(_PupilSize, 0.0001);
                     heartLocal /= max(_PupilAspect.xy, float2(0.001, 0.001));
+                    heartLocal /= NTEye_PupilScale;   // light-linked pupil (1 = unchanged)
                     pupilMask = saturate(0.025 / max(saturate(NTEye_HeartSDF(heartLocal)), 1e-5));
                 }
 
@@ -1018,12 +1380,14 @@ Shader "Natane/Eye"
                     col *= 1 - pupilMask;
                 }
 
-                float2 glareOffset = eyeCenter + float2(0, -0.37); // Glare position relative to eye center
+                float2 glareOffset = eyeCenter + float2(0, -0.37) + NTEye_WobbleOffset; // Glare position relative to eye center
+                // 1 unless the lid shadow is set to occlude highlights / sparkle.
+                float lidOcc = NTEye_GetLidReflectionOcclusion(irisWorkingUV, eyeCenter);
                 float mainFocus = saturate(0.025 / max(saturate(length(glareUV-glareOffset)-.4), 1e-5));
                 float centerFocus = saturate(0.025 / max(saturate(length(glareUV-glareOffset)-.15), 1e-5)) * 2;
 
-                col += lerp(0, mainFocus * _MainColor, _MainColor.a);
-                col += lerp(0, centerFocus * _MainColor, _MainColor.a);
+                col += lerp(0, mainFocus * _MainColor, _MainColor.a) * lidOcc;
+                col += lerp(0, centerFocus * _MainColor, _MainColor.a) * lidOcc;
 
                 col *= 1 - pupilMask * .85;
 
@@ -1044,7 +1408,7 @@ Shader "Natane/Eye"
                 if (_EyeState == 1)
                 {
                     float starTime = sin(_Time.y * _StarRockSpeed * 10);
-                    float2 starLocal = NTEye_GetPupilLocal(pupilUV, eyeCenter);
+                    float2 starLocal = NTEye_GetPupilLocal(pupilUV, eyeCenter) / NTEye_PupilScale;
                     float2 starUV = abs(mul(NTEye_Rot(pow(abs(starTime), 1 - _StarRockSharpness) * sign(starTime) * _StarRockAngle), starLocal)) * .25;
                     float starOffset = 1;
                     float starMask = saturate(0.01 / max(saturate(NTEye_smin(length(abs(starUV * float2(1, .5)) + starUV.x * starOffset), length(abs(starUV * float2(.5, 1)) + starUV.y * starOffset), .6)-.2), 1e-5));
@@ -1068,6 +1432,13 @@ Shader "Natane/Eye"
 
                 bubbleUV += wobbleWave;
 
+                // Sparkle depth (depth effect, per-eye view): 0 = on the cornea as before,
+                // 1 = on the iris plane.
+                if (_UseRealisticEye > 0.5 && _SparkleDepth > 0.0)
+                {
+                    bubbleUV = NTEye_GenerateParallaxUV(bubbleUV, workingViewDir, _IrisDepth * _SparkleDepth);
+                }
+
                 float bubbleSize = _BubbleSize * 2;
                 float glare = saturate(0.001 / max(saturate(length(bubbleUV-float2(.1, .2)) - .06 * bubbleSize), 1e-5));
                 if (_PerformanceTier < 1.5)
@@ -1079,14 +1450,14 @@ Shader "Natane/Eye"
                     glare += saturate(0.001 / max(saturate(length(bubbleUV-float2(-.1, -.1)) - .005 * bubbleSize), 1e-5));
                 }
 
-                col.rgb += glare * _BubbleBrightness;
+                col.rgb += glare * _BubbleBrightness * lidOcc;
 
                 float2 shadowOffset = eyeCenter + float2(0, -0.15); // Shadow position relative to eye center
                 col.rgb *= saturate(smoothstep(.5, .4, length(glareUV - shadowOffset)) + .7);
 
                 if (_PerformanceTier < 1.5)
                 {
-                    col += saturate(0.001 / max(NTEye_EyeDetail1(glareUV, .25, eyeCenter), 1e-5)) * _DetailBrightness;
+                    col += saturate(0.001 / max(NTEye_EyeDetail1(glareUV, .25, eyeCenter), 1e-5)) * _DetailBrightness * lidOcc;
                 }
 
                 NTEye_ApplyExpressionOverlay(col, irisWorkingUV, workingViewDir, eyeCenter);
@@ -1105,6 +1476,45 @@ Shader "Natane/Eye"
                 UNITY_SETUP_INSTANCE_ID(i);
                 UNITY_SETUP_STEREO_EYE_INDEX_POST_VERTEX(i);
                 fixed4 baseCol = tex2D(_MainTex, i.uv);
+                NTEye_LightDirTS = normalize(i.lightDirTS);
+                NTEye_MirrorSign = 1.0;
+                if (_MirrorRightEyeUV > 0.5 && NTEye_IsRightEye(i.uv) > 0.5)
+                {
+                    NTEye_LightDirTS.x = -NTEye_LightDirTS.x;
+                    NTEye_MirrorSign = -1.0;
+                }
+
+                // Shared per-pixel state for the realistic-eye extensions.
+                NTEye_UVDx = ddx(i.uv);
+                NTEye_UVDy = ddy(i.uv);
+                NTEye_CenterViewTS = i.centerViewTS / max(length(i.centerViewTS), 0.0001);
+                NTEye_MatCapRightTS = i.matcapRightTS;
+                NTEye_MatCapUpTS = i.matcapUpTS;
+                NTEye_SurfaceUV = i.uv;
+                NTEye_PupilScale = 1.0;
+                NTEye_WobbleOffset = float2(0.0, 0.0);
+                NTEye_WobbleScale = 1.0;
+                if (_UseRealisticEye > 0.5)
+                {
+                    // Light-linked pupil: bright key light + ambient -> smaller pupil.
+                    // Shaders have no history, so the response is instantaneous.
+                    if (_PupilLightResponse > 0.0)
+                    {
+                        float3 lumaWeights = float3(0.299, 0.587, 0.114);
+                        float sceneLuma = dot(_LightColor0.rgb, lumaWeights)
+                                        + max(dot(float3(unity_SHAr.w, unity_SHAg.w, unity_SHAb.w), lumaWeights), 0.0);
+                        // Luma 1 maps to the midpoint of [min, max] (scale 1 with the defaults).
+                        float pupilTarget = lerp(_PupilLightMax, _PupilLightMin, saturate(sceneLuma * 0.5));
+                        NTEye_PupilScale = max(lerp(1.0, pupilTarget, saturate(_PupilLightResponse)), 0.05);
+                    }
+                    // Highlight wobble: small drift plus a scale pulse.
+                    if (_HighlightWobble > 0.0)
+                    {
+                        float wobbleTime = _Time.y * _HighlightWobbleSpeed;
+                        NTEye_WobbleOffset = float2(sin(wobbleTime * 1.3), cos(wobbleTime * 1.7 + 0.5)) * (0.03 * _HighlightWobble * _PupilSize);
+                        NTEye_WobbleScale = 1.0 + 0.08 * _HighlightWobble * sin(wobbleTime * 2.1);
+                    }
+                }
                 fixed4 col = DoColor(i);
 
                 DoVignette(col, i);

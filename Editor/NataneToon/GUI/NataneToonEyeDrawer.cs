@@ -241,12 +241,72 @@ namespace NataneToon.Editor
             DrawProperty("_LimbalRingColor", L("Limbal Ring Color (HDR)", "Limbal Ring Color (HDR)"));
             DrawProperty("_LimbalRingWidth", L("Limbal Ring Width", "Limbal Ring Width"));
             DrawProperty("_LimbalRingIntensity", L("Limbal Ring Intensity", "Limbal Ring Intensity"));
+            DrawProperty("_LimbalViewBoost", L("輪部リングの視線角ブースト", "Limbal View Angle Boost"));
+            DrawProperty("_IrisConcavity", L("凹んだ虹彩法線", "Iris Concavity"));
             DrawProperty("_ScleraTint", L("Sclera Tint (HDR)", "Sclera Tint (HDR)"));
+            DrawProperty("_ScleraTintStrength", L("白目の色かぶせの強さ", "Sclera Tint Strength"));
+            DrawProperty("_ScleraRedness", L("目尻・目頭の赤み", "Sclera Corner Redness"));
             DrawProperty("_ScleraShadowStrength", L("Sclera Shadow Strength", "Sclera Shadow Strength"));
             DrawProperty("_CorneaSpecColor", L("Cornea Spec Color (HDR)", "Cornea Spec Color (HDR)"));
             DrawProperty("_CorneaSpecIntensity", L("Cornea Spec Intensity", "Cornea Spec Intensity"));
             DrawProperty("_CorneaSpecSmoothness", L("Cornea Smoothness", "Cornea Smoothness"));
             DrawProperty("_CorneaFresnelPower", L("Cornea Fresnel", "Cornea Fresnel"));
+            EditorGUILayout.Space(4);
+            DrawProperty("_CorneaRefraction", L("角膜の屈折", "Cornea Refraction"));
+            DrawProperty("_CorneaIOR", L("角膜の屈折率", "Cornea IOR"));
+            DrawProperty("_CorneaBulge", L("角膜のふくらみ", "Cornea Bulge"));
+            DrawProperty("_LightCausticIntensity", L("ライト連動コースティクス", "Light Caustic Intensity"));
+            EditorGUILayout.Space(4);
+            DrawProperty("_LidShadowStrength", L("まぶたの影の強さ", "Lid Shadow Strength"));
+            DrawProperty("_LidShadowColor", L("まぶたの影の色", "Lid Shadow Color"));
+            DrawProperty("_LidShadowHeight", L("まぶたの影の高さ", "Lid Shadow Height"));
+            DrawProperty("_LidShadowSoftness", L("まぶたの影のぼかし", "Lid Shadow Softness"));
+            DrawProperty("_LidShadowCurve", L("まぶたの影のカーブ", "Lid Shadow Curve"));
+            DrawProperty("_LidShadowFlip", L("まぶたの影を上下反転", "Lid Shadow Flip"));
+            DrawProperty("_LidShadowReflectionOcclusion", L("まぶたの影でハイライトを遮る", "Lid Shadow Reflection Occlusion"));
+            EditorGUILayout.Space(4);
+            DrawProperty("_TearLineIntensity", L("涙ラインの強さ", "Tear Line Intensity"));
+            DrawProperty("_TearLineHeight", L("涙ラインの高さ（下まぶた縁から）", "Tear Line Height (from lower lid edge)"));
+            DrawProperty("_TearLineWidth", L("涙ラインの幅", "Tear Line Width"));
+            EditorGUILayout.HelpBox(
+                L("角膜の屈折：虹彩の奥行きを屈折計算に切り替えます（0 で従来のパララックス）。ライト連動コースティクス：ライトの反対側の虹彩が明るくなります。まぶたの影：瞳の上側に影の帯を重ね、ハイライトも一緒に暗くします。いずれも 0 で無効です。", "Cornea Refraction switches iris depth to a refracted ray (0 = previous parallax). Light Caustic brightens the iris on the side opposite the light. Lid Shadow overlays a shadow band on the upper eye and dims highlights with it. All are off at 0."),
+                MessageType.None);
+            EditorGUILayout.Space(4);
+            EditorGUILayout.LabelField(L("光に反応する瞳孔", "Light-Linked Pupil"), EditorStyles.miniBoldLabel);
+            DrawProperty("_PupilLightResponse", L("瞳孔のライト反応", "Pupil Light Response"));
+            DrawProperty("_PupilLightMin", L("最小スケール（明るいとき）", "Min Scale (bright)"));
+            DrawProperty("_PupilLightMax", L("最大スケール（暗いとき）", "Max Scale (dark)"));
+            DrawProperty("_PupilLightBaseRadius", L("テクスチャ上の瞳孔半径（虹彩比）", "Pupil Radius In Texture (iris ratio)"));
+            EditorGUILayout.HelpBox(
+                L("キーライトと環境光が明るいほど瞳孔が縮み、虹彩テクスチャは輪部（外周）を固定したまま放射方向に伸縮します。シェーダーは前フレームを覚えられないため、時間的なスムージングはありません（明るさが急に変わると瞳孔も即座に変わります）。『テクスチャ上の瞳孔半径』は虹彩テクスチャに描かれた瞳孔の大きさに合わせてください（第2虹彩レイヤーのマスクにも使います）。", "The pupil shrinks as the key light and ambient get brighter; the iris texture stretches radially while the limbus stays fixed. A shader has no memory of the previous frame, so there is NO temporal smoothing (sudden brightness changes snap the pupil). Match 'Pupil Radius In Texture' to the pupil painted in the iris texture (also used by the Iris Layer 2 mask)."),
+                MessageType.Info);
+            EditorGUILayout.Space(4);
+            EditorGUILayout.LabelField(L("奥行きレイヤー", "Depth Layers"), EditorStyles.miniBoldLabel);
+            DrawProperty("_IrisLayer2Depth", L("第2虹彩レイヤーの奥行き", "Iris Layer 2 Depth"));
+            DrawProperty("_IrisLayer2Blend", L("第2虹彩レイヤーのブレンド", "Iris Layer 2 Blend"));
+            DrawProperty("_SparkleDepth", L("きらめきレイヤーの奥行き", "Sparkle Layer Depth"));
+            EditorGUILayout.Space(4);
+            EditorGUILayout.LabelField(L("ハイライトレイヤー", "Highlight Layer"), EditorStyles.miniBoldLabel);
+            MaterialProperty highlightLayerTexProp = FindProperty("_HighlightLayerTex", properties, false);
+            if (highlightLayerTexProp != null) materialEditor.TextureProperty(highlightLayerTexProp, L("ハイライトレイヤー テクスチャ", "Highlight Layer Texture"));
+            DrawProperty("_HighlightLayerIntensity", L("ハイライトレイヤーの強さ", "Highlight Layer Intensity"));
+            DrawProperty("_HighlightLayerColor", L("ハイライトレイヤーの色 (HDR)", "Highlight Layer Color (HDR)"));
+            DrawProperty("_HighlightLayerFollow", L("追従モード (固定/視線/ライト)", "Follow Mode (Fixed/View/Light)"));
+            DrawProperty("_HighlightLayerFollowAmount", L("追従量", "Follow Amount"));
+            DrawProperty("_HighlightWobble", L("うるうる（ハイライトの揺れ）", "Highlight Wobble"));
+            DrawProperty("_HighlightWobbleSpeed", L("うるうるの速さ", "Highlight Wobble Speed"));
+            EditorGUILayout.HelpBox(
+                L("ハイライトレイヤーは瞳テクスチャと同じ UV で加算合成されます（黒＝何も足さない）。追従・うるうるは、ハイライトが虹彩テクスチャに描き込まれていないことが前提です。描き込み済みのハイライトは動かないため、二重に見えます。", "The highlight layer is added using the same UV as the eye texture (black adds nothing). Follow and Wobble assume highlights are NOT baked into the iris texture; baked highlights stay put and will look doubled."),
+                MessageType.Info);
+            EditorGUILayout.Space(4);
+            EditorGUILayout.LabelField(L("角膜マットキャップ", "Cornea MatCap"), EditorStyles.miniBoldLabel);
+            MaterialProperty corneaMatCapTexProp = FindProperty("_CorneaMatCapTex", properties, false);
+            if (corneaMatCapTexProp != null) materialEditor.TextureProperty(corneaMatCapTexProp, L("角膜マットキャップ", "Cornea MatCap"));
+            DrawProperty("_CorneaMatCapIntensity", L("マットキャップの強さ", "Cornea MatCap Intensity"));
+            DrawProperty("_CorneaMatCapColor", L("マットキャップの色 (HDR)", "Cornea MatCap Color (HDR)"));
+            EditorGUILayout.HelpBox(
+                L("VR では両目の中心位置から計算するため、左右の目で映り込みがずれません。屈折・視差レイヤーなどの奥行き表現は片目ごとに計算します。追加項目はすべて 0 で無効です。", "In VR the matcap is evaluated from the centre-eye position, so the reflection matches in both eyes. Depth effects (refraction, parallax layers) are evaluated per eye. Every added control is off at 0."),
+                MessageType.None);
             EditorGUILayout.HelpBox(
                 L("虹彩の奥行き、輪部リング、白目の陰影、角膜風のハイライトを追加します。まず『リアルな瞳』を有効にしてから、虹彩の奥行きや角膜まわりを調整してください。", "Adds iris depth, limbal ring, sclera shading, and a cornea-like top highlight. Enable Realistic Eye first, then tune Iris Depth and Cornea controls."),
                 MessageType.None);

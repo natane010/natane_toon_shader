@@ -8,7 +8,7 @@
 (function () {
   'use strict';
 
-  var VERSION = 'v1.6.5';
+  var VERSION = 'v1.7.0';
 
   /* Feature preview images (optional): drop a screenshot at
      assets/previews/<preview>.jpg and it replaces the styled placeholder
@@ -50,6 +50,10 @@
       }
     ],
     updates: [
+      { title: { ja: 'マット拡散（EON）', en: 'Matte Diffuse (EON)' }, status: 'NEW' },
+      { title: { ja: 'Light Volume キーライト', en: 'Light Volume Key Light' }, href: 'params/lighting/light-volumes.html', status: 'NEW' },
+      { title: { ja: 'Charlie シーン', en: 'Charlie Sheen' }, status: 'NEW' },
+      { title: { ja: 'AO 多重反射 / マイクロシャドウ', en: 'AO Multi-bounce / Micro Shadow' }, href: 'params/lighting/ao.html', status: 'NEW' },
       { title: { ja: 'AWBO 統合ワークスペース', en: 'AWBO Workspace Hub' }, href: 'tools/build-optimization.html', status: 'NEW' },
       { title: { ja: '統合バリアントストリッパー', en: 'Unified Variant Stripper' }, href: 'tools/build-optimization.html', status: 'NEW' },
       { title: { ja: 'Mask Painter / Texture Studio', en: 'Mask Painter / Texture Studio' }, status: 'NEW' },

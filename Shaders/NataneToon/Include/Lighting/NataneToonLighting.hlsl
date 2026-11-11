@@ -338,10 +338,13 @@ half NataneSpecularOcclusion(half visibility, half ndotv, half roughness)
 
 // Ramp Texture Shading
 // Uses a gradient texture to control shadow colors
+// V coordinate of the ramp lookup. 0.5 (the centre row) unless the fragment shader
+// selects a second axis with _RampVAxis (facing or distance: a 2D "X-Toon" ramp).
+static half nataneRampV = 0.5;
 #if defined(_USE_RAMP)
 float3 RampShading(float ndotl)
 {
-    float2 rampUV = float2(saturate(ndotl + _ShadowOffset), 0.5);
+    float2 rampUV = float2(saturate(ndotl + _ShadowOffset), nataneRampV);
     return NATANE_SAMPLE_CLAMP(_RampTex, rampUV).rgb;
 }
 #endif
@@ -556,6 +559,22 @@ half3 SheenHighlight(half3 normal, half3 viewDir, half3 lightDir)
     viewNormal.x *= NataneMirrorSign();
     half NdotV = max(0.0, dot(normalize(viewNormal), float3(0, 0, 1)));
     half NdotL = max(0.0, dot(normal, lightDir));
+    if (_SheenModel >= 1.5)
+    {
+        // Velvet: Ashikhmin & Premoze's inverted-Gaussian NDF (the form used by Filament
+        // before Charlie). A harder, brighter edge than Charlie at the same roughness.
+        half3 velvetH = normalize(viewDir + lightDir);
+        half velvetNdotH = saturate(dot(normal, velvetH));
+        half velvetA2 = max(_SheenRoughness * _SheenRoughness, 0.01);
+        half velvetCos2 = velvetNdotH * velvetNdotH;
+        half velvetSin2 = max(1.0 - velvetCos2, 0.0078125);
+        half velvetSin4 = velvetSin2 * velvetSin2;
+        half velvetCot2 = velvetCos2 / (velvetSin2 * velvetA2);
+        half velvetD = (1.0 + 4.0 * exp(-velvetCot2) / velvetSin4) / (UNITY_PI * (4.0 * velvetA2 + 1.0));
+        half velvetV = 1.0 / (4.0 * (NdotL + NdotV - NdotL * NdotV) + 1e-3);
+        half velvet = velvetD * velvetV * NdotL * UNITY_PI;
+        return min(velvet, 4.0) * _SheenColor.rgb * _SheenIntensity;
+    }
     if (_SheenModel >= 0.5)
     {
         // Charlie sheen: inverted-Gaussian NDF of Estevez & Kulla, "Production Friendly

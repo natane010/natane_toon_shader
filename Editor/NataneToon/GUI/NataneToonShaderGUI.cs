@@ -6283,6 +6283,9 @@ public class NataneToonShaderGUI : ShaderGUI
                 DrawProperty("_AOMicroShadow", L("AOマイクロシャドウ", "AO Micro Shadow"),
                     "AO マップをもとに、メインライトの細かな自己影（しわ・織り目・襟元）を足します。影境界そのものが動くのでトゥーンの段と馴染みます。0 で従来どおり。",
                     "Adds small self-shadows from the main light (creases, weave, collars) driven by the AO map. It moves the shading boundary itself, so it blends with toon steps. 0 = as before.");
+                DrawProperty("_AOShadowProne", L("AOで影に入りやすくする", "AO Shadow Proneness"),
+                    "AO マップの暗い部分ほど、ライトの向きに関係なく先に影へ入ります。顎下・首・しわの影が安定し、境界のちらつきをマップで抑えられます。0 で従来どおり。",
+                    "Darker AO texels drop into shade earlier regardless of light angle, giving stable shadows under the chin, on the neck and in creases. 0 = as before.");
                 DrawHelpToggle("AO",
                     L("🌑 アンビエントオクルージョン (AO):\n" +
                     "テクスチャの暗い部分で陰影を追加し、奥行き感を出します。\n" +
@@ -11052,7 +11055,163 @@ public class NataneToonShaderGUI : ShaderGUI
             "Light Volumes（ベイク光）の主方向をトゥーンのキーライトとして扱います。リアルタイムライトの無いワールドでも影境界がきれいに出て、影側は実際の環境光より暗くなりません。合成モード Natural で最も効果的。0 で従来どおり。",
             "Treats the dominant direction of the Light Volume (baked light) as a toon key light. Worlds without a realtime light get a clean shading boundary, and the shade never drops below the real ambient. Works best with the Natural blend mode. 0 = as before.");
 
+        DrawProperty("_FaceFlatten", L("顔の陰影をフラットに", "Face Shading Flatten"),
+            "陰影用の法線を顔の正面方向へ寄せ、頬・鼻まわりのメッシュ由来のムラを消します。顔マテリアル向け。SDF 顔影の「顔の正面方向」設定を使います。ハイライトやリムは元の法線のまま。0 で従来どおり。",
+            "Pulls the shading normal towards the face-forward axis to remove mesh-dependent blotches on cheeks and nose. For face materials; uses the Face Forward Direction of the SDF face shadow. Highlights and rim keep the real normal. 0 = as before.");
+        DrawProperty("_HairRimTransmission", L("髪の逆光リム透過", "Hair Rim Transmission"),
+            "逆光のとき髪のシルエットが光を通して輝きます（ヘアスペキュラ有効時のみ）。色は「透過カラー」を使います。0 で従来どおり。",
+            "Back light glows through the hair silhouette (requires Hair Specular). Uses the Transmission Color. 0 = as before.");
+        DrawProperty("_ReflectionExposureOcclusion", L("暗所での反射抑制", "Reflection Exposure Occlusion"),
+            "周囲の光がこの明るさを下回ると、リフレクションプローブの映り込みを弱めます。暗い部屋で肌や金属だけが光って見える現象を抑えます。0 で従来どおり。",
+            "Fades reflection-probe reflections when the light reaching the surface drops below this level, so skin and metal do not glow in dark rooms. 0 = as before.");
+
+        DrawExpressionExtrasControls();
+
         DrawMatteMaterialControls();
+    }
+
+    /// <summary>
+    /// 「表現の追加項目」。すべて既定値では無効（0 / 中立）で、既存マテリアルの見た目は変わらない。
+    /// </summary>
+    private void DrawExpressionExtrasControls()
+    {
+        EditorGUILayout.Space(10);
+        DrawSubGroupHeader(L("表現の追加項目", "Expression Extras"));
+        EditorGUILayout.HelpBox(
+            L("すべて 0 で無効です。顔・球・影の向きに関する項目は SDF 顔影の「顔の正面方向 / 右方向」を使います。",
+              "Everything is off at 0. Face, sphere and light-side controls use the Face Forward / Right Direction of the SDF face shadow."),
+            MessageType.None);
+
+        EditorGUILayout.Space(4);
+        EditorGUILayout.LabelField(L("顔", "Face"), EditorStyles.boldLabel);
+        DrawProperty("_FaceFlattenMask", L("顔フラット化マスク (R)", "Face Flatten Mask (R)"),
+            "「顔の陰影をフラットに」を効かせる範囲。白 = 効く、黒 = 元の陰影（顎・首など）。",
+            "Where Face Shading Flatten applies. White = flattened, black = original shading (chin, neck).");
+        DrawProperty("_FaceProxyNormal", L("顔を球として陰影付け", "Face Proxy Normal"),
+            "陰影用の法線を、下の中心点から外向きの球の法線に置き換えます。頬や鼻の境界がなめらかになります。0 で無効。",
+            "Replaces the shading normal with a sphere normal around the centre below, for a smooth terminator over cheeks and nose. 0 = off.");
+        DrawProperty("_FaceProxyCenter", L("　球の中心（オブジェクト空間）", "  Proxy Centre (Object Space)"),
+            "頭の中心あたりを指定します。スキンメッシュではレンダラーの基準位置に対する座標で、頭ボーンには追従しません。",
+            "Roughly the centre of the head. On skinned meshes this is relative to the renderer root and does not follow the head bone.");
+        DrawProperty("_FaceProxyCylinder", L("　円柱寄りにする", "  Cylinder Blend"),
+            "1 に近づけるほど上下方向の丸みを無視し、縦の円柱として陰影を付けます。",
+            "Towards 1 the vertical curvature is ignored, shading the face as an upright cylinder.");
+        DrawProperty("_FaceLightVerticalLimit", L("ライトの上下角を制限", "Light Vertical Limit"),
+            "ライト方向の上下成分を取り除き、真下・真上からの光で顔が崩れるのを防ぎます。落ち影は実際のライトのままなので、向きが食い違うことがあります。0 で無効。",
+            "Removes the up / down part of the light direction so light from below or above cannot distort the face. Cast shadows still follow the real light. 0 = off.");
+        DrawProperty("_NoseLineStrength", L("鼻筋の線", "Nose Line"),
+            "マスクで描いた鼻の線を、正面から見たときだけ表示します。0 で無効。",
+            "Shows a nose line painted in the mask only when the face is seen from the front. 0 = off.");
+        DrawProperty("_NoseLineMask", L("　線のマスク (R)", "  Line Mask (R)"));
+        DrawColorProperty("_NoseLineColor", L("　線の色", "  Line Colour"));
+        DrawProperty("_NoseLineFade", L("　横顔で消える早さ", "  Side Fade"),
+            "大きいほど正面付近でしか表示されません。",
+            "Higher values show the line only close to a frontal view.");
+
+        EditorGUILayout.Space(4);
+        EditorGUILayout.LabelField(L("影", "Shadow"), EditorStyles.boldLabel);
+        DrawProperty("_LightSourceSize", L("光源の大きさ", "Light Source Size"),
+            "大きな光源に照らされたように、明暗の境界を影側へ広げてやわらげます。0 で無効。",
+            "Widens and softens the terminator as a large light source would. 0 = off.");
+        DrawProperty("_ShadowOffsetMapStrength", L("ライト方位別の影オフセット", "Directional Shadow Offset"),
+            "ライトが来る向きごとに、影の出やすさを描き分けたマップを使います。0 で無効。",
+            "Uses a map that paints how easily each area goes into shade, per light side. 0 = off.");
+        DrawProperty("_ShadowOffsetMap", L("　オフセットマップ (RGBA)", "  Offset Map (RGBA)"),
+            "R = 右から、G = 左から、B = 正面から、A = 背後からの光。0.5 が基準、暗いほど影になりやすい。",
+            "R = light from the right, G = left, B = front, A = back. 0.5 is neutral; darker goes into shade sooner.");
+        DrawProperty("_SphereOccluderStrength", L("球による落ち影", "Sphere Occluder"),
+            "指定した球（頭など）が落とすやわらかい影を足します。顎と首、腕と胴の接地感に。球の内側は影になりません。0 で無効。",
+            "Adds the soft shadow of a sphere (e.g. the head) for chin-to-neck contact. Points inside the sphere stay lit. 0 = off.");
+        DrawProperty("_SphereOccluder", L("　球の位置 (XYZ) と半径 (W)", "  Sphere Position (XYZ) / Radius (W)"),
+            "オブジェクト空間。スキンメッシュではボーンに追従しません。",
+            "Object space. Does not follow bones on skinned meshes.");
+        DrawProperty("_SphereOccluderSoftness", L("　影の硬さ", "  Shadow Hardness"));
+        DrawProperty("_DepthHairShadow", L("前髪の影（深度方式）", "Depth Hair Shadow"),
+            "ライト方向の手前にあるもの（前髪）の影を顔に落とします。ワールドに深度テクスチャが必要で、ミラー内・Quest Lite では無効。手や他の物も影になります。0 で無効。",
+            "Shades the face where something nearer (the fringe) lies towards the light. Needs a depth texture in the world; off in mirrors and Quest Lite. Hands and props cast it too. 0 = off.");
+        DrawProperty("_DepthHairShadowOffset", L("　影のずれ幅 (m)", "  Offset (m)"));
+        DrawProperty("_DepthHairShadowBias", L("　奥行きの許容差 (m)", "  Depth Bias (m)"));
+        DrawProperty("_ShadowAutoColor", L("影色を自動で決める (OKLab)", "Automatic Shadow Colour (OKLab)"),
+            "ベース色から、明度を下げ・彩度を上げ・色相をずらした影色を自動で作ります。ランプ使用時は無効。0 で無効。",
+            "Derives the shade from the base colour: darker, more saturated, hue-shifted. Not used with a ramp. 0 = off.");
+        DrawProperty("_ShadowAutoHue", L("　色相のずれ", "  Hue Shift"));
+        DrawProperty("_ShadowAutoChroma", L("　彩度の倍率", "  Chroma"));
+        DrawProperty("_ShadowAutoLightness", L("　明るさ", "  Lightness"));
+
+        EditorGUILayout.Space(4);
+        EditorGUILayout.LabelField(L("ライティング応答", "Lighting Response"), EditorStyles.boldLabel);
+        DrawProperty("_LightMaxSoftKnee", L("明るさ上限をなだらかに", "Light Max Soft Knee"),
+            "「ライト影響の上限」に達する手前からなだらかに抑え、急な頭打ちをなくします。0 で従来どおり。",
+            "Eases into the Light Max Influence limit instead of clipping. 0 = as before.");
+        DrawProperty("_AmbientRimIntensity", L("環境光リム", "Ambient Rim"),
+            "上を向いた輪郭に環境光のリムを足し、ライトが無くても背景から浮かせます。0 で無効。",
+            "Adds an ambient-lit rim on upward-facing silhouettes so the character separates from the background without a light. 0 = off.");
+        DrawProperty("_AmbientRimPower", L("　リムの鋭さ", "  Rim Power"));
+        DrawProperty("_ReflectionOffSpecular", L("粗い反射の向きを補正", "Off-Specular Reflection"),
+            "粗い面の映り込みを法線側へ寄せ、床や地平線が不自然に流れ込むのを抑えます（GGX ハイライト使用時）。0 で従来どおり。",
+            "Leans rough reflections towards the normal so the horizon does not smear in (with GGX Highlight). 0 = as before.");
+        DrawProperty("_Anisotropy", L("ハイライトの異方性", "Specular Anisotropy"),
+            "GGX ハイライトを接線方向に引き伸ばします。サテンやヘアカード向け。メッシュの接線（UV の向き）に従います。0 で無効。",
+            "Stretches the GGX highlight along the tangent, for satin or hair cards. Follows the mesh tangents (UV direction). 0 = off.");
+        DrawProperty("_LitSphereStrength", L("ライト追従リットスフィア", "Light-Space Lit Sphere"),
+            "球に描いた陰影を、ライトの向きに合わせて貼ります。テクスチャの上端がライト側。0 で無効。",
+            "Applies shading painted on a sphere, oriented by the light. Top of the texture faces the light. 0 = off.");
+        DrawProperty("_LitSphereTex", L("　リットスフィア", "  Lit Sphere"));
+        DrawProperty("_RampVAxis", L("ランプの縦軸", "Ramp V Axis"),
+            "ランプテクスチャの縦方向を、輪郭度合い（Facing）または距離（Distance）で引きます。ランプ使用時のみ。",
+            "Reads the ramp vertically by facing ratio or by distance. Ramp shading only.");
+        DrawProperty("_RampDistanceRange", L("　距離の範囲 (X 近 / Y 遠)", "  Distance Range (X near / Y far)"));
+        DrawProperty("_BentNormalStrength", L("ベントノーマルで環境光", "Bent Normal Ambient"),
+            "環境光を、遮蔽されていない方向（ベントノーマル）で受けます。0 で無効。",
+            "Evaluates ambient light along the least occluded direction. 0 = off.");
+        DrawProperty("_BentNormalMap", L("　ベントノーマルマップ", "  Bent Normal Map"));
+
+        EditorGUILayout.Space(4);
+        EditorGUILayout.LabelField(L("髪", "Hair"), EditorStyles.boldLabel);
+        DrawProperty("_HairMultiScatter", L("髪の多重散乱（疑似）", "Hair Multiple Scattering"),
+            "毛束まわりのやわらかい拡散光を足し、影の中で色が濃く出ます（ヘアスペキュラ有効時）。0 で無効。",
+            "Adds a soft wrapped diffuse around the strands whose colour deepens in shadow (requires Hair Specular). 0 = off.");
+        DrawProperty("_HairTransmissionAbsorption", L("透過光を髪色に染める", "Transmission Absorption"),
+            "逆光の透過光を髪自身の色味に寄せます（ヘアスペキュラ有効時）。",
+            "Tints back-lit transmission with the hue of the hair itself (requires Hair Specular).");
+        DrawProperty("_HairVertexOcclusion", L("頂点カラーの髪の陰り (G)", "Vertex Colour Hair Occlusion (G)"),
+            "頂点カラー G に焼いた遮蔽で根元を暗くします（頂点カラー影を有効にしたときのみ）。",
+            "Darkens roots with occlusion baked in vertex colour G (only with Vertex Colour Shadow enabled).");
+
+        EditorGUILayout.Space(4);
+        EditorGUILayout.LabelField(L("肌", "Skin"), EditorStyles.boldLabel);
+        DrawProperty("_SkinTerminatorScatter", L("影境界の赤いにじみ", "Terminator Scatter"),
+            "明暗の境界に、皮下散乱のような赤いにじみを足します。0 で無効。",
+            "Adds a subsurface-like red bleed along the terminator. 0 = off.");
+        DrawColorProperty("_SkinScatterColor", L("　にじみの色", "  Scatter Colour"));
+        DrawProperty("_SkinScatterWidth", L("　にじみの幅", "  Scatter Width"));
+        DrawProperty("_SkinDiffuseNormalBlur", L("色別の拡散法線", "Per-Channel Diffuse Normal"),
+            "赤はなめらかな法線、青は細かい法線で陰影を付け、毛穴を残しつつ柔らかく見せます（ノーマルマップ使用時）。",
+            "Red follows the smooth normal and blue the detailed one: soft skin with crisp pores (with a normal map).");
+        DrawProperty("_SubsurfaceFlatten", L("サブサーフェス平坦化", "Subsurface Flatten"),
+            "正面を少し落とし、輪郭側を持ち上げて、ろう質でやわらかい立体感にします。0 で無効。",
+            "Lowers the centre and lifts grazing angles for a soft, waxy volume. 0 = off.");
+        DrawProperty("_TransmissionSkinProfile", L("透過を肌プロファイルで色付け", "Skin Transmission Profile"),
+            "SSS の透過光を厚みに応じて白〜赤に色付けします（SSS と厚みマップ使用時）。",
+            "Colours SSS transmission from white to red by thickness (with SSS and a thickness map).");
+        DrawProperty("_Wetness", L("濡れ", "Wetness"),
+            "ベース色を少し沈め、水膜の鋭いハイライトを足します。唇や汗に。0 で無効。",
+            "Darkens the base slightly and adds a sharp water-film highlight, for lips or sweat. 0 = off.");
+        DrawProperty("_WetnessMask", L("　濡れマスク (R)", "  Wetness Mask (R)"));
+        DrawProperty("_WetnessRoughness", L("　水膜の粗さ", "  Film Roughness"));
+
+        EditorGUILayout.Space(4);
+        EditorGUILayout.LabelField(L("布", "Cloth"), EditorStyles.boldLabel);
+        DrawProperty("_ClothSubsurface", L("布のサブサーフェス色", "Cloth Subsurface"),
+            "厚手の布の影側に、内部で散乱した光の色を乗せます。0 で無効。",
+            "Tints the shade of thick cloth with light scattered inside it. 0 = off.");
+        DrawColorProperty("_ClothSubsurfaceColor", L("　散乱色", "  Subsurface Colour"));
+        DrawProperty("_Stocking", L("ストッキングの透け", "Stocking Sheerness"),
+            "輪郭に近いほど布色が濃く、正面は肌が透けて見えます。0 で無効。",
+            "Cloth colour builds up towards the silhouette while skin shows through head-on. 0 = off.");
+        DrawColorProperty("_StockingColor", L("　布の色", "  Cloth Colour"));
+        DrawProperty("_StockingPower", L("　濃くなる鋭さ", "  Falloff Power"));
+        DrawProperty("_StockingMask", L("　マスク (R)", "  Mask (R)"));
     }
 
     /// <summary>
@@ -11085,8 +11244,8 @@ public class NataneToonShaderGUI : ShaderGUI
             {
                 EditorGUI.indentLevel++;
                 DrawProperty("_SheenModel", L("方式", "Model"),
-                    "Classic = 輪郭に沿う簡易な光沢。Charlie = 繊維の毛羽立ちを再現する物理ベースの光沢（ベルベット・ウール・フリース向き）。",
-                    "Classic = simple grazing-angle luster. Charlie = physically based microfibre luster (velvet, wool, fleece).");
+                    "Classic = 輪郭に沿う簡易な光沢。Charlie = 繊維の毛羽立ちを再現する物理ベースの光沢（ベルベット・ウール・フリース向き）。 Velvet = Charlie より硬く明るい縁。",
+                    "Classic = simple grazing-angle luster. Charlie = physically based microfibre luster (velvet, wool, fleece). Velvet = a harder, brighter edge than Charlie.");
                 DrawColorProperty("_SheenColor", L("シーンの色", "Sheen Color"));
                 DrawProperty("_SheenIntensity", L("強度", "Intensity"));
                 MaterialProperty sheenModel = FindProperty("_SheenModel", properties, false);

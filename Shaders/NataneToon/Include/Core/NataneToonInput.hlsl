@@ -190,6 +190,55 @@ CBUFFER_START(UnityPerMaterial)
     float _AOIntensity;
     float _AOMultiBounce;            // 0 = off; coloured multi-bounce AO on indirect light
     float _AOMicroShadow;            // 0 = off; AO-driven micro shadowing of the main light
+    float _AOShadowProne;            // 0 = off; AO map biases the light term towards shade before the ramp
+    float _FaceFlatten;              // 0 = off; blends the shading normal towards the face-forward axis
+    float _HairRimTransmission;      // 0 = off; back-lit silhouette glow on hair
+    float _ReflectionExposureOcclusion; // 0 = off; ambient level below which probe reflections fade out
+    // Expression extras (all 0 / neutral = off)
+    float _FaceProxyNormal;
+    float4 _FaceProxyCenter;
+    float _FaceProxyCylinder;
+    float _FaceLightVerticalLimit;
+    float4 _NoseLineColor;
+    float _NoseLineStrength;
+    float _NoseLineFade;
+    float _LightSourceSize;
+    float _ShadowOffsetMapStrength;
+    float _SphereOccluderStrength;
+    float4 _SphereOccluder;
+    float _SphereOccluderSoftness;
+    float _DepthHairShadow;
+    float _DepthHairShadowOffset;
+    float _DepthHairShadowBias;
+    float _ShadowAutoColor;
+    float _ShadowAutoHue;
+    float _ShadowAutoChroma;
+    float _ShadowAutoLightness;
+    float _LightMaxSoftKnee;
+    float _AmbientRimIntensity;
+    float _AmbientRimPower;
+    float _ReflectionOffSpecular;
+    float _HairMultiScatter;
+    float _HairTransmissionAbsorption;
+    float _HairVertexOcclusion;
+    float _SkinTerminatorScatter;
+    float4 _SkinScatterColor;
+    float _SkinScatterWidth;
+    float _SkinDiffuseNormalBlur;
+    float _TransmissionSkinProfile;
+    float _SubsurfaceFlatten;
+    float _Wetness;
+    float _WetnessRoughness;
+    float _ClothSubsurface;
+    float4 _ClothSubsurfaceColor;
+    float _Anisotropy;
+    float _Stocking;
+    float4 _StockingColor;
+    float _StockingPower;
+    float _LitSphereStrength;
+    float _RampVAxis;
+    float4 _RampDistanceRange;
+    float _BentNormalStrength;
     float _AOBlend;
     float _AOBlendMode;
     float _AOBlur;
@@ -1406,6 +1455,13 @@ UNITY_DECLARE_TEX2D_NOSAMPLER(_ShadingGradeMap);
 UNITY_DECLARE_TEX2D_NOSAMPLER(_AOMap);
 #endif
 UNITY_DECLARE_TEX2D_NOSAMPLER(_CavityMap);
+UNITY_DECLARE_TEX2D_NOSAMPLER(_FaceFlattenMask);
+UNITY_DECLARE_TEX2D_NOSAMPLER(_NoseLineMask);
+UNITY_DECLARE_TEX2D_NOSAMPLER(_ShadowOffsetMap);
+UNITY_DECLARE_TEX2D_NOSAMPLER(_WetnessMask);
+UNITY_DECLARE_TEX2D_NOSAMPLER(_StockingMask);
+UNITY_DECLARE_TEX2D_NOSAMPLER(_LitSphereTex);
+UNITY_DECLARE_TEX2D_NOSAMPLER(_BentNormalMap);
 
 // Specular
 #if defined(_SPECULAR)
@@ -1694,9 +1750,8 @@ samplerCUBE _EnvRimCube;
 #endif
 
 // Intersection Fade / PCSS / Screen Edge — shared _CameraDepthTexture declaration
-#if defined(_INTERSECTION_FADE) || defined(_PCSS) || defined(_SCREEN_EDGE)
+// Declared unconditionally: the depth hair shadow (_DepthHairShadow) is uniform-gated.
 UNITY_DECLARE_DEPTH_TEXTURE(_CameraDepthTexture);
-#endif
 
 // PCSS Poisson Disk sampling pattern (32 samples)
 #if defined(_PCSS)
