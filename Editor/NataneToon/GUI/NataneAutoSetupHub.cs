@@ -483,12 +483,15 @@ namespace NataneToon.Editor
                 case "_HAIR_SPECULAR": return "_HairSpecular";
                 case "_RIM_LIGHT": return "_RimLight";
                 case "_OUTLINE": return "_Outline";
+                case "_MATCAP":
                 case "_MAT_CAP": return "_MatCap";
                 case "_EMISSION": return "_Emission";
                 case "_REFLECTION": return "_Reflection";
                 case "_PARALLAX": return "_Parallax";
+                case "_NORMALMAP":
                 case "_USE_NORMAL_MAP": return "_UseNormalMap";
                 case "_ENV_RIM": return "_EnvRim";
+                case "_USE_DITHERING":
                 case "_DITHERING": return "_UseDithering";
                 default: return null;
             }

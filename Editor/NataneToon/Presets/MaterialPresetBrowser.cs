@@ -73,7 +73,7 @@ namespace NataneToon.Editor
             }
         }
 
-        [MenuItem("Tools/Natane/Presets/マテリアルプリセットブラウザ Material Preset Browser _p", false, 21)]
+        [MenuItem("Tools/Natane/プリセット Presets/マテリアルプリセットブラウザ Material Preset Browser _p", false, 21)]
         public static void ShowWindow()
         {
             var window = GetWindow<MaterialPresetBrowser>(WindowTitle);

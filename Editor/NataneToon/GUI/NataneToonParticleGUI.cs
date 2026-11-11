@@ -29,7 +29,7 @@ namespace NataneToon.Editor
                 "Natane Toon Shader",
                 L("軽量トゥーンパーティクル", "Lightweight Toon Particle"),
                 "Particle",
-                $"S {budget.EstimatedSamplers}/{budget.Limit}",
+                $"Tex {budget.EstimatedSamplers}/{budget.Limit}",
                 budget.IsOverLimit
                     ? NataneInspectorStatus.Error
                     : budget.IsWarning ? NataneInspectorStatus.Warning : NataneInspectorStatus.Success,

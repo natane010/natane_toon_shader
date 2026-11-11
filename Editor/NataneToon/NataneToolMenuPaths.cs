@@ -12,6 +12,7 @@ namespace NataneToon.Editor
     {
         public const string Dashboard = "Tools/Natane/Dashboard %j";
         public const string HelpWindow = "Tools/Natane/ヘルプ Help _h";
+        public const string EffectTryout = "Tools/Natane/効果を試す Try Effects";
 
         public const string MaterialValidator = "Tools/Natane/マテリアル Material/マテリアル検証 Material Validator _m";
         public const string MaterialEditor = "Tools/Natane/マテリアル Material/統合マテリアルエディタ Unified Material Editor";

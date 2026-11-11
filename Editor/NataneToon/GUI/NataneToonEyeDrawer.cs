@@ -180,7 +180,7 @@ namespace NataneToon.Editor
                 "Natane Toon Shader",
                 L("瞳と表情のセットアップ", "Eye & Expression Setup"),
                 "Eye",
-                $"S {budget.EstimatedSamplers}/{budget.Limit}",
+                $"Tex {budget.EstimatedSamplers}/{budget.Limit}",
                 budget.IsOverLimit
                     ? NataneInspectorStatus.Error
                     : budget.IsWarning ? NataneInspectorStatus.Warning : NataneInspectorStatus.Success,

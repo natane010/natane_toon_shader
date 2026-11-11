@@ -486,11 +486,11 @@ namespace NataneToon.Editor
             EditorGUILayout.BeginVertical(EditorStyles.helpBox);
             EditorGUILayout.BeginHorizontal();
 
-            EditorGUILayout.LabelField(L("Performance Rating", "Performance Rating") + ":", GUILayout.Width(130));
+            GUILayout.Label(L("Performance Rating", "Performance Rating") + ":", GUILayout.ExpandWidth(false));
 
             Color oldColor = GUI.color;
             GUI.color = ratingColor;
-            EditorGUILayout.LabelField(rating, EditorStyles.boldLabel);
+            GUILayout.Label(new GUIContent(rating, rating), EditorStyles.boldLabel, GUILayout.MinWidth(0f));
             GUI.color = oldColor;
 
             EditorGUILayout.EndHorizontal();
@@ -641,10 +641,10 @@ namespace NataneToon.Editor
                         bool isToggleable = material != null && !contributor.Keyword.StartsWith("__");
 
                         EditorGUILayout.BeginHorizontal();
-                        EditorGUILayout.LabelField(
-                            L($"  • {name} を OFF → -{contributor.SamplerCost} samplers",
-                              $"  • Turn off {name} → -{contributor.SamplerCost} samplers"),
-                            EditorStyles.miniLabel);
+                        GUILayout.Label(
+                            L($"  • {name} を OFF → テクスチャ枠 -{contributor.SamplerCost}",
+                              $"  • Turn off {name} → -{contributor.SamplerCost} texture slots"),
+                            NataneToonInspectorComponents.WrappedMiniLabel, GUILayout.MinWidth(0f));
                         if (isToggleable && GUILayout.Button(
                                 new GUIContent(
                                     L("OFFにする", "Turn Off"),
@@ -783,12 +783,12 @@ namespace NataneToon.Editor
             EditorGUILayout.BeginVertical(EditorStyles.helpBox);
             EditorGUILayout.BeginHorizontal();
 
-            EditorGUILayout.BeginVertical();
-            GUIStyle titleStyle = new GUIStyle(EditorStyles.boldLabel) { fontSize = 14 };
-            EditorGUILayout.LabelField(L(titleJP, titleEN), titleStyle);
-            EditorGUILayout.EndVertical();
+            // GUILayout.Label + MinWidth(0) で、狭いウィンドウではタイトル側が縮む。
+            // （LabelField は最小幅を要求するため、言語切替とヘルプが右へ押し出されていた）
+            GUIStyle titleStyle = new GUIStyle(EditorStyles.boldLabel) { fontSize = 14, clipping = TextClipping.Clip, alignment = TextAnchor.MiddleLeft };
+            string toolTitle = L(titleJP, titleEN);
+            GUILayout.Label(new GUIContent(toolTitle, toolTitle), titleStyle, GUILayout.MinWidth(0f), GUILayout.Height(25f));
 
-            GUILayout.FlexibleSpace();
             DrawLanguageToggleButton();
             DrawHelpButton(toolKey);
 
@@ -835,7 +835,7 @@ namespace NataneToon.Editor
         {
             EditorGUILayout.BeginHorizontal();
             GUILayout.FlexibleSpace();
-            if (GUILayout.Button(L(labelJP, labelEN), EditorStyles.miniButton, GUILayout.Width(160), GUILayout.Height(18)))
+            if (GUILayout.Button(L(labelJP, labelEN), EditorStyles.miniButton, GUILayout.MinWidth(40f), GUILayout.MaxWidth(160f), GUILayout.Height(18)))
             {
                 onClick?.Invoke();
             }

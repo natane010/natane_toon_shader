@@ -19,6 +19,24 @@ namespace NataneToon.Editor
     {
         private const int DefaultResolution = 256;
 
+        // 既定はショーケース生成の出力先。「効果を試す」など利用者向けの導線では、
+        // テスト用フォルダではなく生成物用フォルダへ書き出すために一時的に差し替える。
+        private static string _folderOverride;
+        private static string Folder => _folderOverride ?? NataneFeatureShowcaseGrid.OutputFolder;
+
+        /// <summary>using で囲んだ間だけ、素材の書き出し先を folder にする。</summary>
+        public static IDisposable UseFolder(string folder)
+        {
+            return new FolderScope(folder);
+        }
+
+        private sealed class FolderScope : IDisposable
+        {
+            private readonly string _previous;
+            public FolderScope(string folder) { _previous = _folderOverride; _folderOverride = folder; }
+            public void Dispose() { _folderOverride = _previous; }
+        }
+
         // ---- 公開: 機能セットアップから使う素材 ----
 
         /// <summary>MatCap。中心が明るく縁が落ちる、球体を写した想定の絵。</summary>
@@ -88,7 +106,7 @@ namespace NataneToon.Editor
         /// <summary>ノーマルマップ。<see cref="Height"/> の勾配から作る。</summary>
         public static Texture2D NormalMap()
         {
-            string path = Path(NataneFeatureShowcaseGrid.OutputFolder, "Showcase_Normal");
+            string path = Path(Folder, "Showcase_Normal");
             var existing = AssetDatabase.LoadAssetAtPath<Texture2D>(path);
             if (existing != null) return existing;
 
@@ -138,7 +156,7 @@ namespace NataneToon.Editor
         public static Texture2D Lut()
         {
             const int size = 16;
-            string path = Path(NataneFeatureShowcaseGrid.OutputFolder, "Showcase_LUT");
+            string path = Path(Folder, "Showcase_LUT");
             var existing = AssetDatabase.LoadAssetAtPath<Texture2D>(path);
             if (existing != null) return existing;
 
@@ -175,7 +193,7 @@ namespace NataneToon.Editor
         private static Texture2D GetOrCreate(string name, int resolution, bool writeToAlpha,
                                              Func<float, float, float> evaluate)
         {
-            string path = Path(NataneFeatureShowcaseGrid.OutputFolder, name);
+            string path = Path(Folder, name);
             var existing = AssetDatabase.LoadAssetAtPath<Texture2D>(path);
             if (existing != null) return existing;
 

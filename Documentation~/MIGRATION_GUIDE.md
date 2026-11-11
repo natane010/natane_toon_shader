@@ -2,6 +2,22 @@
 
 lilToon から Natane Toon Shader への移行方法を説明します。
 
+## いちばん簡単な方法（ウィンドウを開かずに変換）
+
+ツールウィンドウを開かなくても、今いる場所から 1 操作で変換できます。どれも同じ変換処理を使います。
+
+| やりたいこと | 操作 | 元のマテリアル |
+|---|---|---|
+| アバター全体を変換 | Hierarchy でアバターを右クリック → `Natane > lilToon から変換 (アバター全体)` | 変更しません（複製を変換してシーン上のアバターに割り当て。Ctrl+Z で戻せます） |
+| マテリアル / フォルダを変換 | Project で右クリック → `Natane > lilToon から変換` | 変更しません（隣の `NataneToon` フォルダに変換後を作成） |
+| 1 つをその場で変換 | マテリアルのインスペクター右上の ⋮ → `Natane Toon へ変換 (lilToon)` | 書き換えます（`_lilToon_backup` を作成。Ctrl+Z で戻せます） |
+| シェーダー欄で切り替え | マテリアルの Shader 欄で `Natane/Toon Shader` を選ぶ | 書き換えます（Ctrl+Z で戻せます） |
+
+- Shader 欄で `Natane/Toon Shader` を選んだ場合は、lilToon の描画モード（不透明 / カットアウト / 半透明）に合うバリアントを自動で選びます。
+  特定のバリアント（例: `Natane/Toon Shader Cutout`）を選んだ場合はそれを使います。
+- Shader 欄での自動引き継ぎは、移行ツールの「シェーダー欄の切り替えでも引き継ぐ」でオフにできます。
+- 変換後に見た目を調整したいときは、インスペクターの「クイックセットアップ」か `Tools > Natane > 効果を試す Try Effects` が近道です。
+
 ## 自動移行ツール
 
 Natane Toon Shader には、lilToonから自動的に移行するためのツールが含まれています。
@@ -11,7 +27,7 @@ Natane Toon Shader には、lilToonから自動的に移行するためのツー
 #### 1. lilToon Migration Tool
 lilToon専用の移行ツールです。プロパティを適切にマッピングして変換します。
 
-**場所**: `Tools > Natane > lilToon Migration Tool`
+**場所**: `Tools > Natane > 移行 Migration > lilToon Migration Tool`
 
 **特徴**:
 - lilToonのプロパティを自動検出
@@ -22,7 +38,7 @@ lilToon専用の移行ツールです。プロパティを適切にマッピン�
 #### 2. Batch Material Converter
 汎用的なマテリアル変換ツールです。任意のシェーダー間で変換できます。
 
-**場所**: `Tools > Natane > Batch Material Converter`
+**場所**: `Tools > Natane > 移行 Migration` 以下の Batch Material Converter
 
 **特徴**:
 - 任意のシェーダー間で変換
@@ -34,14 +50,14 @@ lilToon専用の移行ツールです。プロパティを適切にマッピン�
 
 ### ステップ1: ツールを開く
 
-1. Unityメニューから `Tools > Natane > lilToon Migration Tool` を選択
+1. Unityメニューの `Tools > Natane > 移行 Migration > lilToon Migration Tool` を選択
 2. ツールウィンドウが開きます
 
 ### ステップ2: オプションを設定
 
 **Create Backup（推奨）**
-- チェック: 元のマテリアルのバックアップを作成（`_lilToon_backup.mat`）
-- 元のファイルを保護したい場合はチェック
+- 「元マテリアルを直接置換」をオンにしたときだけ使われます（`_lilToon_backup.mat` を作成）
+- 通常の変換は元のマテリアルを変更せず、隣の `NataneToon` フォルダに変換後のマテリアルを作るため、バックアップは不要です
 
 **Replace Original（危険）**
 - チェック: 元のマテリアルを直接変更（破壊的）
@@ -62,8 +78,7 @@ lilToon専用の移行ツールです。プロパティを適切にマッピン�
 
 **一括変換**:
 - `Convert All Materials` ボタンをクリック
-- 確認ダイアログが表示されます
-- `Yes` をクリックして変換を開始
+- 一覧のすべてのマテリアルを順に変換します（進捗バーが表示されます）
 
 ### ステップ5: 確認
 
@@ -104,7 +119,7 @@ lilToonとNatane Toon Shaderのプロパティ対応表です。
 
 | lilToon | Natane Toon Shader | 変換ロジック |
 |---------|-------------------|------------|
-| `_OutlineWidth` | `_OutlineWidth` | × 0.01 で変換 |
+| `_OutlineWidth` | `_OutlineWidth` | × 0.1 で変換（lilToon と Natane Toon の太さの単位差を補正） |
 | `_OutlineColor` | `_OutlineColor` | そのまま |
 
 ### 発光
@@ -211,7 +226,7 @@ lilToonの1/100の値に変換されます
 
 ### 使用方法
 
-1. `Tools > Natane > Batch Material Converter` を開く
+1. `Tools > Natane > 移行 Migration` から Batch Material Converter を開く
 2. Source Shader Contains: `lilToon` と入力
 3. Target Shader: `Natane/Toon Shader` を入力
 4. オプションを設定:

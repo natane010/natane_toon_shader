@@ -57,8 +57,8 @@ namespace NataneToon.Editor
             EditorGUILayout.Space(10);
             drawHelpToggle(
                 "LightShadowTabMigration",
-                L("AO and dithering settings have been moved to the Light & Shadow tab.",
-                  "AO and dithering settings have been moved to the Light & Shadow tab."),
+                L("AO とディザリングは「ライティング」タブ →「基本ライティング」にあります。",
+                  "AO and Dithering are in the Lighting tab, under Basic Lighting."),
                 MessageType.None);
 
             if (isSectionAvailable == null || isSectionAvailable("SDFMap"))
@@ -377,10 +377,11 @@ namespace NataneToon.Editor
                   "Recommended values are usually 2 to 3 steps."),
                 MessageType.Info);
 
-            drawProperty("_ShadowSharpness", L("Shadow Sharpness", "Shadow Sharpness"));
+            // 値が大きいほど境界がぼける。以前の「影の鋭さ」は意味が逆に読めた。
+            drawProperty("_ShadowSharpness", L("影の境界のぼかし", "Shadow Edge Blur"));
             drawHelpToggle(
                 "ShadowSharpness",
-                L("Lower values sharpen the border. Higher values soften it.",
+                L("小さいほど境界がくっきり、大きいほどやわらかくぼけます。",
                   "Lower values sharpen the border. Higher values soften it."),
                 MessageType.Info);
 

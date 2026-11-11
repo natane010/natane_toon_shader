@@ -53,6 +53,13 @@ namespace NataneToon.Editor
             ("_SDFMap",      "_UseSDFMap", "_SDF_MAP",    "SDF テクスチャ検出 → SDF 有効化"),
         };
 
+        /// <summary>
+        /// false にすると、スムースノーマルのベイク（メッシュアセットの新規作成と
+        /// Renderer のメッシュ差し替え）を行わない。右クリックやシェーダー欄からの
+        /// ワンクリック変換は「マテリアルだけが変わる」ことを期待されるので false で呼ぶ。
+        /// </summary>
+        public static bool AllowMeshBake = true;
+
         // ===== メイン API =====
 
         /// <summary>
@@ -477,7 +484,7 @@ namespace NataneToon.Editor
             }
 
             // スムースノーマルが必要な場合、Renderer があれば自動ベイクを試行
-            if (meshResult.needsSmoothNormals)
+            if (meshResult.needsSmoothNormals && AllowMeshBake)
             {
                 Renderer renderer = FindRendererForMaterial(material);
                 if (renderer != null)
