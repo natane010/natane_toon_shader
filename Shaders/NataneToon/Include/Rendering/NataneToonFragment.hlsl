@@ -693,14 +693,15 @@ half4 frag(v2f i) : SV_Target
     #else
         if (_ShadowSmoothing > 0.001)
         {
-            // --- Point/Spot Light: Adaptive smoothstep ---
-            // Fixed centre. The previous "adaptive" centre was clamp(atten, 0.1, 0.9), i.e. the
-            // input itself, so the smoothstep returned exactly 0.5 for every atten in
-            // [0.1, 0.9]: point / spot lights broke into three flat bands, and unshadowed
-            // surfaces darkened once the width exceeded 0.1.
-            half attenDeriv = fwidth(atten);
-            half smoothWidth = min(max(attenDeriv, _ShadowSmoothing * SMOOTH_WIDTH_SCALE), 0.5);
-            atten = smoothstep(0.5 - smoothWidth, 0.5 + smoothWidth, atten);
+            // --- Point/Spot Light: shadow edge only ---
+            // "atten" here is distance falloff x cookie x shadow. Remapping the product
+            // turned the falloff itself into bands (the old adaptive centre) or a hard disc
+            // (any fixed centre), so only the shadow term is remapped and the falloff and
+            // cookie are carried through unchanged.
+            half shadowOnly = UNITY_SHADOW_ATTENUATION(i, i.worldPos);
+            half smoothWidth = min(max(fwidth(shadowOnly), _ShadowSmoothing * SMOOTH_WIDTH_SCALE), 0.5);
+            half shadowSmoothed = smoothstep(0.5 - smoothWidth, 0.5 + smoothWidth, shadowOnly);
+            atten *= shadowSmoothed / max(shadowOnly, 1e-4);
         }
     #endif
 

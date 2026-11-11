@@ -1376,7 +1376,8 @@ CGPROGRAM
             {
                 half4 col = frag(i);
                 #if defined(_HASHED_ALPHA)
-                    float2 hashedScreenPos = i.pos.xy;
+                    // Same coordinate as the hashed clip inside frag(), so both tests share one pattern.
+                    float2 hashedScreenPos = StabilizeDitherCoord(i.pos.xy);
                     float hashedAlpha = saturate((col.a - _Cutoff) / max(1.0 - _Cutoff, 0.0001));
                     float hashedCutout = ApplyHashedAlpha(hashedAlpha, hashedScreenPos, i.worldPos.xz, _HashedAlphaScale);
                     clip(hashedCutout);
@@ -1477,7 +1478,8 @@ CGPROGRAM
             {
                 half4 col = frag(i);
                 #if defined(_HASHED_ALPHA)
-                    float2 hashedScreenPos = i.pos.xy;
+                    // Same coordinate as the hashed clip inside frag(), so both tests share one pattern.
+                    float2 hashedScreenPos = StabilizeDitherCoord(i.pos.xy);
                     float hashedAlpha = saturate((col.a - _Cutoff) / max(1.0 - _Cutoff, 0.0001));
                     float hashedCutout = ApplyHashedAlpha(hashedAlpha, hashedScreenPos, i.worldPos.xz, _HashedAlphaScale);
                     clip(hashedCutout);

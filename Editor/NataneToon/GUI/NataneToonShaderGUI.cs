@@ -2553,10 +2553,6 @@ public class NataneToonShaderGUI : ShaderGUI
     // Shader name mapping: non-Lite → Lite counterpart (for GrabPass-free performance).
     // Background and ScreenEdge Split intentionally omitted (no Lite counterpart exists).
     // 判定と変換の実体は NataneLiteVariantUtility（最適化ハブの一括変換と共有）。
-    private static System.Collections.Generic.Dictionary<string, string> s_LiteShaderCounterparts
-    {
-        get { return NataneToon.Editor.NataneLiteVariantUtility.Counterparts; }
-    }
 
     /// <summary>
     /// 現在のマテリアルが「Lite 版を持つ非 Lite バリアント」で、かつ GrabPass 依存機能を
@@ -2630,23 +2626,18 @@ public class NataneToonShaderGUI : ShaderGUI
 
     private void ConvertTargetsToLite(string liteShaderName)
     {
-        Shader liteShader = Shader.Find(liteShaderName);
-        if (liteShader == null)
-        {
-            Debug.LogError($"[NataneToonShader] Lite シェーダーが見つかりません: {liteShaderName}");
-            return;
-        }
-
+        // 複数選択時も 1 件ずつ判定する。以前は先頭のマテリアルだけを見ており、
+        // 2 件目以降はテッセレーションや GrabPass 機能を使っていても変換されていた。
+        var convertible = new System.Collections.Generic.List<Material>();
         foreach (Material mat in GetAllTargetMaterials())
         {
-            if (mat == null || mat.shader == null) continue;
-            if (!s_LiteShaderCounterparts.TryGetValue(mat.shader.name, out string expectedLite)) continue;
+            string expectedLite;
+            if (!NataneToon.Editor.NataneLiteVariantUtility.CanConvert(mat, out expectedLite)) continue;
             if (expectedLite != liteShaderName) continue;  // Mixed-shader selection — only convert matching ones.
-
-            Undo.RecordObject(mat, L("Lite バリアントに変換", "Convert to Lite Variant"));
-            mat.shader = liteShader;
-            EditorUtility.SetDirty(mat);
+            convertible.Add(mat);
         }
+
+        NataneToon.Editor.NataneLiteVariantUtility.ConvertToLite(convertible);
     }
 
     private void DrawSamplerBudgetInspectorWarning()
