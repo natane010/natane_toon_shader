@@ -190,6 +190,9 @@ sampler2D _OutlineWidthMap;
 v2f vert(appdata v)
 {
     v2f o;
+    // Zero-fill first: with the outline off, optional members (worldPos for the height /
+    // distance fade) were never written and the output was "not completely initialized".
+    UNITY_INITIALIZE_OUTPUT(v2f, o);
     UNITY_SETUP_INSTANCE_ID(v);
     UNITY_INITIALIZE_VERTEX_OUTPUT_STEREO(o);
     o.uv = v.uv;
