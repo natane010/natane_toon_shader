@@ -75,6 +75,16 @@ TessellationFactors PatchConstantFunction(InputPatch<TessellationControlPoint, 3
 {
     TessellationFactors f;
 
+    // A pass that is known at compile time to output nothing (e.g. the Screen Edge overlay
+    // while _SCREEN_EDGE is off) culls its patches here instead of rasterising the whole
+    // mesh and discarding every pixel.
+    #if defined(NATANE_CULL_ALL_PATCHES)
+        f.edge[0] = 0.0;
+        f.edge[1] = 0.0;
+        f.edge[2] = 0.0;
+        f.inside  = 0.0;
+    #else
+
     float3 p0 = mul(unity_ObjectToWorld, patch[0].vertex).xyz;
     float3 p1 = mul(unity_ObjectToWorld, patch[1].vertex).xyz;
     float3 p2 = mul(unity_ObjectToWorld, patch[2].vertex).xyz;
@@ -89,6 +99,8 @@ TessellationFactors PatchConstantFunction(InputPatch<TessellationControlPoint, 3
     f.edge[1] = factor;
     f.edge[2] = factor;
     f.inside  = factor;
+
+    #endif // NATANE_CULL_ALL_PATCHES
     return f;
 }
 
@@ -182,7 +194,12 @@ struct TessellationFactors
 TessellationFactors PatchConstantFunction(InputPatch<v2f, 3> patch)
 {
     TessellationFactors f;
-    f.edge[0] = f.edge[1] = f.edge[2] = f.inside = 1.0;
+    #if defined(NATANE_CULL_ALL_PATCHES)
+        // Pass has nothing to draw (see the tessellated branch above): cull the patch.
+        f.edge[0] = f.edge[1] = f.edge[2] = f.inside = 0.0;
+    #else
+        f.edge[0] = f.edge[1] = f.edge[2] = f.inside = 1.0;
+    #endif
     return f;
 }
 

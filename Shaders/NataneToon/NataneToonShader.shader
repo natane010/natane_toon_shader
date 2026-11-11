@@ -1574,16 +1574,16 @@ Shader "Natane/Toon Shader"
             #pragma domain domain
             #pragma fragment frag
             #pragma multi_compile_fwdadd
+            // Keywords whose code is ForwardBase-only (rim / env rim / SSS / PBR-like / topographic /
+            // caustics / shadow bokeh / multi-shadow colour) are intentionally NOT declared here:
+            // declaring them only multiplied the ForwardAdd variants without changing a pixel.
             #pragma shader_feature_local _PERSPECTIVE_FLAT
             #pragma shader_feature_local _FACE_ORTHO
             #pragma shader_feature_local _FACE_ORTHO_MASK
             #pragma shader_feature_local _LINE_BOIL
             #pragma shader_feature_local _SHAPED_HIGHLIGHT
-            #pragma shader_feature_local _TOPOGRAPHIC
             #pragma shader_feature_local _FX_MODULATOR
             #pragma shader_feature_local _LENTICULAR
-            #pragma shader_feature_local _CAUSTICS
-            #pragma shader_feature_local _SHADOW_BOKEH
             #pragma shader_feature_local _PIXEL_ART
             #pragma shader_feature_local _MIRROR_TEXTURE
             #pragma shader_feature_local _QUEST_LITE
@@ -1598,7 +1598,6 @@ Shader "Natane/Toon Shader"
             #pragma shader_feature_local _GRADIENT_BASE_COLOR
             #pragma shader_feature_local _USE_RAMP
 
-            #pragma shader_feature_local _USE_MULTI_SHADOW
             #pragma shader_feature_local _SHADOW_RECEIVE_MASK
             #pragma shader_feature_local _SDF_MAP
             #pragma shader_feature_local _SHADOW_SHAPE_RIG
@@ -1608,7 +1607,6 @@ Shader "Natane/Toon Shader"
             #pragma shader_feature_local _NORMAL_WARP
             #pragma shader_feature_local _USE_DITHERING
             #pragma shader_feature_local _SHADOW_EDGE_NOISE
-            #pragma shader_feature_local _CAST_SHADOW_COLOR
             #pragma shader_feature_local _LIGHT_SNAP
             #pragma shader_feature_local _BLUE_NOISE_DITHER
             #pragma shader_feature_local _SOFT_LIGHTING_MODE
@@ -1632,7 +1630,6 @@ Shader "Natane/Toon Shader"
             #pragma shader_feature_local _VAT_NORMAL
             #pragma shader_feature_local _SMOOTH_NORMAL
             #pragma shader_feature_local _VERTEX_COLOR_SHADOW
-            #pragma shader_feature_local _PBR_LIKE
             #pragma shader_feature_local _TESSELLATION
             #pragma shader_feature_local _TESS_DISPLACEMENT
             #pragma shader_feature_local _MIRROR_CONTROL

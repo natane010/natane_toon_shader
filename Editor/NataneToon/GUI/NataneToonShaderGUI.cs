@@ -2550,24 +2550,11 @@ public class NataneToonShaderGUI : ShaderGUI
 
     // Shader name mapping: non-Lite → Lite counterpart (for GrabPass-free performance).
     // Background and ScreenEdge Split intentionally omitted (no Lite counterpart exists).
-    private static readonly System.Collections.Generic.Dictionary<string, string> s_LiteShaderCounterparts =
-        new System.Collections.Generic.Dictionary<string, string>
-        {
-            { "Natane/Toon Shader",               "Natane/Toon Shader (Lite)" },
-            { "Natane/Toon Shader (Cutout)",      "Natane/Toon Shader (Cutout Lite)" },
-            { "Natane/Toon Shader (Transparent)", "Natane/Toon Shader (Transparent Lite)" },
-            { "Natane/Toon Shader (Fur)",         "Natane/Toon Shader (Fur Lite)" },
-        };
-
-    // Keys are the float property names (source of truth per keyword synchronizer).
-    private static readonly string[] s_GrabPassFeatureToggles =
+    // 判定と変換の実体は NataneLiteVariantUtility（最適化ハブの一括変換と共有）。
+    private static System.Collections.Generic.Dictionary<string, string> s_LiteShaderCounterparts
     {
-        "_Refraction",
-        "_UseSoftFilter",
-        "_UseKuwahara",
-        "_UseColorBleeding",
-        "_UseChromaticAberration",
-    };
+        get { return NataneToon.Editor.NataneLiteVariantUtility.Counterparts; }
+    }
 
     /// <summary>
     /// 現在のマテリアルが「Lite 版を持つ非 Lite バリアント」で、かつ GrabPass 依存機能を
@@ -2578,17 +2565,9 @@ public class NataneToonShaderGUI : ShaderGUI
         liteShaderName = null;
         if (targetMaterial == null || targetMaterial.shader == null) return false;
 
-        // Only suggest when the current shader is a non-Lite variant that has a Lite counterpart.
-        if (!s_LiteShaderCounterparts.TryGetValue(targetMaterial.shader.name, out liteShaderName))
-            return false;
-
-        // Skip if any GrabPass-dependent feature is actually in use.
-        foreach (var prop in s_GrabPassFeatureToggles)
-        {
-            if (IsMaterialToggleEnabled(targetMaterial, prop))
-                return false;
-        }
-        return true;
+        // Lite 版があり、Lite に無い機能（GrabPass 依存 5 機能 + テッセレーション）を使っていない場合のみ。
+        // 以前はテッセレーションを見ておらず、変換すると黙ってテッセレーションが消えていた。
+        return NataneToon.Editor.NataneLiteVariantUtility.CanConvert(targetMaterial, out liteShaderName);
     }
 
     private void DrawGrabPassSuggestionBanner()
@@ -2606,7 +2585,7 @@ public class NataneToonShaderGUI : ShaderGUI
             {
                 EditorGUILayout.LabelField(
                     new GUIContent(
-                        L("GrabPass 未使用: Lite バリアントにすると軽くなります", "No GrabPass feature in use: the Lite variant is lighter"),
+                        L("GrabPass / テッセレーション未使用: Lite バリアントにすると軽くなります", "No GrabPass / tessellation feature in use: the Lite variant is lighter"),
                         L("屈折/ソフトフィルタ/クワハラ/カラーブリーディング/色収差を使っていないため、Lite バリアントに切り替えると画面コピーのコストを丸ごと削減できます。",
                           "Refraction / Soft Filter / Kuwahara / Color Bleeding / Chromatic Aberration are all off, so switching to the Lite variant removes the full-screen copy.")),
                     EditorStyles.miniLabel);

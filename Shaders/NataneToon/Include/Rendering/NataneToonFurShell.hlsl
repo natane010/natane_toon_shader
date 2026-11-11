@@ -59,6 +59,13 @@ v2f_fur furVert(appdata_fur v)
     // let the rasteriser drop it. The draw calls remain, the pixel cost does not.
     if (!NataneFurShellsEnabled()) o.pos = float4(0, 0, 0, 1);
 
+    // The outermost shell (layer 1.0) can never pass the fragment LOD test
+    // (lodThreshold <= 1.0, clip(lodThreshold - layer - 0.001)), so every pixel it
+    // rasterised was discarded. Collapse it here and skip the fill entirely.
+    #if FUR_SHELL_INDEX >= (FUR_SHELL_COUNT - 1)
+        o.pos = float4(0, 0, 0, 1);
+    #endif
+
     UNITY_TRANSFER_FOG(o, o.pos);
     return o;
 }
