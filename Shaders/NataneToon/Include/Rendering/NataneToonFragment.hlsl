@@ -730,12 +730,110 @@ half4 frag(v2f i) : SV_Target
         }
     #endif
 
+    // ===== Analytic sphere occluder =====
+    // A sphere placed in object space (e.g. the head, set on the body material) casts a
+    // soft shadow along the light. On a skinned mesh "object space" is the renderer's
+    // root, like _FaceForwardDirection: it follows the avatar, not an individual bone.
+    if (_SphereOccluderStrength > 0.001)
+    {
+        float3 sphCenterWS = mul(unity_ObjectToWorld, float4(_SphereOccluder.xyz, 1.0)).xyz;
+        float sphScale = length(mul((float3x3)unity_ObjectToWorld, float3(0.0, 1.0, 0.0)));
+        half sphShadow = NataneSphereSoftShadow(i.worldPos, lightDir, sphCenterWS,
+                                                max(_SphereOccluder.w * sphScale, 1e-4), _SphereOccluderSoftness);
+        atten *= lerp(1.0, sphShadow, saturate(_SphereOccluderStrength));
+    }
+
+    // ===== Depth hair shadow =====
+    // Compares the scene depth a short step towards the light with this pixel: where
+    // something nearer (the fringe) is found, the face is shaded. Needs the world to
+    // provide _CameraDepthTexture; skipped in mirrors and for orthographic cameras,
+    // where that texture is not usable. Anything in front casts it, not only hair.
+    #if defined(UNITY_PASS_FORWARDBASE) && !defined(_QUEST_LITE)
+    if (_DepthHairShadow > 0.001 && !NataneIsMirror() && !NataneIsOrthoCamera())
+    {
+        float4 dhsClip = UnityWorldToClipPos(i.worldPos + lightDir * _DepthHairShadowOffset);
+        float4 dhsScreen = ComputeScreenPos(dhsClip);
+        float2 dhsUV = dhsScreen.xy / max(dhsScreen.w, 0.0001);
+        float dhsScene = LinearEyeDepth(UNITY_SAMPLE_SCREENSPACE_TEXTURE(_CameraDepthTexture, dhsUV).r);
+        float dhsDiff = dhsClip.w - dhsScene;
+        // Occluders further than 0.5 m in front are ignored (other avatars, props).
+        half dhsShadow = saturate((dhsDiff - _DepthHairShadowBias) * 100.0) * step(dhsDiff, 0.5);
+        atten *= 1.0 - dhsShadow * saturate(_DepthHairShadow);
+    }
+    #endif
+
     // Apply shadow receive strength (allows controlling how much shadows affect this material)
     // マスクの判定を反転: 白（1.0）= 影を受けない、黒（0.0）= 影を受ける
     half shadowStrength = (1.0 - shadowReceiveMask) * _ShadowReceive;
     atten = lerp(1.0, atten, shadowStrength);
 
     half3 viewDir = normalize(_WorldSpaceCameraPos - i.worldPos);
+
+    // ===== Expression extras: albedo-level terms =====
+    half exprNdotV = saturate(dot(worldNormal, viewDir));
+    half3 exprFaceForwardWS = normalize(mul((float3x3)unity_ObjectToWorld, _FaceForwardDirection.xyz) + float3(0, 0, 0.0001));
+    half3 exprUpWS = normalize(mul((float3x3)unity_ObjectToWorld, float3(0.0, 1.0, 0.0)));
+
+    // Nose line that fades in profile, where the silhouette already draws the nose.
+    if (_NoseLineStrength > 0.001)
+    {
+        half noseMask = NATANE_SAMPLE_SHARED_R(_NoseLineMask, _MainTex, uv);
+        half noseFront = saturate(dot(viewDir, exprFaceForwardWS));
+        half noseFadeStart = lerp(0.0, 0.9, saturate(_NoseLineFade));
+        half noseVisible = smoothstep(noseFadeStart, min(noseFadeStart + 0.15, 1.0), noseFront);
+        col.rgb = lerp(col.rgb, col.rgb * _NoseLineColor.rgb, noseMask * noseVisible * saturate(_NoseLineStrength));
+    }
+
+    // Sheer stockings: the cloth colour builds up towards grazing angles, where the
+    // view passes through more fibre.
+    if (_Stocking > 0.001)
+    {
+        half stockingMask = NATANE_SAMPLE_SHARED_R(_StockingMask, _MainTex, uv);
+        half stockingDensity = pow(max(1.0 - exprNdotV, 1e-4), max(_StockingPower, 0.5));
+        stockingDensity = saturate(stockingDensity + 0.15) * saturate(_Stocking) * stockingMask;
+        col.rgb = lerp(col.rgb, _StockingColor.rgb, stockingDensity);
+    }
+
+    // Wetness (after Lagarde, "Water drop 3b", 2013): the diffuse albedo darkens, and a
+    // sharp water lobe is added with the direct light further down.
+    half exprWet = 0.0;
+    if (_Wetness > 0.001)
+    {
+        exprWet = saturate(_Wetness) * NATANE_SAMPLE_SHARED_R(_WetnessMask, _MainTex, uv);
+        col.rgb *= lerp(1.0, 0.75, exprWet);
+    }
+
+    // Baked hair self-occlusion in vertex colour G (roots dark, tips bright).
+    #ifdef _VERTEX_COLOR_SHADOW
+    if (_HairVertexOcclusion > 0.001)
+    {
+        col.rgb *= lerp(1.0, saturate(i.color.g), saturate(_HairVertexOcclusion));
+    }
+    #endif
+
+    // Anisotropic GGX: consumed by every NatanePBRSpecular lobe.
+    nataneAniso = clamp(_Anisotropy, -0.95, 0.95);
+    nataneAnisoT = normalize(i.worldTangent - worldNormal * dot(i.worldTangent, worldNormal) + float3(0, 1e-5, 0));
+    nataneAnisoB = cross(worldNormal, nataneAnisoT);
+
+    // Bent normal: the least occluded direction, used for ambient / SH lookups only.
+    half3 ambientNormal = worldNormal;
+    if (_BentNormalStrength > 0.001)
+    {
+        half3 bentTS = UnpackNormal(NATANE_SAMPLE_REPEAT(_BentNormalMap, uv));
+        half3 bentWS = normalize(i.worldTangent * bentTS.x + i.worldBinormal * bentTS.y + i.worldNormal * bentTS.z);
+        ambientNormal = normalize(lerp(worldNormal, bentWS, saturate(_BentNormalStrength)));
+    }
+
+    // 2D ramp: second axis of the ramp texture (facing ratio or viewer distance).
+    #if defined(_USE_RAMP)
+    if (_RampVAxis > 0.5)
+    {
+        half rampDist = saturate((NataneViewerDistance(i.worldPos) - _RampDistanceRange.x)
+                                 / max(_RampDistanceRange.y - _RampDistanceRange.x, 0.001));
+        nataneRampV = (_RampVAxis > 1.5) ? rampDist : exprNdotV;
+    }
+    #endif
 
     // ===== Smooth Normal Shading Blend =====
     // Blend world normal with smooth normal for softer shadow boundaries on hard-edge models
@@ -752,12 +850,55 @@ half4 frag(v2f i) : SV_Target
     // stop producing mesh-dependent blotches and the face switches between lit and shade
     // more as one plane (the "reduce diffuse shading on the face" practice of anime
     // character shaders). Normal-map detail, specular and rim keep the real normal.
+    // Proxy normal: shade the face as a sphere (or, with the cylinder blend, a vertical
+    // cylinder) around an object-space centre, the classic clean-terminator trick.
+    if (_FaceProxyNormal > 0.001)
+    {
+        float3 proxyDir = i.worldPos - mul(unity_ObjectToWorld, float4(_FaceProxyCenter.xyz, 1.0)).xyz;
+        proxyDir -= exprUpWS * (dot(proxyDir, exprUpWS) * saturate(_FaceProxyCylinder));
+        shadingNormal = normalize(lerp(shadingNormal, normalize(proxyDir + float3(0, 0, 1e-5)), saturate(_FaceProxyNormal)));
+    }
     if (_FaceFlatten > 0.001)
     {
-        half3 faceFlattenAxis = normalize(mul((float3x3)unity_ObjectToWorld, _FaceForwardDirection.xyz) + float3(0, 0, 0.0001));
-        shadingNormal = normalize(lerp(shadingNormal, faceFlattenAxis, saturate(_FaceFlatten) * 0.98) + float3(0, 0.0001, 0));
+        half faceFlattenAmount = saturate(_FaceFlatten) * NATANE_SAMPLE_SHARED_R(_FaceFlattenMask, _MainTex, uv);
+        shadingNormal = normalize(lerp(shadingNormal, exprFaceForwardWS, faceFlattenAmount * 0.98) + float3(0, 0.0001, 0));
+    }
+    // Vertical light limit: removes the up / down part of the light direction (relative
+    // to the avatar's up axis) so light from below or straight above cannot distort the
+    // face. Cast shadows still come from the real light, so the two can disagree.
+    if (_FaceLightVerticalLimit > 0.001)
+    {
+        lightDir = normalize(lightDir - exprUpWS * (dot(lightDir, exprUpWS) * saturate(_FaceLightVerticalLimit) * 0.95)
+                             + exprFaceForwardWS * 1e-4);
     }
     half ndotl = dot(shadingNormal, lightDir);
+
+    // Light source size: an area (sphere) light keeps lighting past the geometric
+    // horizon, which widens the terminator. Quadratic horizon fit; own approximation.
+    if (_LightSourceSize > 0.001)
+    {
+        half lightSinA = saturate(_LightSourceSize) * 0.5;
+        if (ndotl < lightSinA)
+        {
+            half lightHorizon = lightSinA + ndotl;
+            ndotl = (lightHorizon > 0.0) ? (lightHorizon * lightHorizon) / (4.0 * lightSinA) : lightHorizon;
+        }
+    }
+
+    // Directional shadow offset map (after Todo et al., "Locally Controllable Stylized
+    // Shading", 2007): painted offsets for the terminator, one channel per light side.
+    // R = light from the character's right, G = left, B = front, A = back; 0.5 = none.
+    if (_ShadowOffsetMapStrength > 0.001)
+    {
+        half4 offsetTex = NATANE_SAMPLE_SHARED(_ShadowOffsetMap, _MainTex, uv);
+        half3 offsetRightWS = normalize(mul((float3x3)unity_ObjectToWorld, _FaceRightDirection.xyz) + float3(1e-4, 0, 0));
+        half offsetLR = dot(lightDir, offsetRightWS);
+        half offsetFB = dot(lightDir, exprFaceForwardWS);
+        half4 offsetW = half4(saturate(offsetLR), saturate(-offsetLR), saturate(offsetFB), saturate(-offsetFB));
+        half offsetValue = dot(offsetTex, offsetW) / max(dot(offsetW, half4(1.0, 1.0, 1.0, 1.0)), 1e-3);
+        ndotl += (offsetValue - 0.5) * 2.0 * saturate(_ShadowOffsetMapStrength);
+    }
+    half exprRawNdotL = ndotl;
 
     // ===== Bump terminator softening =====
     // Only the lit side is scaled, so the shade never gets darker than before.
@@ -1053,6 +1194,15 @@ half4 frag(v2f i) : SV_Target
         lighting = lerp(shadowColor, litColor, shadingValue);
     #endif
 
+    // ===== Automatic shadow colour (OKLab) =====
+    // Derives the shade from the albedo in a perceptual space: darker, more saturated
+    // and hue-rotated, instead of a hand-picked multiply colour. Not used by Ramp mode.
+    if (_ShadowAutoColor > 0.001)
+    {
+        half3 autoShadow = NataneOKLabShadowMultiplier(col.rgb, _ShadowAutoHue, _ShadowAutoChroma, _ShadowAutoLightness);
+        shadowColor = lerp(shadowColor, autoShadow, saturate(_ShadowAutoColor));
+    }
+
     // ===== Shadow Color HSV Shift =====
     if (abs(_ShadowHueShift) > 0.001 || abs(_ShadowSaturation - 1.0) > 0.001)
     {
@@ -1098,8 +1248,8 @@ half4 frag(v2f i) : SV_Target
 
             // Evaluate direct and indirect lighting from Light Volume
             // _LightVolumeSHMode 0 (default) is the plain linear evaluation, as before.
-            float3 directLightLV = NataneLightVolumeEvaluateMode(worldNormal, L0, L1r, L1g, L1b, _LightVolumeSHMode);
-            float3 indirectLightLV = NataneLightVolumeEvaluateMode(-worldNormal, L0, L1r, L1g, L1b, _LightVolumeSHMode);
+            float3 directLightLV = NataneLightVolumeEvaluateMode(ambientNormal, L0, L1r, L1g, L1b, _LightVolumeSHMode);
+            float3 indirectLightLV = NataneLightVolumeEvaluateMode(-ambientNormal, L0, L1r, L1g, L1b, _LightVolumeSHMode);
 
             // Gentle clamp to prevent over-brightening
             directLightLV = min(directLightLV, float3(1.1, 1.1, 1.1));
@@ -1134,8 +1284,8 @@ half4 frag(v2f i) : SV_Target
             indirectResult = max(0, shAverage);
 
             // Directional SH for ambient contribution
-            float3 shDirect = NataneShadeSH(worldNormal, i.worldPos);
-            float3 shIndirect = NataneShadeSH(-worldNormal, i.worldPos);
+            float3 shDirect = NataneShadeSH(ambientNormal, i.worldPos);
+            float3 shIndirect = NataneShadeSH(-ambientNormal, i.worldPos);
             ambient = lerp(shIndirect, shDirect, SH_INDIRECT_BLEND);
             ambient *= _IndirectLightIntensity * _GIIntensity;
         #endif
@@ -1201,6 +1351,59 @@ half4 frag(v2f i) : SV_Target
         // Matte diffuse: albedo-dependent multiple-scattering tint (1 when the feature is off)
         directResult *= matteDiffuseTint;
 
+        // ===== Expression extras: diffuse response =====
+        // Lit-sphere in light space (after Todo, Anjyo & Yokoyama, "Lit-Sphere Extension",
+        // 2013): a painted sphere whose "up" is the light, so the painted shading turns
+        // with the light instead of the camera.
+        if (_LitSphereStrength > 0.001)
+        {
+            half3 lsRef = (abs(lightDir.y) > 0.95) ? half3(0.0, 0.0, 1.0) : half3(0.0, 1.0, 0.0);
+            half3 lsRight = normalize(cross(lsRef, lightDir));
+            // U = across the light, V = towards the light (top of the texture = lit pole).
+            float2 lsUV = float2(dot(shadingNormal, lsRight), dot(shadingNormal, lightDir)) * 0.5 + 0.5;
+            half3 litSphere = NATANE_SAMPLE_CLAMP_LOD(_LitSphereTex, lsUV, 0).rgb;
+            directResult = lerp(directResult, litSphere * lerp(shadowColor, half3(1.0, 1.0, 1.0), atten), saturate(_LitSphereStrength));
+        }
+        // Skin: red bleed around the terminator (the look of pre-integrated skin without
+        // its LUT; a band fit, not the published curve).
+        if (_SkinTerminatorScatter > 0.001)
+        {
+            half scatterBand = saturate(1.0 - abs(exprRawNdotL) / max(_SkinScatterWidth, 0.02));
+            scatterBand *= scatterBand;
+            directResult += _SkinScatterColor.rgb * (scatterBand * saturate(_SkinTerminatorScatter) * 0.5 * lerp(1.0, atten, 0.5));
+        }
+        // Skin: per-channel diffuse normals (Hable, Uncharted 2). Red follows the smooth
+        // geometric normal, blue the detailed one, so pores stay crisp without grey speckles.
+        #ifdef _NORMALMAP
+        if (_SkinDiffuseNormalBlur > 0.001)
+        {
+            half normalBlurDelta = saturate(dot(normalize(i.worldNormal), lightDir)) - saturate(dot(worldNormal, lightDir));
+            directResult = max(half3(0, 0, 0), directResult + half3(1.0, 0.45, 0.1) * (normalBlurDelta * saturate(_SkinDiffuseNormalBlur) * 0.6));
+        }
+        #endif
+        // Subsurface flatten (the Hanrahan-Krueger term of the Disney BRDF): lifts grazing
+        // angles and flattens the centre, for a soft waxy volume.
+        if (_SubsurfaceFlatten > 0.001)
+        {
+            half ssNL = saturate(exprRawNdotL);
+            half3 ssH = normalize(lightDir + viewDir);
+            half ssLH = saturate(dot(lightDir, ssH));
+            half ssFss90 = ssLH * ssLH * saturate(1.0 - _Smoothness);
+            half ssFL = pow(1.0 - ssNL, 5.0);
+            half ssFV = pow(1.0 - exprNdotV, 5.0);
+            half ssFss = lerp(1.0, ssFss90, ssFL) * lerp(1.0, ssFss90, ssFV);
+            half ssTerm = 1.25 * (ssFss * (1.0 / max(ssNL + exprNdotV, 0.1) - 0.5) + 0.5);
+            directResult *= lerp(1.0, clamp(ssTerm * 1.6, 0.8, 1.25), saturate(_SubsurfaceFlatten));
+        }
+        // Cloth subsurface colour (Filament cloth model): the shade of thick cloth takes
+        // the colour of the light scattered inside it.
+        if (_ClothSubsurface > 0.001)
+        {
+            half clothWrap = saturate((exprRawNdotL + 0.5) / 1.5);
+            half3 clothLit = saturate(directResult + _ClothSubsurfaceColor.rgb * clothWrap * (1.0 - saturate(directResult)));
+            directResult = lerp(directResult, clothLit, saturate(_ClothSubsurface));
+        }
+
         // Light color application (with LightColorInfluence preservation)
         half lightColorLum = CALC_LUMINANCE(effectiveLightColor);
         half3 colorMultiplied = directResult * saturate(effectiveLightColor);
@@ -1212,6 +1415,16 @@ half4 frag(v2f i) : SV_Target
         // (normalize() here would darken neutral light by ~1/sqrt(3).)
         half directLum = CALC_LUMINANCE(directResult);
         half directLumClamped = clamp(directLum, _LightMinInfluence, _LightMaxInfluence);
+        // Soft knee: approach the upper limit along a curve instead of a hard clip.
+        if (_LightMaxSoftKnee > 0.001)
+        {
+            half kneeRange = max(_LightMaxInfluence * saturate(_LightMaxSoftKnee) * 0.9, 1e-3);
+            half kneeStart = _LightMaxInfluence - kneeRange;
+            if (directLum > kneeStart)
+            {
+                directLumClamped = max(_LightMinInfluence, kneeStart + kneeRange * (1.0 - exp(-(directLum - kneeStart) / kneeRange)));
+            }
+        }
         directResult = (directLum > 1e-4)
             ? directResult * (directLumClamped / directLum)
             : half3(1, 1, 1) * directLumClamped; // black input: neutral floor at _LightMinInfluence
@@ -1234,6 +1447,26 @@ half4 frag(v2f i) : SV_Target
             backlightBlendFaded *= lerp(1.0, distanceFade, _BacklightDistFade);
         #endif
         additionalResult += backlight * _BacklightColor.rgb * effectiveLightColor * backlightBlendFaded;
+
+        // Ambient rim (Mitchell et al., "Illustrative Rendering in Team Fortress 2", 2007):
+        // an upward-facing fresnel rim lit by the ambient light, so the silhouette
+        // separates from the background even without a realtime light.
+        if (_AmbientRimIntensity > 0.001)
+        {
+            half ambientRim = pow(max(1.0 - exprNdotV, 1e-4), max(_AmbientRimPower, 0.5)) * saturate(dot(worldNormal, float3(0.0, 1.0, 0.0)));
+            additionalResult += max(indirectResult, ambient) * (ambientRim * _AmbientRimIntensity);
+        }
+        // Wetness: water film highlight (F0 0.02), independent of the material's own gloss.
+        if (exprWet > 0.001)
+        {
+            // A water film is isotropic whatever the cloth or hair underneath is.
+            half wetSavedAniso = nataneAniso;
+            nataneAniso = 0.0;
+            half3 wetSpec = NatanePBRSpecular(worldNormal, viewDir, lightDir, max(_WetnessRoughness, 0.02),
+                                              half3(0.04, 0.04, 0.04), effectiveLightColor, atten);
+            nataneAniso = wetSavedAniso;
+            additionalResult += min(wetSpec * 8.0, 2.0) * (exprWet * specularOcclusion);
+        }
 
         // LTCGI (diffuse → additional, specular → applied after base lighting)
         #if defined(_LTCGI)
@@ -1803,6 +2036,26 @@ half4 frag(v2f i) : SV_Target
         hairSpec *= effectiveLightColor * atten;
         hairTransmission *= effectiveLightColor * atten;
 
+        // Absorption tint: light that crossed the fibres takes the hair's own hue.
+        if (_HairTransmissionAbsorption > 0.001)
+        {
+            half3 hairHue = saturate(originalAlbedo) / max(CALC_LUMINANCE(saturate(originalAlbedo)), 0.05);
+            hairTransmission *= lerp(half3(1.0, 1.0, 1.0), min(hairHue, 2.0), saturate(_HairTransmissionAbsorption));
+        }
+        // Fake multiple scattering (Karis, "Physically Based Hair Shading in Unreal", 2016):
+        // a wrapped diffuse around the strand whose tint saturates inside the shadow.
+        if (_HairMultiScatter > 0.001)
+        {
+            half3 msAlbedo = max(saturate(originalAlbedo), 0.02);
+            half3 msStrand = normalize(i.worldBinormal);
+            half msKajiya = 1.0 - abs(dot(msStrand, lightDir));
+            half3 msFakeN = normalize(viewDir - msStrand * dot(viewDir, msStrand) + float3(0, 1e-4, 0));
+            half msNoL = saturate((dot(msFakeN, lightDir) + 1.0) / 4.0);
+            half msScatter = lerp(msNoL, msKajiya, 0.33) / UNITY_PI;
+            half3 msTint = pow(msAlbedo / max(CALC_LUMINANCE(msAlbedo), 0.02), 1.0 - atten);
+            hairTransmission += sqrt(msAlbedo) * msTint * effectiveLightColor * (msScatter * _HairMultiScatter);
+        }
+
         // Rim transmission (the scatter term of Unity HDRP's Kajiya-Kay hair): light from
         // behind glows through the silhouette of the hair. Uses the geometric normal so a
         // normal map cannot break up the halo. In ForwardBase the cast shadow only half
@@ -1895,6 +2148,11 @@ half4 frag(v2f i) : SV_Target
         half sssMask = NATANE_SAMPLE_SHARED_R(_SSSMask, _MainTex, uv);
         sssMask = ApplySoftMask(sssMask); // Smooth mask transitions
         sss *= sssMask * transmissionStrength;
+        // Thickness-driven skin profile: thin parts stay white-ish, thick parts go red.
+        if (_TransmissionSkinProfile > 0.001)
+        {
+            sss *= lerp(half3(1.0, 1.0, 1.0), NataneSkinTransmittance(thickness * 10.0) * 2.0, saturate(_TransmissionSkinProfile));
+        }
 
         // Use safe additive blending to prevent white-out
         half sssStrength = saturate(length(sss) * 0.5);

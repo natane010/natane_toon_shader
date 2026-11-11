@@ -19,8 +19,31 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **髪の逆光リム透過** (`_HairRimTransmission`): 逆光で髪のシルエットが光を通して輝く。
 - **暗所での反射抑制** (`_ReflectionExposureOcclusion`): 周囲が暗いときリフレクションプローブの映り込みを弱める。
 
+### Added — 表現の追加項目（調査候補の残り）
+すべて Uniform のみ・既定値は無効。キーワードは増えない。インスペクターは「ライティング詳細 > 表現の追加項目」と Eye の「リアルな瞳」。
+- **目** (`Natane/Eye`): 凹んだ虹彩法線 (`_IrisConcavity`)、視線角で強まるリンバルリング (`_LimbalViewBoost`)、
+  まぶた影による反射遮蔽 (`_LidShadowReflectionOcclusion`)、明るさ連動の瞳孔とリング保持リマップ (`_PupilLight*`)、
+  ハイライト別レイヤー (`_HighlightLayer*`)、ハイライトの揺れ (`_HighlightWobble*`)、角膜マットキャップ (`_CorneaMatCap*`)、
+  キラキラ層の奥行き (`_SparkleDepth`)、虹彩の 2 層目パララックス (`_IrisLayer2*`)、強膜の色味と目尻の赤み
+  (`_ScleraTintStrength` / `_ScleraRedness`)、涙ラインのハイライト (`_TearLine*`)。
+  奥行き系は片眼ごと、貼り付け系は中央眼基準（`NataneToonCamera.hlsl` を include）。
+- **顔**: フラット化マスク (`_FaceFlattenMask`)、球 / 円柱プロキシ法線 (`_FaceProxy*`)、ライトの上下角制限
+  (`_FaceLightVerticalLimit`)、横顔で消える鼻筋の線 (`_NoseLine*`)。
+- **影**: 光源の大きさ (`_LightSourceSize`)、ライト方位別の影オフセットマップ (`_ShadowOffsetMap*`)、
+  解析的な球オクルーダー (`_SphereOccluder*`)、深度方式の前髪影 (`_DepthHairShadow*`)、OKLab での影色自動生成 (`_ShadowAuto*`)。
+- **ライティング応答**: 明るさ上限のソフトニー (`_LightMaxSoftKnee`)、環境光リム (`_AmbientRim*`)、
+  粗い反射の主方向補正 (`_ReflectionOffSpecular`)、異方性 GGX (`_Anisotropy`)、ライト空間リットスフィア (`_LitSphere*`)、
+  2D ランプ (`_RampVAxis` / `_RampDistanceRange`)、ベントノーマルでの環境光 (`_BentNormal*`)。
+- **髪**: Karis の疑似多重散乱 (`_HairMultiScatter`)、透過光の吸収色 (`_HairTransmissionAbsorption`)、
+  頂点カラー G の自己遮蔽 (`_HairVertexOcclusion`、頂点カラー影が有効なときのみ)。
+- **肌**: 影境界の赤いにじみ (`_SkinTerminatorScatter` ほか)、色別の拡散法線 (`_SkinDiffuseNormalBlur`)、
+  サブサーフェス平坦化 (`_SubsurfaceFlatten`)、厚みによる透過プロファイル (`_TransmissionSkinProfile`)、濡れ (`_Wetness*`)。
+- **布**: サブサーフェス色 (`_ClothSubsurface*`)、ストッキングの透け (`_Stocking*`)、シーンの方式に Velvet を追加。
+- 新規 include: `Include/Effects/NataneToonExpression.hlsl`（OKLab・肌の透過プロファイル・球の影・反射の主方向）。
+
 ### Changed
 - Eye シェーダーのパスに `LightMode = ForwardBase` を指定（ライト方向を取得するため。描画回数は変わらない）。
+- `_CameraDepthTexture` の宣言を無条件にした（深度方式の前髪影が Uniform で切り替わるため）。
 
 ## [1.7.0] - 2026-11-11
 

@@ -50,6 +50,8 @@
 #include "../Effects/NataneToonShadowBokeh.hlsl"
 #include "../Effects/NataneToonHalftone.hlsl"
 #include "../Effects/NataneToonPixelArt.hlsl"
+// Expression extras helpers (OKLab, skin transmittance, sphere occluder). Pure functions.
+#include "../Effects/NataneToonExpression.hlsl"
 // Shadow Shape Rig (NPR2026 P1). Must come before Lighting: ApplyShadowShapeRig
 // lives in Lighting and calls NataneRigWeight from here.
 #include "../Effects/NataneToonShadowShapeRig.hlsl"

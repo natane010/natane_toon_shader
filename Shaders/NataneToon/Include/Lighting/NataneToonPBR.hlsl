@@ -47,6 +47,22 @@ half3 NataneSchlickFresnel(half cosTheta, half3 F0)
     return F0 + (1.0 - F0) * pow(saturate(1.0 - cosTheta), 5.0);
 }
 
+// Anisotropic GGX (Burley 2012, in the form used by Filament). Set by the fragment
+// shader from _Anisotropy; 0 keeps every lobe isotropic and the code below unused.
+static half nataneAniso = 0.0;
+static half3 nataneAnisoT = half3(1.0, 0.0, 0.0);
+static half3 nataneAnisoB = half3(0.0, 1.0, 0.0);
+
+half NataneGGX_D_Aniso(half NdotH, half TdotH, half BdotH, half roughness, half anisotropy)
+{
+    float at = max((float)roughness * (1.0 + (float)anisotropy), 0.003);
+    float ab = max((float)roughness * (1.0 - (float)anisotropy), 0.003);
+    float a2 = at * ab;
+    float3 v = float3(ab * TdotH, at * BdotH, a2 * NdotH);
+    float w2 = a2 / max(dot(v, v), 1e-7);
+    return min(a2 * w2 * w2 / UNITY_PI, 16384.0);
+}
+
 // Full PBR Direct Specular (Cook-Torrance microfacet BRDF)
 half3 NatanePBRSpecular(half3 normal, half3 viewDir, half3 lightDir,
                          half roughness, half3 F0, half3 lightColor, half atten)
@@ -65,6 +81,10 @@ half3 NatanePBRSpecular(half3 normal, half3 viewDir, half3 lightDir,
     half VdotH = max(0.001, dot(viewDir, H));
 
     half D = NataneGGX_D(NdotH, roughness);
+    if (abs(nataneAniso) > 0.001)
+    {
+        D = NataneGGX_D_Aniso(NdotH, dot(nataneAnisoT, H), dot(nataneAnisoB, H), roughness, nataneAniso);
+    }
     half G = NataneGGX_G(NdotL, NdotV, roughness);
     half3 F = NataneSchlickFresnel(VdotH, F0);
 
@@ -77,6 +97,11 @@ half3 NatanePBRIndirectSpecular(half3 worldNormal, half3 viewDir, half3 worldPos
                                 half roughness, half3 F0)
 {
     half3 reflDir = reflect(-viewDir, worldNormal);
+    if (_ReflectionOffSpecular > 0.001)
+    {
+        reflDir = normalize(lerp(reflDir, NataneSpecularDominantDir(worldNormal, reflDir, roughness),
+                                 saturate(_ReflectionOffSpecular)));
+    }
     half mipLevel = roughness * 7.0;
 
     // Box projection for Reflection Probe 0 (if enabled)
