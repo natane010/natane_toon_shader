@@ -222,6 +222,8 @@ namespace NataneToon.Editor
             new[] { "_USE_LIGHT_VOLUME" },                                // Light Volume SH モード
             new[] { "_AUDIOLINK", "_EMISSION" },
             new[] { "_REFLECTION", "_ENV_RIM", "_FAKE_REFLECTION" },
+            new[] { "_HAIR_SPECULAR", "_USE_AO", "_REFLECTION", "_PBR_LIKE" }, // 髪リム透過 / AO 影ウェイト / 露出オクルージョン
+            new[] { "_PBR", "_USE_AO" },                                  // 露出オクルージョン（PBR 経路）
             new[] { "_REFRACTION" },
             new[] { "_DITHERING_ALPHA" },
             new[] { "_HASHED_ALPHA" },

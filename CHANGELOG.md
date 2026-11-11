@@ -7,6 +7,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added — 目・顔・髪・反射の表現
+すべて Uniform のみ・既定値は無効（0）。既存マテリアルの見た目は変わらず、キーワードも増えない。
+- **角膜の屈折** (Eye: `_CorneaRefraction` / `_CorneaIOR` / `_CorneaBulge`): 虹彩の奥行きを、視線を角膜で屈折させて
+  虹彩面と交差させる方式に切り替える（Unity HDRP の Eye と同じ考え方を UV 単位で実装）。角膜のふくらみは解析的に与える。
+- **ライト連動コースティクス** (Eye: `_LightCausticIntensity`): ライトの反対側の虹彩が明るくなる。
+  リアルタイムライトが無いときは SH の主方向を使う。
+- **まぶたの影** (Eye: `_LidShadow*`): 瞳の上側に影の帯を重ね、ハイライトも一緒に暗くする。
+- **顔の陰影をフラットに** (`_FaceFlatten`): 陰影用の法線を顔の正面方向へ寄せる。
+- **AO で影に入りやすくする** (`_AOShadowProne`): AO マップの暗い部分ほど、ライトの向きに関係なく先に影へ入る。
+- **髪の逆光リム透過** (`_HairRimTransmission`): 逆光で髪のシルエットが光を通して輝く。
+- **暗所での反射抑制** (`_ReflectionExposureOcclusion`): 周囲が暗いときリフレクションプローブの映り込みを弱める。
+
+### Changed
+- Eye シェーダーのパスに `LightMode = ForwardBase` を指定（ライト方向を取得するため。描画回数は変わらない）。
+
 ## [1.7.0] - 2026-11-11
 
 ### Added — リアル調トゥーンのマット質感 / Light Volume

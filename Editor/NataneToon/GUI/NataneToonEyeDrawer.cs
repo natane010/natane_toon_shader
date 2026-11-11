@@ -247,6 +247,21 @@ namespace NataneToon.Editor
             DrawProperty("_CorneaSpecIntensity", L("Cornea Spec Intensity", "Cornea Spec Intensity"));
             DrawProperty("_CorneaSpecSmoothness", L("Cornea Smoothness", "Cornea Smoothness"));
             DrawProperty("_CorneaFresnelPower", L("Cornea Fresnel", "Cornea Fresnel"));
+            EditorGUILayout.Space(4);
+            DrawProperty("_CorneaRefraction", L("角膜の屈折", "Cornea Refraction"));
+            DrawProperty("_CorneaIOR", L("角膜の屈折率", "Cornea IOR"));
+            DrawProperty("_CorneaBulge", L("角膜のふくらみ", "Cornea Bulge"));
+            DrawProperty("_LightCausticIntensity", L("ライト連動コースティクス", "Light Caustic Intensity"));
+            EditorGUILayout.Space(4);
+            DrawProperty("_LidShadowStrength", L("まぶたの影の強さ", "Lid Shadow Strength"));
+            DrawProperty("_LidShadowColor", L("まぶたの影の色", "Lid Shadow Color"));
+            DrawProperty("_LidShadowHeight", L("まぶたの影の高さ", "Lid Shadow Height"));
+            DrawProperty("_LidShadowSoftness", L("まぶたの影のぼかし", "Lid Shadow Softness"));
+            DrawProperty("_LidShadowCurve", L("まぶたの影のカーブ", "Lid Shadow Curve"));
+            DrawProperty("_LidShadowFlip", L("まぶたの影を上下反転", "Lid Shadow Flip"));
+            EditorGUILayout.HelpBox(
+                L("角膜の屈折：虹彩の奥行きを屈折計算に切り替えます（0 で従来のパララックス）。ライト連動コースティクス：ライトの反対側の虹彩が明るくなります。まぶたの影：瞳の上側に影の帯を重ね、ハイライトも一緒に暗くします。いずれも 0 で無効です。", "Cornea Refraction switches iris depth to a refracted ray (0 = previous parallax). Light Caustic brightens the iris on the side opposite the light. Lid Shadow overlays a shadow band on the upper eye and dims highlights with it. All are off at 0."),
+                MessageType.None);
             EditorGUILayout.HelpBox(
                 L("虹彩の奥行き、輪部リング、白目の陰影、角膜風のハイライトを追加します。まず『リアルな瞳』を有効にしてから、虹彩の奥行きや角膜まわりを調整してください。", "Adds iris depth, limbal ring, sclera shading, and a cornea-like top highlight. Enable Realistic Eye first, then tune Iris Depth and Cornea controls."),
                 MessageType.None);

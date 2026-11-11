@@ -747,6 +747,16 @@ half4 frag(v2f i) : SV_Target
             shadingNormal = normalize(lerp(worldNormal, smoothN, _SmoothNormalShadingBlend));
         }
     #endif
+    // ===== Face shading flatten =====
+    // Pulls the shading normal towards the face-forward axis, so cheeks, nose and brow
+    // stop producing mesh-dependent blotches and the face switches between lit and shade
+    // more as one plane (the "reduce diffuse shading on the face" practice of anime
+    // character shaders). Normal-map detail, specular and rim keep the real normal.
+    if (_FaceFlatten > 0.001)
+    {
+        half3 faceFlattenAxis = normalize(mul((float3x3)unity_ObjectToWorld, _FaceForwardDirection.xyz) + float3(0, 0, 0.0001));
+        shadingNormal = normalize(lerp(shadingNormal, faceFlattenAxis, saturate(_FaceFlatten) * 0.98) + float3(0, 0.0001, 0));
+    }
     half ndotl = dot(shadingNormal, lightDir);
 
     // ===== Bump terminator softening =====
@@ -872,11 +882,19 @@ half4 frag(v2f i) : SV_Target
 
     // ===== AO (pre-calculate before shading branch) =====
     half aoEffect = 1.0;
+    // 1 = reflections untouched. Set in the ForwardBase indirect step.
+    half exposureOcclusion = 1.0;
     #ifdef _USE_AO
         half ao = NATANE_SAMPLE_SHARED_BLUR_R(_AOMap, _MainTex, uv, _AOBlur);
         ao = ApplySoftMask(ao);
         aoEffect = lerp(1.0, ao, _AOIntensity);
         aoForIndirect = lerp(1.0, ao, _AOIntensity * AO_INDIRECT_STRENGTH);
+
+        // Shadow proneness: occluded texels drop into shade earlier and stay there, so
+        // creases and the under-chin read as stable painted shadows (the AO-like
+        // "how easily this area goes into shade" weight of Guilty Gear Xrd's ILM map).
+        // Unlike the micro shadow below it does not depend on the light angle.
+        lightTerm -= (1.0 - aoEffect) * saturate(_AOShadowProne);
 
         // Micro-shadowing (Chan, "Material Advances in Call of Duty: WWII", SIGGRAPH 2018;
         // form used by Filament). The AO value is read as the opening of a cone above the
@@ -1122,6 +1140,14 @@ half4 frag(v2f i) : SV_Target
             ambient *= _IndirectLightIntensity * _GIIntensity;
         #endif
 
+        // Exposure occlusion (as in Filamented): probe reflections are faded where the
+        // light actually reaching the surface is dark, so a bright reflection probe does not
+        // make skin, eyes and metal glow inside a dark room.
+        if (_ReflectionExposureOcclusion > 0.001)
+        {
+            exposureOcclusion = saturate(length(indirectResult + effectiveLightColor) / _ReflectionExposureOcclusion);
+        }
+
         // Indirect light minimum color (prevents completely dark characters in dark worlds)
         indirectResult = max(indirectResult, _IndirectLightMinColor.rgb);
         indirectResult *= _IndirectLightIntensity * _GIIntensity;
@@ -1243,7 +1269,7 @@ half4 frag(v2f i) : SV_Target
                 roughness, F0);
             half pbrOcclusion = NATANE_SAMPLE_SHARED_R(_PBR_OcclusionMap, _PBR_MetallicGlossMap, uv);
             pbrOcclusion = lerp(1.0, pbrOcclusion, _PBR_OcclusionStrength);
-            indirectSpec *= pbrOcclusion * _PBR_ReflectionIntensity * basePbrWeight;
+            indirectSpec *= pbrOcclusion * _PBR_ReflectionIntensity * basePbrWeight * exposureOcclusion;
             additionalResult += indirectSpec;
         }
         #endif
@@ -1273,7 +1299,7 @@ half4 frag(v2f i) : SV_Target
 
                 half3 pbrLikeIndirectSpec = NatanePBRIndirectSpecular(worldNormal, viewDir, i.worldPos,
                     roughness, F0);
-                pbrLikeIndirectSpec *= pbrLikeReflectionIntensity * _Glossiness * specularOcclusion * skinPrimaryStrength * basePbrWeight;
+                pbrLikeIndirectSpec *= pbrLikeReflectionIntensity * _Glossiness * specularOcclusion * skinPrimaryStrength * basePbrWeight * exposureOcclusion;
                 pbrLikeIndirectSpec = ApplyMatteQuality(pbrLikeIndirectSpec, col.rgb, _MatteEffect);
                 additionalResult += pbrLikeIndirectSpec;
             #endif
@@ -1311,7 +1337,7 @@ half4 frag(v2f i) : SV_Target
                         half3 skinSecondaryIndirectSpec = NatanePBRIndirectSpecular(worldNormal, viewDir, i.worldPos,
                             secondaryRoughness, secondaryF0);
                         skinSecondaryIndirectSpec *= skinSecondaryReflectionIntensity * _SkinSpecSecondaryColor.rgb
-                            * _Glossiness * specularOcclusion * secondaryStrength * skinFresnelFactor;
+                            * _Glossiness * specularOcclusion * secondaryStrength * skinFresnelFactor * exposureOcclusion;
                         skinSecondaryIndirectSpec = ApplyMatteQuality(skinSecondaryIndirectSpec, col.rgb, _MatteEffect);
                         additionalResult += skinSecondaryIndirectSpec;
                     #endif
@@ -1777,6 +1803,23 @@ half4 frag(v2f i) : SV_Target
         hairSpec *= effectiveLightColor * atten;
         hairTransmission *= effectiveLightColor * atten;
 
+        // Rim transmission (the scatter term of Unity HDRP's Kajiya-Kay hair): light from
+        // behind glows through the silhouette of the hair. Uses the geometric normal so a
+        // normal map cannot break up the halo. In ForwardBase the cast shadow only half
+        // applies: back-lit hair is always inside its own shadow, which would erase it.
+        if (_HairRimTransmission > 0.001)
+        {
+            half hairRimNdotV = saturate(dot(normalize(i.worldNormal), viewDir));
+            half hairRim = pow(saturate(-dot(lightDir, viewDir)), 9.0)
+                         * pow(saturate(1.0 - hairRimNdotV * hairRimNdotV), 12.0);
+            #ifdef UNITY_PASS_FORWARDBASE
+                half hairRimAtten = lerp(1.0, atten, 0.5);
+            #else
+                half hairRimAtten = atten;
+            #endif
+            hairTransmission += _HairTransmissionColor.rgb * effectiveLightColor * (hairRim * _HairRimTransmission * hairRimAtten);
+        }
+
         // Apply additional light intensity scaling in ForwardAdd pass
         #ifndef UNITY_PASS_FORWARDBASE
             hairSpec *= _AdditionalLightIntensity;
@@ -2210,7 +2253,7 @@ half4 frag(v2f i) : SV_Target
         reflection *= reflectionMask;
 
         // Apply glossiness and matte material quality
-        reflection *= _Glossiness * specularOcclusion;
+        reflection *= _Glossiness * specularOcclusion * exposureOcclusion;
         reflection = ApplyMatteQuality(reflection, col.rgb, _MatteEffect);
 
         // Use safe additive blending to prevent white-out
@@ -2248,7 +2291,7 @@ half4 frag(v2f i) : SV_Target
             half3 clearCoat = NatanePBRSpecular(coatNormalWS, viewDir, lightDir,
                 coatRoughness, coatF0, effectiveLightColor, atten);
             clearCoat += NatanePBRIndirectSpecular(coatNormalWS, viewDir, i.worldPos,
-                coatRoughness, coatF0) * _GIIntensity * coatFresnelFactor;
+                coatRoughness, coatF0) * _GIIntensity * coatFresnelFactor * exposureOcclusion;
 
             clearCoat *= coatStrength * specularOcclusion;
             clearCoat = ApplyMatteQuality(clearCoat, col.rgb, _MatteEffect);

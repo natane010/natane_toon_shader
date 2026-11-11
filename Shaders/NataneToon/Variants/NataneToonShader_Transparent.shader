@@ -207,6 +207,10 @@ Shader "Natane/Toon Shader (Transparent)"
         _AOIntensity ("AO Intensity", Range(0, 1)) = 1
         _AOMultiBounce ("AO Multi-Bounce Color", Range(0, 1)) = 0
         _AOMicroShadow ("AO Micro Shadow", Range(0, 1)) = 0
+        _AOShadowProne ("AO Shadow Proneness", Range(0, 1)) = 0
+        _FaceFlatten ("Face Shading Flatten", Range(0, 1)) = 0
+        _HairRimTransmission ("Hair Rim Transmission", Range(0, 3)) = 0
+        _ReflectionExposureOcclusion ("Reflection Exposure Occlusion", Range(0, 1)) = 0
         [Enum(Normal,0,Soft,1,Screen,2,Overlay,3)] _AOBlendMode ("AO Blend Mode", Float) = 0
         _AOBlend ("AO Blend", Range(0, 1)) = 1
         _AOBlur ("AO Blur", Range(0, 1)) = 0

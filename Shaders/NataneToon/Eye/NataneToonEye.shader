@@ -31,6 +31,16 @@ Shader "Natane/Eye"
         _CorneaSpecIntensity ("Cornea Spec Intensity", Range(0, 3)) = 0
         _CorneaSpecSmoothness ("Cornea Spec Smoothness", Range(0, 1)) = 0.92
         _CorneaFresnelPower ("Cornea Fresnel Power", Range(0.5, 8)) = 4
+        _CorneaRefraction ("Cornea Refraction", Range(0, 1)) = 0
+        _CorneaIOR ("Cornea IOR", Range(1, 1.6)) = 1.333
+        _CorneaBulge ("Cornea Bulge", Range(0, 1)) = 0.5
+        _LightCausticIntensity ("Light Caustic Intensity", Range(0, 3)) = 0
+        _LidShadowColor ("Lid Shadow Color", Color) = (0.55, 0.5, 0.62, 1)
+        _LidShadowStrength ("Lid Shadow Strength", Range(0, 1)) = 0
+        _LidShadowHeight ("Lid Shadow Height", Range(-1.5, 1.5)) = 0.5
+        _LidShadowSoftness ("Lid Shadow Softness", Range(0.01, 1)) = 0.4
+        _LidShadowCurve ("Lid Shadow Curve", Range(-1, 1)) = 0.3
+        [Toggle] _LidShadowFlip ("Lid Shadow Flip", Float) = 0
 
         [Header(___________________________________________________)]
         [Header(Dual Eye Centers)]
@@ -255,6 +265,9 @@ Shader "Natane/Eye"
 
         Pass
         {
+            // ForwardBase so _WorldSpaceLightPos0 / _LightColor0 / SH are valid for the
+            // light-driven iris caustic. The pass is still drawn exactly once.
+            Tags { "LightMode" = "ForwardBase" }
             CGPROGRAM
             #pragma vertex vert
             #pragma fragment frag
@@ -283,6 +296,7 @@ Shader "Natane/Eye"
                 float4 vertex : SV_POSITION;
                 float2 viewDir : TEXCOORD2;
                 float3 rawViewDir : TEXCOORD5;
+                float3 lightDirTS : TEXCOORD6;
                 float4 screenPos : TEXCOORD3;
                 float2 screenRatio : TEXCOORD4;
                 UNITY_VERTEX_INPUT_INSTANCE_ID
@@ -311,6 +325,12 @@ Shader "Natane/Eye"
             float _UseRealisticEye, _IrisDepth, _IrisDepthRadius, _LimbalRingWidth, _LimbalRingIntensity;
             float _ScleraShadowStrength, _CorneaSpecIntensity, _CorneaSpecSmoothness, _CorneaFresnelPower;
             float4 _LimbalRingColor, _ScleraTint, _CorneaSpecColor;
+            float _CorneaRefraction, _CorneaIOR, _CorneaBulge, _LightCausticIntensity;
+            float _LidShadowStrength, _LidShadowHeight, _LidShadowSoftness, _LidShadowCurve, _LidShadowFlip;
+            float4 _LidShadowColor;
+            fixed4 _LightColor0;
+            // Tangent-space direction to the key light for the current pixel (set in frag).
+            static float3 NTEye_LightDirTS = float3(0.0, 0.0, 1.0);
             int _EyeState;
 
             float _DetailBrightness;
@@ -544,6 +564,28 @@ Shader "Natane/Eye"
 
                 float irisMask = NTEye_GetIrisMask(uv, center, _IrisDepthRadius);
                 float2 irisDepthUV = NTEye_GenerateParallaxUV(uv, viewDirection, _IrisDepth);
+
+                // Cornea refraction: refract the view ray at a virtual cornea dome and
+                // intersect the iris plane below it (the refract-then-intersect form used by
+                // Unity HDRP's eye, done here in tangent/UV units so mesh scale does not
+                // matter). Unlike the linear offset above, the shift stays bounded at grazing
+                // angles and both VR eyes agree on the iris depth.
+                if (_CorneaRefraction > 0.001)
+                {
+                    float2 local = NTEye_GetPupilLocal(uv, center);
+                    float irisR = max(_IrisDepthRadius, 0.001);
+                    float dome = saturate(1.0 - dot(local, local) / (irisR * irisR));
+                    float3 viewTS = float3(viewDirection, sqrt(saturate(1.0 - dot(viewDirection, viewDirection))));
+                    // Analytic bulge: the dome's normal tilts outwards towards the limbus and
+                    // the chamber gets shallower there, so the refraction meets the sclera
+                    // without a seam.
+                    float3 corneaN = normalize(float3(local / irisR * (_CorneaBulge * 0.6), 1.0));
+                    float3 refr = refract(-viewTS, corneaN, 1.0 / max(_CorneaIOR, 1.0));
+                    float2 slope = refr.xy / max(-refr.z, 0.25);
+                    float chamber = -_IrisDepth * lerp(1.0, dome, saturate(_CorneaBulge));
+                    float2 refractedUV = uv + slope * chamber * _MainParallax;
+                    irisDepthUV = lerp(irisDepthUV, refractedUV, saturate(_CorneaRefraction));
+                }
                 return lerp(uv, irisDepthUV, irisMask);
             }
 
@@ -646,6 +688,33 @@ Shader "Natane/Eye"
                 float corneaFresnel = pow(saturate(length(workingViewDir)), max(0.5, _CorneaFresnelPower));
                 float corneaMask = saturate((corneaSpark + corneaFresnel * 0.35) * _CorneaSpecIntensity);
                 col.rgb += _CorneaSpecColor.rgb * corneaMask * _CorneaSpecColor.a;
+
+                // Light-driven iris caustic: the cornea focuses light onto the side of the
+                // iris opposite the light (empirical form from Unity HDRP's eye:
+                // 2 * saturate(dot(-radialDir, lightDir.xy))^2, half weight).
+                if (_LightCausticIntensity > 0.001)
+                {
+                    float2 lightXY = NTEye_LightDirTS.xy;
+                    float lightLen = length(lightXY);
+                    float2 radialDir = localUV / max(radial, 0.0001);
+                    float facing = saturate(dot(-radialDir, lightXY / max(lightLen, 0.0001)));
+                    // Fades out for a light straight in front (no side to focus onto) and
+                    // towards the pupil centre, where the radial direction is undefined.
+                    float caustic = 2.0 * facing * facing * irisMask * saturate(lightLen * 2.0)
+                                  * saturate(radial / max(_IrisDepthRadius, 0.001));
+                    col.rgb *= 1.0 + 0.5 * caustic * _LightCausticIntensity;
+                }
+
+                // Upper-lid shadow band. Applied last so it also dims the cornea highlight
+                // and the caustic above (an eye in the lid's shade should not sparkle).
+                if (_LidShadowStrength > 0.001)
+                {
+                    float lidY = (_LidShadowFlip > 0.5) ? -localUV.y : localUV.y;
+                    float lidT = lidY + _LidShadowCurve * localUV.x * localUV.x;
+                    float lid = smoothstep(_LidShadowHeight - _LidShadowSoftness, _LidShadowHeight + _LidShadowSoftness, lidT);
+                    lid = saturate(lid * _LidShadowStrength * _LidShadowColor.a);
+                    col.rgb = lerp(col.rgb, col.rgb * _LidShadowColor.rgb, lid);
+                }
             }
 
             void NTEye_ApplyIrisCaustics(inout fixed4 col, float2 workingUV, float2 workingViewDir, float2 eyeCenter)
@@ -859,6 +928,18 @@ Shader "Natane/Eye"
                 float3 rawViewDir = mul(worldToTangent, WorldSpaceViewDir(v.vertex));
                 o.viewDir = normalize(rawViewDir);
                 o.rawViewDir = rawViewDir;
+
+                // Key light for the iris caustic: realtime light, else the dominant SH
+                // direction, else a fixed upper-front direction so the eye never goes flat.
+                float3 worldPos = mul(unity_ObjectToWorld, v.vertex).xyz;
+                float3 keyDirWS = _WorldSpaceLightPos0.xyz - worldPos * _WorldSpaceLightPos0.w;
+                float keyAmount = dot(_LightColor0.rgb, float3(1.0, 1.0, 1.0)) * dot(keyDirWS, keyDirWS);
+                float3 shDirWS = unity_SHAr.xyz * 0.3 + unity_SHAg.xyz * 0.59 + unity_SHAb.xyz * 0.11;
+                if (keyAmount < 0.0001)
+                {
+                    keyDirWS = (dot(shDirWS, shDirWS) > 0.000001) ? shDirWS : float3(0.3, 0.8, 0.5);
+                }
+                o.lightDirTS = mul(worldToTangent, normalize(keyDirWS));
 
                 o.screenPos = ComputeScreenPos(o.vertex);
                 o.screenRatio = float2(_ScreenParams.x / _ScreenParams.y, 1);
@@ -1105,6 +1186,11 @@ Shader "Natane/Eye"
                 UNITY_SETUP_INSTANCE_ID(i);
                 UNITY_SETUP_STEREO_EYE_INDEX_POST_VERTEX(i);
                 fixed4 baseCol = tex2D(_MainTex, i.uv);
+                NTEye_LightDirTS = normalize(i.lightDirTS);
+                if (_MirrorRightEyeUV > 0.5 && NTEye_IsRightEye(i.uv) > 0.5)
+                {
+                    NTEye_LightDirTS.x = -NTEye_LightDirTS.x;
+                }
                 fixed4 col = DoColor(i);
 
                 DoVignette(col, i);

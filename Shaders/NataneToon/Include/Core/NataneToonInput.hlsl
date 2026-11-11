@@ -190,6 +190,10 @@ CBUFFER_START(UnityPerMaterial)
     float _AOIntensity;
     float _AOMultiBounce;            // 0 = off; coloured multi-bounce AO on indirect light
     float _AOMicroShadow;            // 0 = off; AO-driven micro shadowing of the main light
+    float _AOShadowProne;            // 0 = off; AO map biases the light term towards shade before the ramp
+    float _FaceFlatten;              // 0 = off; blends the shading normal towards the face-forward axis
+    float _HairRimTransmission;      // 0 = off; back-lit silhouette glow on hair
+    float _ReflectionExposureOcclusion; // 0 = off; ambient level below which probe reflections fade out
     float _AOBlend;
     float _AOBlendMode;
     float _AOBlur;

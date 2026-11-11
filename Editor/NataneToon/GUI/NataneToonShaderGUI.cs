@@ -6283,6 +6283,9 @@ public class NataneToonShaderGUI : ShaderGUI
                 DrawProperty("_AOMicroShadow", L("AOマイクロシャドウ", "AO Micro Shadow"),
                     "AO マップをもとに、メインライトの細かな自己影（しわ・織り目・襟元）を足します。影境界そのものが動くのでトゥーンの段と馴染みます。0 で従来どおり。",
                     "Adds small self-shadows from the main light (creases, weave, collars) driven by the AO map. It moves the shading boundary itself, so it blends with toon steps. 0 = as before.");
+                DrawProperty("_AOShadowProne", L("AOで影に入りやすくする", "AO Shadow Proneness"),
+                    "AO マップの暗い部分ほど、ライトの向きに関係なく先に影へ入ります。顎下・首・しわの影が安定し、境界のちらつきをマップで抑えられます。0 で従来どおり。",
+                    "Darker AO texels drop into shade earlier regardless of light angle, giving stable shadows under the chin, on the neck and in creases. 0 = as before.");
                 DrawHelpToggle("AO",
                     L("🌑 アンビエントオクルージョン (AO):\n" +
                     "テクスチャの暗い部分で陰影を追加し、奥行き感を出します。\n" +
@@ -11051,6 +11054,16 @@ public class NataneToonShaderGUI : ShaderGUI
         DrawProperty("_LightVolumeKeyLight", L("ライトボリュームをキーライト化", "Light Volume Key Light"),
             "Light Volumes（ベイク光）の主方向をトゥーンのキーライトとして扱います。リアルタイムライトの無いワールドでも影境界がきれいに出て、影側は実際の環境光より暗くなりません。合成モード Natural で最も効果的。0 で従来どおり。",
             "Treats the dominant direction of the Light Volume (baked light) as a toon key light. Worlds without a realtime light get a clean shading boundary, and the shade never drops below the real ambient. Works best with the Natural blend mode. 0 = as before.");
+
+        DrawProperty("_FaceFlatten", L("顔の陰影をフラットに", "Face Shading Flatten"),
+            "陰影用の法線を顔の正面方向へ寄せ、頬・鼻まわりのメッシュ由来のムラを消します。顔マテリアル向け。SDF 顔影の「顔の正面方向」設定を使います。ハイライトやリムは元の法線のまま。0 で従来どおり。",
+            "Pulls the shading normal towards the face-forward axis to remove mesh-dependent blotches on cheeks and nose. For face materials; uses the Face Forward Direction of the SDF face shadow. Highlights and rim keep the real normal. 0 = as before.");
+        DrawProperty("_HairRimTransmission", L("髪の逆光リム透過", "Hair Rim Transmission"),
+            "逆光のとき髪のシルエットが光を通して輝きます（ヘアスペキュラ有効時のみ）。色は「透過カラー」を使います。0 で従来どおり。",
+            "Back light glows through the hair silhouette (requires Hair Specular). Uses the Transmission Color. 0 = as before.");
+        DrawProperty("_ReflectionExposureOcclusion", L("暗所での反射抑制", "Reflection Exposure Occlusion"),
+            "周囲の光がこの明るさを下回ると、リフレクションプローブの映り込みを弱めます。暗い部屋で肌や金属だけが光って見える現象を抑えます。0 で従来どおり。",
+            "Fades reflection-probe reflections when the light reaching the surface drops below this level, so skin and metal do not glow in dark rooms. 0 = as before.");
 
         DrawMatteMaterialControls();
     }
