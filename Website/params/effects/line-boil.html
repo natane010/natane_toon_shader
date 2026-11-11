@@ -1,0 +1,148 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ラインボイル - Natane Toon Shader</title>
+  <link rel="stylesheet" href="../../styles.css">
+</head>
+<body>
+<header class="site-header"></header>
+<div class="page-wrapper">
+  <aside class="sidebar"></aside>
+  <main class="main-content">
+    <nav class="breadcrumb"></nav>
+    <h1>ラインボイル</h1>
+    <p class="page-subtitle">線が手描きアニメのようにコマ打ちで揺れます。輪郭・ハッチング・水彩の粒が数コマごとにカクッと切り替わり、鉛筆やクレヨンで描いたような手描きの温かみが出ます。(v1.6.0)</p>
+
+    <div class="feature-preview" aria-hidden="true">
+      <span class="preview-tag">PREVIEW</span>
+      <em class="preview-name">Line Boil</em>
+    </div>
+
+    <h2 id="overview">概要</h2>
+    <p>手描きアニメ特有の「線のうねり (boil)」を再現する機能です。滑らかに揺れるのではなく、時間を一定のフレーム数で量子化し、そのタイミングでノイズのシードを切り替えます。これにより、作画した線が<strong>コマごとに置き換わる</strong>2コマ打ち・3コマ打ちのようなアニメ的な揺れになります。</p>
+    <p>キーワード <code>_LINE_BOIL</code> で切り替わり、OFF 時は描画結果に一切変化を与えません (ゼロコスト)。輪郭 (アウトラインパス) には位置・幅のジッター、フラグメント側にはハッチング・スクリーントーン・水彩グレインの UV ジッターとして適用されます。</p>
+
+    <h2 id="looks">作れる表現</h2>
+    <ul>
+      <li>鉛筆で描いた輪郭線、アニメーション原画風の線揺れ</li>
+      <li>絵本・クレヨン・木炭画のような質感</li>
+      <li>ハッチングが微妙に動く漫画表現</li>
+      <li>水彩紙の粒子がコマごとに変わる表現</li>
+      <li>AudioLink と組み合わせて音に反応して線が暴れる表現 (FXモジュレーター併用)</li>
+    </ul>
+
+    <h2 id="key-params">主なパラメータ</h2>
+
+    <div class="param-card">
+      <div class="param-header">
+        <span class="param-name">ボイルの更新フレームレート</span>
+        <span class="param-prop">_LineBoilFPS</span>
+        <span class="param-badge badge-range">range (1〜24)</span>
+      </div>
+      <div class="param-body">
+        <p>1 秒あたり何回ジッターを更新するかです。低いほどカクカクした昔ながらのアニメ調に、高いほど細かく震えます。</p>
+        <p class="param-default">デフォルト: 8</p>
+      </div>
+      <div class="param-tip">クリーンなアニメ調なら 12、鉛筆画なら 8、ストップモーション調なら 4 前後が目安です。</div>
+    </div>
+
+    <div class="param-card">
+      <div class="param-header">
+        <span class="param-name">位相を固定するコマ数</span>
+        <span class="param-prop">_LineBoilHoldFrames</span>
+        <span class="param-badge badge-range">range (1〜8)</span>
+      </div>
+      <div class="param-body">
+        <p>同じ形を何コマ保持するかです。2 にすると「2コマ打ち」、3 で「3コマ打ち」になります。</p>
+        <p class="param-default">デフォルト: 1</p>
+      </div>
+      <div class="param-tip">日本のアニメらしい間 (ま) を出したいときは 2〜3 に設定してください。</div>
+    </div>
+
+    <div class="param-card">
+      <div class="param-header">
+        <span class="param-name">アウトライン位置のジッター量</span>
+        <span class="param-prop">_LineBoilPositionJitter</span>
+        <span class="param-badge badge-range">range (0〜5)</span>
+      </div>
+      <div class="param-body">
+        <p>アウトライン頂点をどれだけ揺らすかです (×0.001 オブジェクト空間)。大きいほど線が大胆に暴れます。</p>
+        <p class="param-default">デフォルト: 1</p>
+      </div>
+      <div class="param-tip">ラフスケッチ調にしたいときは大きめ、清書調なら小さめに。</div>
+    </div>
+
+    <div class="param-card">
+      <div class="param-header">
+        <span class="param-name">アウトライン幅の乱れ量</span>
+        <span class="param-prop">_LineBoilWidthJitter</span>
+        <span class="param-badge badge-range">range (0〜1)</span>
+      </div>
+      <div class="param-body">
+        <p>アウトラインの太さをコマごとに乱す量です。線に強弱がついて、筆圧のある手描きらしさが出ます。</p>
+        <p class="param-default">デフォルト: 0.2</p>
+      </div>
+    </div>
+
+    <div class="param-card">
+      <div class="param-header">
+        <span class="param-name">UV ジッター量</span>
+        <span class="param-prop">_LineBoilUVJitter</span>
+        <span class="param-badge badge-range">range (0〜0.05)</span>
+      </div>
+      <div class="param-body">
+        <p>ハッチング・スクリーントーン・水彩などのテクスチャ UV を揺らす量です。紙目や網点がコマごとにずれて動きます。</p>
+        <p class="param-default">デフォルト: 0.005</p>
+      </div>
+    </div>
+
+    <h2 id="all-params">すべてのパラメータ</h2>
+    <table>
+      <thead>
+        <tr><th>プロパティ</th><th>型 / 既定</th><th>説明</th></tr>
+      </thead>
+      <tbody>
+        <tr><td><code>_LineBoil</code></td><td>Toggle / 0</td><td>機能の有効化 (<code>_LINE_BOIL</code>)</td></tr>
+        <tr><td><code>_LineBoilFPS</code></td><td>Range(1,24) / 8</td><td>ボイルの更新フレームレート</td></tr>
+        <tr><td><code>_LineBoilPositionJitter</code></td><td>Range(0,5) / 1</td><td>アウトライン頂点の位置ジッター量</td></tr>
+        <tr><td><code>_LineBoilWidthJitter</code></td><td>Range(0,1) / 0.2</td><td>アウトライン幅の乱れ量</td></tr>
+        <tr><td><code>_LineBoilUVJitter</code></td><td>Range(0,0.05) / 0.005</td><td>フラグメント側 UV ジッター量</td></tr>
+        <tr><td><code>_LineBoilHoldFrames</code></td><td>Range(1,8) / 1</td><td>位相を固定するコマ数 (2 = 2コマ打ち)</td></tr>
+        <tr><td><code>_LineBoilRandomSeed</code></td><td>Float / 0</td><td>位相シードのオフセット (マテリアルごとの揺れ方)</td></tr>
+        <tr><td><code>_LineBoilAffectOutline</code></td><td>Toggle / 1</td><td>アウトライン (位置/幅) に適用</td></tr>
+        <tr><td><code>_LineBoilAffectHatching</code></td><td>Toggle / 1</td><td>ハッチング / スクリーントーン / 影エッジノイズの UV に適用</td></tr>
+        <tr><td><code>_LineBoilAffectWatercolor</code></td><td>Toggle / 1</td><td>水彩グレインの UV に適用</td></tr>
+        <tr><td><code>_LineBoilMaskTex</code></td><td>2D (R) / white</td><td>R チャンネルでボイル強度をマスク</td></tr>
+      </tbody>
+    </table>
+
+    <h2 id="presets">プリセット値</h2>
+    <table>
+      <thead>
+        <tr><th>プリセット</th><th>FPS</th><th>HoldFrames</th><th>PositionJitter</th><th>WidthJitter</th><th>UVJitter</th></tr>
+      </thead>
+      <tbody>
+        <tr><td>Clean Anime (クリーンアニメ)</td><td>12</td><td>2</td><td>0.4</td><td>0.10</td><td>0.002</td></tr>
+        <tr><td>Pencil (鉛筆)</td><td>8</td><td>2</td><td>1.0</td><td>0.25</td><td>0.006</td></tr>
+        <tr><td>Rough Sketch (ラフスケッチ)</td><td>6</td><td>1</td><td>2.5</td><td>0.50</td><td>0.012</td></tr>
+        <tr><td>Stop Motion (ストップモーション)</td><td>4</td><td>3</td><td>1.5</td><td>0.30</td><td>0.008</td></tr>
+      </tbody>
+    </table>
+
+    <h2 id="tips">使い方のヒント</h2>
+    <ul>
+      <li><strong>適用先を選ぶ</strong>: <code>_LineBoilAffectOutline</code> / <code>AffectHatching</code> / <code>AffectWatercolor</code> で、揺らす対象を個別に ON/OFF できます。線だけ揺らしたいときは他を OFF に。</li>
+      <li><strong>手描きアニメ調のまとめ方</strong>: <a href="watercolor.html">水彩</a>・<a href="screen-tone.html">スクリーントーン</a>・<a href="outline.html">アウトライン</a>・<a href="color-quantize.html">カラー量子化</a>を同じ低 FPS で揺らすと、輪郭・影・紙目が一体となった統一感のある手描きルックになります。</li>
+      <li><strong>マスク</strong>: <code>_LineBoilMaskTex</code> の R チャンネルで、揺らす範囲を部分的に制御できます。</li>
+      <li>頂点位置そのものは変化しないため、FORWARD_ADD でのデシンク (二重光源でのズレ) は起きません。fwidth ベースのトゥーン段差 AA とも共存します。</li>
+    </ul>
+
+    <nav class="page-nav"></nav>
+  </main>
+</div>
+<footer class="site-footer">&copy; 2025 Natane Toon Shader.</footer>
+<script src="../../nav.js"></script>
+</body>
+</html>

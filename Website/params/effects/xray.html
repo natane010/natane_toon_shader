@@ -1,0 +1,93 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>X-Ray - Natane Toon Shader</title>
+  <link rel="stylesheet" href="../../styles.css">
+</head>
+<body>
+<header class="site-header"></header>
+<div class="page-wrapper">
+  <aside class="sidebar"></aside>
+  <main class="main-content">
+    <nav class="breadcrumb"></nav>
+    <h1>X-Ray</h1>
+    <p class="page-subtitle">壁やほかのオブジェクトに隠れている部分だけを、別の色・輪郭・パターンで透かして表示します。壁越しのキャラ輪郭、索敵表示、幽霊の「隠れると見える」表現を作れる専用バリアントです。(v1.6.0)</p>
+
+    <div class="feature-preview" aria-hidden="true">
+      <span class="preview-tag">PREVIEW</span>
+      <em class="preview-name">X-Ray</em>
+    </div>
+
+    <h2 id="overview">概要</h2>
+    <p>X-Ray は<strong>遮蔽シルエット専用のシェーダーバリアント</strong> <code>Natane/Toon Shader (X-Ray)</code> です。追加の深度テストパスを必要とするため通常シェーダーには常設せず、専用バリアントとして提供しています。Cutout バリアントをベースに生成されています。</p>
+    <p>見えている部分 (遮蔽されていない部分) は通常の Forward パス (<code>ZTest LEqual</code>) でトゥーンシェーダーの全機能を使って普通に描画されます。これに加えて、OUTLINE パスの直後・通常 Forward パスの前に <strong>X-RAY パス</strong> を 1 枚描画します。このパスは <code>ZTest Greater</code> でデプスバッファより奥にあるフラグメント = 遮蔽されている部分だけを描画します。</p>
+    <p>頂点シェーダーは通常の <code>vert</code> を共有するため、VAT / スメア / パースペクティブフラット / 顔直交投影などの頂点変形を有効にしても透視シルエットが本体と一致します。Stencil は SubShader レベルで宣言され、X-RAY パスにも適用されます。</p>
+
+    <h2 id="modes">表示モード (<code>_XRayMode</code>)</h2>
+    <table>
+      <thead>
+        <tr><th>値</th><th>モード</th><th>内容</th></tr>
+      </thead>
+      <tbody>
+        <tr><td>0</td><td>OutlineOnly</td><td>フレネルエッジのみを残す (<code>_XRayOutlineWidth</code> で細さ調整)</td></tr>
+        <tr><td>1</td><td>SolidFill</td><td><code>_XRayOccludedAlpha</code> によるフラットな塗りつぶし</td></tr>
+        <tr><td>2</td><td>DitherFill</td><td>Bayer 4x4 ディザによる網点塗り (スクリーン画素基準)</td></tr>
+        <tr><td>3</td><td>Scanline</td><td>スキャンライン (スクリーン空間 / ワールド Y を選択)</td></tr>
+        <tr><td>4</td><td>Fresnel</td><td>リムグラデーション塗り + エッジへの加算発光 (既定モード)</td></tr>
+        <tr><td>5</td><td>Pulse</td><td>時間サイン波でアルファを点滅 (<code>_XRayPulseSpeed</code>)</td></tr>
+        <tr><td>6</td><td>DepthGradient</td><td>視点深度に応じてフェード (<code>_XRayDepthFade</code>)</td></tr>
+      </tbody>
+    </table>
+    <p>Wireframe モードは追加のジオメトリシェーダー / バリセントリック座標が必要なため非対応です。線的な表現は OutlineOnly / Scanline で代替できます。</p>
+
+    <h2 id="params">パラメータ</h2>
+    <table>
+      <thead>
+        <tr><th>プロパティ</th><th>説明</th><th>既定値</th></tr>
+      </thead>
+      <tbody>
+        <tr><td><code>_XRayColor</code> (HDR)</td><td>遮蔽部分の色。Bloom と組み合わせると発光する</td><td>(0.3, 0.8, 1.5, 1)</td></tr>
+        <tr><td><code>_XRayOccludedAlpha</code></td><td>遮蔽部分の基本不透明度</td><td>0.6</td></tr>
+        <tr><td><code>_XRayMode</code></td><td>表示モード (上表)</td><td>4 (Fresnel)</td></tr>
+        <tr><td><code>_XRayOutlineWidth</code></td><td>OutlineOnly モードのフレネル輪郭幅 (pow)</td><td>4</td></tr>
+        <tr><td><code>_XRayDepthFade</code></td><td>DepthGradient モードの視点深度フェード距離</td><td>10</td></tr>
+        <tr><td><code>_XRayScanlineScale</code></td><td>スキャンライン間隔</td><td>80</td></tr>
+        <tr><td><code>_XRayScanlineSpeed</code></td><td>スキャンライン移動速度</td><td>1</td></tr>
+        <tr><td><code>_XRayScanlineSpace</code></td><td>スキャンライン座標系 (0=スクリーン, 1=ワールドY)</td><td>0</td></tr>
+        <tr><td><code>_XRayFresnelPower</code></td><td>Fresnel モードの輪郭鋭さ</td><td>2.5</td></tr>
+        <tr><td><code>_XRayPulseSpeed</code></td><td>Pulse モードの点滅速度</td><td>3</td></tr>
+        <tr><td><code>_XRaySrcBlend</code> / <code>_XRayDstBlend</code></td><td>X-RAY パスのブレンド係数 (加算なら One One)</td><td>SrcAlpha / OneMinusSrcAlpha</td></tr>
+        <tr><td>Stencil (<code>_StencilRef</code> 他)</td><td>SubShader レベルの Stencil 制御 (全パス共通)</td><td>&mdash;</td></tr>
+      </tbody>
+    </table>
+    <p>テクスチャのアルファ (<code>_MainTex.a &times; _Color.a</code>) でマスクされ、小さなクリップ閾値によってカットアウト部分 (穴) が壁越しに光らないようになっています。</p>
+
+    <h2 id="usage">主な用途</h2>
+    <ul>
+      <li>ワールド演出 / 自己遮蔽の小物: 壁越しのキャラクター輪郭、索敵表示、隠れた演者・アイテムの強調</li>
+      <li>サイバースキャン演出 (等高線と併用してスキャン線 + 透視表示)</li>
+      <li>幽霊 / 霊体の「隠れると見える」表現</li>
+    </ul>
+
+    <h3 id="vrc">VRChat での挙動</h3>
+    <ul>
+      <li><strong>アバターに使う場合</strong>: 表示されるのは「他プレイヤーのワールド (壁など) を透かして自分が見える」挙動です。他プレイヤー自身のメッシュがデプスに書き込む限り、その奥にいる自分の X-Ray シルエットが見えます。自分自身のメッシュの奥側 (自己遮蔽) も表示されます。</li>
+      <li>Safety でブロックされたアバターは <code>VRCFallback = "ToonCutout"</code> により通常のトゥーンカットアウトに退避します。</li>
+    </ul>
+
+    <h2 id="limits">既知の制限</h2>
+    <ul>
+      <li><strong>描画順 (透明ソート)</strong>: X-RAY パスは <code>LightMode = "Always"</code> のため、後から描画される他の半透明オブジェクトを透かして常に表示されてしまうことがあります。半透明ソートの外側で描かれる構造的な限界で、Ghost / 通常の半透明シェーダーと同様です。</li>
+      <li>Wireframe モードは非対応 (上記参照)。</li>
+      <li>DepthGradient は追加の深度サンプリングを避けるため、フラグメント自身の視点深度による近似としています。</li>
+    </ul>
+
+    <nav class="page-nav"></nav>
+  </main>
+</div>
+<footer class="site-footer">&copy; 2025 Natane Toon Shader.</footer>
+<script src="../../nav.js"></script>
+</body>
+</html>

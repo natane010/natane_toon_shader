@@ -200,16 +200,21 @@ namespace NataneToon.Editor
 
         private void DrawWirelightHeader()
         {
-            GUIStyle headerStyle = new GUIStyle(EditorStyles.boldLabel)
-            {
-                fontSize = 16,
-                alignment = TextAnchor.MiddleCenter,
-                normal = { textColor = new Color(0.3f, 0.7f, 1f) }
-            };
-
-            EditorGUILayout.BeginVertical(HeaderBox);
-            EditorGUILayout.LabelField(L("ナタネトゥーン ワイヤーライト", "Natane Toon Wirelight"), headerStyle);
-            EditorGUILayout.EndVertical();
+            NataneToonSamplerBudgetEstimator.SamplerBudgetEstimate budget = NataneToonSamplerBudgetEstimator.Estimate(targetMaterial);
+            NataneToonInspectorComponents.DrawInspectorHeader(
+                "Natane Toon Shader",
+                L("ワイヤーフレームとサイバー表現", "Wireframe & Cyber Look"),
+                "Wirelight",
+                $"S {budget.EstimatedSamplers}/{budget.Limit}",
+                budget.IsOverLimit
+                    ? NataneInspectorStatus.Error
+                    : budget.IsWarning ? NataneInspectorStatus.Warning : NataneInspectorStatus.Success,
+                () =>
+                {
+                    NataneToonLocalization.ToggleLanguage();
+                    materialEditor?.Repaint();
+                },
+                null);
         }
 
         private void DrawFoldoutSection(string title, ref bool foldout, Action content)

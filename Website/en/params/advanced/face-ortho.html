@@ -1,0 +1,104 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Face Ortho Projection - Natane Toon Shader</title>
+  <link rel="stylesheet" href="../../../styles.css">
+</head>
+<body>
+<header class="site-header"></header>
+<div class="page-wrapper">
+  <aside class="sidebar"></aside>
+  <main class="main-content">
+    <nav class="breadcrumb"></nav>
+    <h1>Face Ortho Projection</h1>
+    <p class="page-subtitle">Keep face proportions ideal at any camera distance or FOV (v1.6.0)</p>
+
+    <h2 id="overview">Overview</h2>
+    <p>Face Ortho Projection keeps the face ideally proportioned regardless of camera distance, FOV, or camera type (desktop / VRChat camera / mirrors). It blends the screen-space projection of masked vertices from perspective toward orthographic around a pivot (the head).</p>
+    <p>Only NDC <code>xy</code> is transformed in the vertex stage; depth, world position, and lighting stay perspective-correct, so shadows, lights, and effects remain consistent. The outline pass applies the identical transform so outlines track the flattened face.</p>
+    <p>Controlled by the keyword <code>_FACE_ORTHO</code>.</p>
+
+    <h2 id="params">Parameters</h2>
+
+    <div class="param-card">
+      <div class="param-header">
+        <span class="param-name">Enable Face Ortho</span>
+        <span class="param-prop">_FaceOrtho</span>
+        <span class="param-badge badge-toggle">toggle</span>
+      </div>
+      <div class="param-body">
+        <p>Toggles the Face Ortho Projection feature. Sets the <code>_FACE_ORTHO</code> keyword when enabled.</p>
+        <p class="param-default">Default: OFF</p>
+      </div>
+      <div class="param-tip">Enable it on the dedicated face material. For materials that include non-face geometry, use the mask texture.</div>
+    </div>
+
+    <div class="param-card">
+      <div class="param-header">
+        <span class="param-name">Ortho Amount</span>
+        <span class="param-prop">_FaceOrthoAmount</span>
+        <span class="param-badge badge-range">range</span>
+      </div>
+      <div class="param-body">
+        <p>Blend amount from perspective to orthographic projection. 0 = normal perspective, 1 = fully orthographic.</p>
+        <p class="param-default">Default: 1.0</p>
+      </div>
+      <div class="param-tip">1.0 gives a face that never distorts at any distance. Start around 0.5 if you want a subtler effect.</div>
+    </div>
+
+    <div class="param-card">
+      <div class="param-header">
+        <span class="param-name">VR Amount</span>
+        <span class="param-prop">_FaceOrthoVRAmount</span>
+        <span class="param-badge badge-range">range</span>
+      </div>
+      <div class="param-body">
+        <p>Strength used instead of <code>_FaceOrthoAmount</code> in VR (stereo rendering). Fully orthographic faces fight stereo depth cues, so the default is conservative.</p>
+        <p class="param-default">Default: 0.3</p>
+      </div>
+      <div class="param-tip">Set to 0 if it feels off in VR. Desktop, camera, and mirror rendering are unaffected.</div>
+    </div>
+
+    <div class="param-card">
+      <div class="param-header">
+        <span class="param-name">Pivot (Object Space)</span>
+        <span class="param-prop">_FaceOrthoPivot</span>
+        <span class="param-badge badge-vector">vector</span>
+      </div>
+      <div class="param-body">
+        <p>Pivot position (object space) around which the projection is flattened, relative to the SkinnedMeshRenderer's root transform. Set it to the head position.</p>
+        <p class="param-default">Default: (0, 1.4, 0)</p>
+      </div>
+      <div class="param-tip">Roughly Y=1.4 for humanoid avatars; adjust for avatar scale. The feature auto-disables when the pivot is not beyond the near plane.</div>
+    </div>
+
+    <div class="param-card">
+      <div class="param-header">
+        <span class="param-name">Mask Texture</span>
+        <span class="param-prop">_FaceOrthoMaskTex</span>
+        <span class="param-badge badge-texture">texture</span>
+      </div>
+      <div class="param-body">
+        <p>Application mask. The R channel is the amount: white = apply, black = do not apply.</p>
+        <p class="param-default">Default: white (applied everywhere)</p>
+      </div>
+      <div class="param-tip">Required for materials that include non-face geometry; feather the neck boundary with a gradient for a natural transition.</div>
+    </div>
+
+    <h2 id="tips">Usage Tips</h2>
+    <ul>
+      <li><strong>Basic steps</strong>: enable on the face material, set the pivot to the head, and assign a mask if needed.</li>
+      <li><strong>Close-up cameras</strong>: especially effective against face distortion from VRChat handheld cameras and close mirrors.</li>
+      <li><strong>Lighting consistency</strong>: applied in both FORWARD_BASE and FORWARD_ADD, so additional lights stay depth-consistent.</li>
+      <li>Related: <a href="perspective-flat.html">Perspective Flat</a> (whole-object depth compression)</li>
+    </ul>
+
+    <nav class="page-nav"></nav>
+  </main>
+</div>
+<footer class="site-footer">&copy; 2025 Natane Toon Shader.</footer>
+<script src="../../../nav.js"></script>
+</body>
+</html>

@@ -1,0 +1,285 @@
+// MapGen_FaceSdfBake.compute
+// Bake a face SDF shadow map: for every texel, find the horizontal light angle at
+// which it flips into shadow, and encode that angle as s = (1 - cos theta) / 2.
+//
+// This is what _FACE_SDF_ROTATION actually consumes. The older generator produced a
+// signed distance field of a mask, which carries no light-angle information at all,
+// so rotation tracking could never work with it.
+//
+// The sweep is a shadow-map pass, not a raycast: 1024^2 x 64 angles would be 67M rays
+// on the CPU. Instead the mesh is rasterized into a light-space depth buffer once per
+// angle (CSRasterDepth) and every texel is tested against it (CSAccumulate).
+//
+// Only the right half of the face (RdotL >= 0) is swept — the shader mirrors UV.x for
+// the other side, so baking both halves would be redundant and could disagree.
+
+#pragma kernel CSClearGBuffer
+#pragma kernel CSBakeGBuffer
+#pragma kernel CSClearDepth
+#pragma kernel CSRasterDepth
+#pragma kernel CSClearState
+#pragma kernel CSAccumulate
+#pragma kernel CSFinalize
+
+// ---- Mesh input ----
+StructuredBuffer<float3> _Vertices;   // world space
+StructuredBuffer<float3> _Normals;    // world space
+StructuredBuffer<float2> _UVs;
+StructuredBuffer<int>    _Triangles;
+int _TriangleCount;
+
+// ---- UV-space G-buffer ----
+RWTexture2D<float4> _PosMap;          // xyz = world position, w = coverage (0/1)
+RWTexture2D<float4> _NrmMap;          // xyz = world normal
+int2 _TexSize;
+
+// ---- Light-space depth buffer ----
+// uint so InterlockedMin can resolve the nearest surface without a depth-test pipeline.
+RWStructuredBuffer<uint> _LightDepth;
+int2 _DepthSize;
+
+// Light-space basis. _LightDir points from the surface toward the light, matching
+// UnityWorldSpaceLightDir() in the runtime shader.
+float3 _LightRight;
+float3 _LightUp;
+float3 _LightDir;
+float3 _BoundsCenter;
+float3 _BoundsExtent;                 // half sizes along right / up / lightDir
+float  _DepthBias;                    // in normalized depth units
+
+// ---- Sweep state ----
+// x = everLit, y = consecutive shadow count, z = transition index (-1 = undetermined),
+// w = everShadow
+RWTexture2D<float4> _State;
+RWTexture2D<float4> _Result;
+int _AngleIndex;
+int _AngleCount;
+
+#define DEPTH_QUANT 16777215.0        // 24-bit; exactly representable in float32
+#define DEPTH_FAR   0xFFFFFFFFu
+
+float Cross2D(float2 a, float2 b)
+{
+    return a.x * b.y - a.y * b.x;
+}
+
+// World position -> light-space (xy in [0,1] across the depth buffer, z in [0,1] with
+// 0 nearest the light).
+float3 WorldToLight(float3 p)
+{
+    float3 d = p - _BoundsCenter;
+    float x = dot(d, _LightRight) / max(_BoundsExtent.x, 1e-5);
+    float y = dot(d, _LightUp)    / max(_BoundsExtent.y, 1e-5);
+    float z = dot(d, _LightDir)   / max(_BoundsExtent.z, 1e-5);
+    // +_LightDir points toward the light, so larger dot == closer to the light.
+    return float3(x * 0.5 + 0.5, y * 0.5 + 0.5, 0.5 - z * 0.5);
+}
+
+// ---- Kernel: clear the UV-space G-buffer ----
+
+[numthreads(8, 8, 1)]
+void CSClearGBuffer(uint3 id : SV_DispatchThreadID)
+{
+    if ((int)id.x >= _TexSize.x || (int)id.y >= _TexSize.y) return;
+    _PosMap[id.xy] = float4(0, 0, 0, 0);
+    _NrmMap[id.xy] = float4(0, 0, 1, 0);
+}
+
+// ---- Kernel: rasterize the mesh into UV space ----
+
+[numthreads(64, 1, 1)]
+void CSBakeGBuffer(uint3 id : SV_DispatchThreadID)
+{
+    uint triIdx = id.x;
+    if (triIdx >= (uint)_TriangleCount) return;
+
+    int i0 = _Triangles[triIdx * 3];
+    int i1 = _Triangles[triIdx * 3 + 1];
+    int i2 = _Triangles[triIdx * 3 + 2];
+
+    float2 p0 = _UVs[i0] * float2(_TexSize);
+    float2 p1 = _UVs[i1] * float2(_TexSize);
+    float2 p2 = _UVs[i2] * float2(_TexSize);
+
+    int2 bmin = clamp(int2(floor(min(p0, min(p1, p2)))), int2(0, 0), _TexSize - int2(1, 1));
+    int2 bmax = clamp(int2(ceil(max(p0, max(p1, p2)))),  int2(0, 0), _TexSize - int2(1, 1));
+
+    float area = Cross2D(p1 - p0, p2 - p0);
+    if (abs(area) < 0.001) return;
+    float invArea = 1.0 / area;
+
+    for (int y = bmin.y; y <= bmax.y; y++)
+    {
+        for (int x = bmin.x; x <= bmax.x; x++)
+        {
+            float2 p = float2(x + 0.5, y + 0.5);
+            float w0 = Cross2D(p1 - p0, p - p0) * invArea;
+            float w1 = Cross2D(p2 - p1, p - p1) * invArea;
+            float w2 = 1.0 - w0 - w1;
+
+            if (w0 >= -0.001 && w1 >= -0.001 && w2 >= -0.001)
+            {
+                float3 pos = _Vertices[i0] * w2 + _Vertices[i1] * w0 + _Vertices[i2] * w1;
+                float3 nrm = _Normals[i0]  * w2 + _Normals[i1]  * w0 + _Normals[i2]  * w1;
+                _PosMap[int2(x, y)] = float4(pos, 1.0);
+                _NrmMap[int2(x, y)] = float4(normalize(nrm), 1.0);
+            }
+        }
+    }
+}
+
+// ---- Kernel: clear the light-space depth buffer ----
+
+[numthreads(64, 1, 1)]
+void CSClearDepth(uint3 id : SV_DispatchThreadID)
+{
+    uint idx = id.x;
+    if (idx >= (uint)(_DepthSize.x * _DepthSize.y)) return;
+    _LightDepth[idx] = DEPTH_FAR;
+}
+
+// ---- Kernel: rasterize the mesh into the light-space depth buffer ----
+
+[numthreads(64, 1, 1)]
+void CSRasterDepth(uint3 id : SV_DispatchThreadID)
+{
+    uint triIdx = id.x;
+    if (triIdx >= (uint)_TriangleCount) return;
+
+    int i0 = _Triangles[triIdx * 3];
+    int i1 = _Triangles[triIdx * 3 + 1];
+    int i2 = _Triangles[triIdx * 3 + 2];
+
+    float3 l0 = WorldToLight(_Vertices[i0]);
+    float3 l1 = WorldToLight(_Vertices[i1]);
+    float3 l2 = WorldToLight(_Vertices[i2]);
+
+    float2 p0 = l0.xy * float2(_DepthSize);
+    float2 p1 = l1.xy * float2(_DepthSize);
+    float2 p2 = l2.xy * float2(_DepthSize);
+
+    int2 bmin = clamp(int2(floor(min(p0, min(p1, p2)))), int2(0, 0), _DepthSize - int2(1, 1));
+    int2 bmax = clamp(int2(ceil(max(p0, max(p1, p2)))),  int2(0, 0), _DepthSize - int2(1, 1));
+
+    float area = Cross2D(p1 - p0, p2 - p0);
+    if (abs(area) < 0.001) return;
+    float invArea = 1.0 / area;
+
+    for (int y = bmin.y; y <= bmax.y; y++)
+    {
+        for (int x = bmin.x; x <= bmax.x; x++)
+        {
+            float2 p = float2(x + 0.5, y + 0.5);
+            float w0 = Cross2D(p1 - p0, p - p0) * invArea;
+            float w1 = Cross2D(p2 - p1, p - p1) * invArea;
+            float w2 = 1.0 - w0 - w1;
+
+            if (w0 >= -0.001 && w1 >= -0.001 && w2 >= -0.001)
+            {
+                float depth = saturate(l0.z * w2 + l1.z * w0 + l2.z * w1);
+                uint quantized = (uint)(depth * DEPTH_QUANT);
+                uint ignored;
+                InterlockedMin(_LightDepth[y * _DepthSize.x + x], quantized, ignored);
+            }
+        }
+    }
+}
+
+// ---- Kernel: reset the sweep state ----
+
+[numthreads(8, 8, 1)]
+void CSClearState(uint3 id : SV_DispatchThreadID)
+{
+    if ((int)id.x >= _TexSize.x || (int)id.y >= _TexSize.y) return;
+    _State[id.xy] = float4(0, 0, -1, 0);
+}
+
+// ---- Kernel: evaluate one angle and update the transition state ----
+
+[numthreads(8, 8, 1)]
+void CSAccumulate(uint3 id : SV_DispatchThreadID)
+{
+    if ((int)id.x >= _TexSize.x || (int)id.y >= _TexSize.y) return;
+
+    float4 pos = _PosMap[id.xy];
+    if (pos.w < 0.5) return;            // texel not covered by the mesh
+
+    float4 state = _State[id.xy];
+    if (state.z >= 0.0) return;         // transition already settled
+
+    float3 nrm = _NrmMap[id.xy].xyz;
+    float ndotl = dot(nrm, _LightDir);
+
+    bool lit = ndotl > 0.0;
+    if (lit)
+    {
+        // Shadow-map test. Compare against the nearest surface along the light ray.
+        float3 ls = WorldToLight(pos.xyz);
+        int2 dp = int2(ls.xy * float2(_DepthSize));
+        if (dp.x >= 0 && dp.y >= 0 && dp.x < _DepthSize.x && dp.y < _DepthSize.y)
+        {
+            uint stored = _LightDepth[dp.y * _DepthSize.x + dp.x];
+            if (stored != DEPTH_FAR)
+            {
+                float storedDepth = (float)stored / DEPTH_QUANT;
+                if (ls.z > storedDepth + _DepthBias)
+                {
+                    lit = false;        // something nearer the light occludes this texel
+                }
+            }
+        }
+    }
+
+    if (lit)
+    {
+        state.x = 1.0;                  // everLit
+        state.y = 0.0;                  // reset the consecutive-shadow run
+    }
+    else
+    {
+        state.w = 1.0;                  // everShadow
+        state.y += 1.0;
+        // Require two consecutive shadowed angles so a single noisy sample — a texel
+        // grazing a depth-buffer edge — does not lock in a bogus transition.
+        if (state.x > 0.5 && state.y >= 2.0)
+        {
+            state.z = (float)_AngleIndex - (state.y - 1.0);
+        }
+    }
+
+    _State[id.xy] = state;
+}
+
+// ---- Kernel: convert the transition index into s = (1 - cos theta) / 2 ----
+
+[numthreads(8, 8, 1)]
+void CSFinalize(uint3 id : SV_DispatchThreadID)
+{
+    if ((int)id.x >= _TexSize.x || (int)id.y >= _TexSize.y) return;
+
+    float coverage = _PosMap[id.xy].w;
+    if (coverage < 0.5)
+    {
+        // Uncovered texels are filled by the dilation pass afterwards.
+        _Result[id.xy] = float4(0, 0, 0, 0);
+        return;
+    }
+
+    float4 state = _State[id.xy];
+    float s;
+
+    if (state.z < 0.0)
+    {
+        // Never flipped: either lit for the whole sweep or shadowed for the whole sweep.
+        s = (state.x > 0.5) ? 1.0 : 0.0;
+    }
+    else
+    {
+        float denom = max((float)(_AngleCount - 1), 1.0);
+        float thetaDeg = 180.0 * state.z / denom;
+        float thetaRad = radians(thetaDeg);
+        s = (1.0 - cos(thetaRad)) * 0.5;
+    }
+
+    _Result[id.xy] = float4(s, s, s, 1.0);
+}

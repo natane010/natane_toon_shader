@@ -151,11 +151,53 @@ v2f vert(appdata v)
 
     // ===== Perspective Flattening (3D → 2D depth compression) =====
     #ifdef _PERSPECTIVE_FLAT
+    // Skipped for oblique (VRChat mirror) and orthographic projections, where
+    // "w * 0.5" is not a mid-depth and the object would sort against the wrong
+    // surfaces (or vanish behind the scene). Must match NataneToonOutlinePass.hlsl.
+    if (!NataneIsObliqueProjection() && !NataneIsOrthoCamera())
     {
         // Compress Z depth toward center to reduce foreshortening
         // This creates a more 2D/illustration-like appearance
         float flatZ = lerp(o.pos.z, o.pos.w * 0.5, _PerspectiveFlatAmount);
         o.pos.z = flatZ;
+    }
+    #endif
+
+    // ===== Face Orthographic Projection (顔直交投影) =====
+    // Blends the screen-space projection of masked vertices (typically the
+    // face) from perspective toward orthographic around a pivot, so the face
+    // keeps its ideal illustration-like proportions at any camera distance,
+    // FOV, or camera type (desktop / VRChat camera / mirror).
+    #ifdef _FACE_ORTHO
+    {
+        float faceOrthoAmount = _FaceOrthoAmount;
+
+        // Fully orthographic faces fight stereo depth cues, so VR uses its
+        // own (default: reduced) amount.
+        #if defined(USING_STEREO_MATRICES)
+            faceOrthoAmount = _FaceOrthoVRAmount;
+        #else
+            // VR mirrors are rendered by mono cameras: use the VR amount there too.
+            if (_VRChatMirrorMode > 0.5 && _VRChatMirrorMode < 1.5)
+                faceOrthoAmount = _FaceOrthoVRAmount;
+        #endif
+
+        #ifdef _FACE_ORTHO_MASK
+            faceOrthoAmount *= NATANE_SAMPLE_REPEAT_LOD(_FaceOrthoMaskTex, v.uv, 0).r;
+        #endif
+
+        float4 faceOrthoPivotCS = UnityObjectToClipPos(float4(_FaceOrthoPivot.xyz, 1.0));
+        // Skip when the pivot is behind/at the near plane (projection undefined).
+        if (faceOrthoAmount > 0.001 && faceOrthoPivotCS.w > 0.01 && o.pos.w > 0.01)
+        {
+            // Orthographic look = every face vertex shares the pivot's
+            // perspective divisor: ndcOrtho = pivotNDC + (clip - pivotClip)/pivotW,
+            // which simplifies to clip.xy / pivotW. Blend in NDC space.
+            float2 ndcPersp = o.pos.xy / o.pos.w;
+            float2 ndcOrtho = o.pos.xy / faceOrthoPivotCS.w;
+            float2 ndcBlend = lerp(ndcPersp, ndcOrtho, saturate(faceOrthoAmount));
+            o.pos.xy = ndcBlend * o.pos.w;
+        }
     }
     #endif
 

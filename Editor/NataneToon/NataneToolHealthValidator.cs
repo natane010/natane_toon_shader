@@ -145,6 +145,14 @@ namespace NataneToon.Editor
             // --- Mesh Tools (Tools assembly) ---
             new ToolRegistryEntry("SmoothNormalBaker", "スムース法線ベイク Smooth Normal Baker",
                 NataneToolMenuPaths.SmoothNormalBaker, "NataneToon.Editor.SmoothNormalBaker", ASSEMBLY_TOOLS),
+            new ToolRegistryEntry("EyeSetupTool", "目のセットアップ Eye Setup Tool",
+                NataneToolMenuPaths.EyeSetupTool, "NataneToon.Editor.EyeSetupTool", ASSEMBLY_TOOLS),
+
+            // --- Texture Tools (Tools assembly) ---
+            new ToolRegistryEntry("MaskPainter", "マスクペインター Mask Painter",
+                NataneToolMenuPaths.MaskPainter, "NataneToon.Editor.NataneMaskPainter", ASSEMBLY_TOOLS),
+            new ToolRegistryEntry("TextureStudio", "テクスチャスタジオ Texture Studio",
+                NataneToolMenuPaths.TextureStudio, "NataneToon.Editor.NataneTextureStudioWindow", ASSEMBLY_TOOLS),
 
             // --- Preset Tools (Editor assembly, continued) ---
             new ToolRegistryEntry("GenerateDefaultPresets", "デフォルトプリセット生成 Generate Default Presets",

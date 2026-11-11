@@ -59,7 +59,7 @@ namespace NataneToon.Editor
         private GUIStyle toolListButtonStyle;
         private GUIStyle selectedToolListButtonStyle;
         private Texture2D selectedToolListBackground;
-        private bool cachedProSkin;
+        private int cachedThemeKey = int.MinValue;
 
         private class Tutorial
         {
@@ -137,7 +137,9 @@ namespace NataneToon.Editor
 
         private void OnDisable()
         {
-            ReleaseToolListBackground();
+            // selectedToolListBackground は NataneToonEditorTextures の共有キャッシュ
+            // なのでここでは破棄しない（参照を手放すだけ）。
+            selectedToolListBackground = null;
             headerStyle = null;
             subHeaderStyle = null;
             bodyStyle = null;
@@ -153,7 +155,7 @@ namespace NataneToon.Editor
 
         private void InitializeStyles()
         {
-            bool skinChanged = cachedProSkin != EditorGUIUtility.isProSkin;
+            bool themeChanged = cachedThemeKey != NataneToonEditorTheme.CacheKey;
             bool stylesMissing = headerStyle == null ||
                                  subHeaderStyle == null ||
                                  bodyStyle == null ||
@@ -162,12 +164,12 @@ namespace NataneToon.Editor
                                  selectedToolListButtonStyle == null ||
                                  selectedToolListBackground == null;
 
-            if (!skinChanged && !stylesMissing)
+            if (!themeChanged && !stylesMissing)
             {
                 return;
             }
 
-            cachedProSkin = EditorGUIUtility.isProSkin;
+            cachedThemeKey = NataneToonEditorTheme.CacheKey;
 
             headerStyle = new GUIStyle(EditorStyles.boldLabel)
             {
@@ -200,11 +202,10 @@ namespace NataneToon.Editor
                 padding = new RectOffset(10, 10, 6, 6)
             };
 
-            ReleaseToolListBackground();
-            selectedToolListBackground = CreateSolidTexture(
-                EditorGUIUtility.isProSkin
-                    ? new Color(0.28f, 0.46f, 0.74f, 0.55f)
-                    : new Color(0.30f, 0.54f, 0.82f, 0.24f));
+            // 選択中ツールのハイライト: ブランドアクセントの薄色地（共有キャッシュから取得）
+            Color accent = NataneToonEditorTheme.Accent;
+            selectedToolListBackground = NataneToonEditorTextures.Solid(
+                new Color(accent.r, accent.g, accent.b, NataneToonEditorTheme.IsDark ? 0.30f : 0.18f));
 
             selectedToolListButtonStyle = new GUIStyle(toolListButtonStyle)
             {
@@ -215,6 +216,7 @@ namespace NataneToon.Editor
 
         private void OnGUI()
         {
+            NataneToonInspectorComponents.DrawWindowBackground(position);
             InitializeStyles();
             RefreshWindowTitle();
 
@@ -881,29 +883,6 @@ namespace NataneToon.Editor
             }
             EditorGUILayout.EndVertical();
             EditorGUILayout.Space(5);
-        }
-
-        private void ReleaseToolListBackground()
-        {
-            if (selectedToolListBackground == null)
-            {
-                return;
-            }
-
-            DestroyImmediate(selectedToolListBackground);
-            selectedToolListBackground = null;
-        }
-
-        private static Texture2D CreateSolidTexture(Color color)
-        {
-            var texture = new Texture2D(1, 1, TextureFormat.RGBA32, false)
-            {
-                hideFlags = HideFlags.HideAndDontSave
-            };
-            texture.SetPixel(0, 0, color);
-            texture.Apply();
-
-            return texture;
         }
 
         private static void ApplyBackground(GUIStyle style, Texture2D background)

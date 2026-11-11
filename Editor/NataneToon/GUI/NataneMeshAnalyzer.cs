@@ -123,7 +123,7 @@ namespace NataneToon.Editor
             if (mat == null) return null;
 
             // Search scene for renderers using this material
-            var renderers = Object.FindObjectsOfType<Renderer>();
+            var renderers = NataneEditorCompat.FindObjectsOfTypeCompat<Renderer>();
             foreach (var renderer in renderers)
             {
                 if (renderer.sharedMaterials == null) continue;

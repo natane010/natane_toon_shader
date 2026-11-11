@@ -175,16 +175,28 @@ namespace NataneToon.Editor
 
         private void DrawHeader()
         {
-            EditorGUILayout.BeginVertical(EditorStyles.helpBox);
-            EditorGUILayout.LabelField(L("Natane Toon 瞳シェーダー", "Natane Toon Eye Shader"), HeaderStyle);
-            EditorGUILayout.EndVertical();
+            NataneToonSamplerBudgetEstimator.SamplerBudgetEstimate budget = NataneToonSamplerBudgetEstimator.Estimate(targetMaterial);
+            NataneToonInspectorComponents.DrawInspectorHeader(
+                "Natane Toon Shader",
+                L("瞳と表情のセットアップ", "Eye & Expression Setup"),
+                "Eye",
+                $"S {budget.EstimatedSamplers}/{budget.Limit}",
+                budget.IsOverLimit
+                    ? NataneInspectorStatus.Error
+                    : budget.IsWarning ? NataneInspectorStatus.Warning : NataneInspectorStatus.Success,
+                () =>
+                {
+                    NataneToonLocalization.ToggleLanguage();
+                    materialEditor?.Repaint();
+                },
+                null);
         }
 
         // ===== Foldout Helper =====
         private bool DrawFoldout(ref bool state, string label)
         {
             EditorGUI.BeginChangeCheck();
-            state = EditorGUILayout.Foldout(state, label, true, EditorStyles.foldoutHeader);
+            state = EditorGUILayout.Foldout(state, label, true, NataneToonShaderGUIStyles.SectionHeaderFoldout);
             if (EditorGUI.EndChangeCheck()) SaveFoldoutStates();
             return state;
         }

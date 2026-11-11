@@ -1,31 +1,13 @@
 // NataneToonFurShell.hlsl - Shell-based fur vertex/fragment shader
 // Called from NataneToonShader_Fur.shader with FUR_SHELL_INDEX defined per pass
+//
+// The strand field and the shading live in NataneToonFurCommon.hlsl, shared with the
+// fin method. This file only turns "which shell am I" into a slice of that field.
 
 #ifndef NATANE_TOON_FUR_SHELL_INCLUDED
 #define NATANE_TOON_FUR_SHELL_INCLUDED
 
-#include "UnityCG.cginc"
-#include "AutoLight.cginc"
-#include "Lighting.cginc"
-#define NATANE_UTILS_STANDALONE
-#include "../Utils/NataneToonUtils.hlsl"
-
-// FurShell passes are standalone CG programs with only 3 samplers (_MainTex,
-// _FurNoiseTex, _FurMask) — well within the DX11 16-sampler limit.
-// They use standard sampler2D declarations from the .shader Pass block,
-// so NOSAMPLER conversion is intentionally skipped here.
-
-#define NATANE_FORCE_LIGHTVOLUME_HELPERS
-#define NATANE_FORCE_LTCGI_HELPERS
-#include "../Lighting/NataneToonThirdPartyLighting.hlsl"
-#undef NATANE_FORCE_LTCGI_HELPERS
-#undef NATANE_FORCE_LIGHTVOLUME_HELPERS
-
-// The shader keyword and the material property share the same identifier.
-// Undefine the keyword macro after helper includes so the runtime float can be declared safely.
-#if defined(_LTCGI)
-    #undef _LTCGI
-#endif
+#include "NataneToonFurCommon.hlsl"
 
 // Shell parameters
 #define FUR_SHELL_COUNT 16
@@ -50,56 +32,6 @@ struct v2f_fur {
     UNITY_VERTEX_OUTPUT_STEREO
 };
 
-// Shared samplers and variables (from NataneToonInput.hlsl via the .shader CBUFFER)
-// These are declared in the .shader Pass block that includes this file
-float _MatteEffect;
-float _UseLightVolume;
-float _LightVolumeIntensity;
-float _LTCGI;
-float _LTCGIIntensity;
-float _LTCGISpecular;
-float _LTCGIBlend;
-float _LTCGIBlendMode;
-
-float3 ApplyFurMatteQuality(float3 effect, float3 baseColor, float matteAmount)
-{
-    matteAmount = saturate(matteAmount);
-    float effectLum = dot(max(effect, 0.0), float3(0.299, 0.587, 0.114));
-    effect = lerp(effect, effectLum.xxx, matteAmount * 0.7);
-
-    float3 tintBase = saturate(baseColor + 0.35);
-    effect = lerp(effect, effect * tintBase, matteAmount * 0.45);
-
-    float lumAfter = dot(max(effect, 0.0), float3(0.299, 0.587, 0.114));
-    float peakCompression = rcp(1.0 + lumAfter * matteAmount * 1.25);
-    float mattePresence = lerp(1.0, 0.55, matteAmount);
-    float matteSoften = lerp(1.0, 0.9, matteAmount);
-    return effect * peakCompression * matteSoften * mattePresence;
-}
-
-// Procedural noise for fur strand pattern (used as fallback when no noise texture is set)
-float _furHash(float2 p)
-{
-    p = frac(p * float2(443.8975, 397.2973));
-    p += dot(p, p.yx + 19.19);
-    return frac(p.x * p.y);
-}
-
-// Smooth value noise for natural-looking fur strands
-float _furValueNoise(float2 uv)
-{
-    float2 i = floor(uv);
-    float2 f = frac(uv);
-    // Smooth interpolation
-    float2 u = f * f * (3.0 - 2.0 * f);
-    // 4 corner hash values
-    float a = _furHash(i);
-    float b = _furHash(i + float2(1.0, 0.0));
-    float c = _furHash(i + float2(0.0, 1.0));
-    float d = _furHash(i + float2(1.0, 1.0));
-    return lerp(lerp(a, b, u.x), lerp(c, d, u.x), u.y);
-}
-
 v2f_fur furVert(appdata_fur v)
 {
     v2f_fur o;
@@ -111,16 +43,7 @@ v2f_fur furVert(appdata_fur v)
     o.uv = v.uv;
     o.uv1 = v.uv1;
 
-    // Shell offset along normal
-    float3 offset = v.normal * layer * _FurLength;
-
-    // Gravity (quadratic falloff for natural droop)
-    offset.y -= _FurGravity * layer * layer;
-
-    // Wind animation
-    float windPhase = _Time.y * _FurWindSpeed;
-    float3 windOffset = _FurWindDirection.xyz * sin(windPhase + v.vertex.x * 2.0) * _FurWindStrength * layer;
-    offset += windOffset;
+    float3 offset = NataneFurStrandOffset(v.normal, v.vertex.xyz, layer);
 
     // Apply mask - scale shell offset by mask value
     float mask = tex2Dlod(_FurMask, float4(v.uv, 0, 0)).r;
@@ -130,6 +53,18 @@ v2f_fur furVert(appdata_fur v)
     o.worldPos = worldPos.xyz;
     o.worldNormal = UnityObjectToWorldNormal(v.normal);
     o.pos = UnityWorldToClipPos(worldPos);
+
+    // Fin-only mode. The Built-in pipeline cannot switch a Pass off from a material
+    // property, so the 16 shell passes still run: collapse the triangle to a point and
+    // let the rasteriser drop it. The draw calls remain, the pixel cost does not.
+    if (!NataneFurShellsEnabled()) o.pos = float4(0, 0, 0, 1);
+
+    // The outermost shell (layer 1.0) can never pass the fragment LOD test
+    // (lodThreshold <= 1.0, clip(lodThreshold - layer - 0.001)), so every pixel it
+    // rasterised was discarded. Collapse it here and skip the fill entirely.
+    #if FUR_SHELL_INDEX >= (FUR_SHELL_COUNT - 1)
+        o.pos = float4(0, 0, 0, 1);
+    #endif
 
     UNITY_TRANSFER_FOG(o, o.pos);
     return o;
@@ -142,109 +77,17 @@ fixed4 furFrag(v2f_fur i) : SV_Target
     float layer = i.furLayer;
 
     // Distance-based LOD: fade out upper shells at distance
-    float camDist = distance(i.worldPos, _WorldSpaceCameraPos);
+    float camDist = NataneViewerDistance(i.worldPos);   // same shell LOD in both eyes
     float lodFade = saturate(1.0 - max(camDist - _FurLODDistance, 0.0) / max(_FurLODDistance * 0.5, 0.001));
     // Upper layers get clipped first at distance
     float lodThreshold = lerp(_FurLODMinLayers / (float)FUR_SHELL_COUNT, 1.0, lodFade);
     clip(lodThreshold - layer - 0.001);
 
-    // Noise-based alpha cutoff for fur strand pattern
-    // Procedural noise: always generates strand pattern
-    float2 cellUV = i.uv * _FurDensity;
-    float strandNoise = _furValueNoise(cellUV);
-    // Add fine detail at 2x frequency for more natural look
-    strandNoise = strandNoise * 0.7 + _furValueNoise(cellUV * 2.13 + 7.77) * 0.3;
+    float field;
+    float alpha = NataneFurStrandAlpha(i.uv, layer, field);
+    clip(alpha - 0.004);
 
-    // Texture mask: modulates procedural noise (white texture = no effect)
-    float texMask = tex2D(_FurNoiseTex, TRANSFORM_TEX(i.uv, _FurNoiseTex)).r;
-    float furNoise = strandNoise * texMask;
-
-    // Height-based alpha: upper layers have less fur
-    float alpha = furNoise * (1.0 - layer);
-    clip(alpha - _FurAlphaCutoff);
-
-    // Base color from main texture
-    float4 mainColor = tex2D(_MainTex, TRANSFORM_TEX(i.uv, _MainTex));
-
-    // Root-to-tip color gradient
-    float3 furRootColor = _FurRootColor.rgb;
-    float3 furTipColor = _FurTipColor.rgb;
-    float3 furColor = lerp(furRootColor, furTipColor, layer);
-
-    // Blend fur color with main texture
-    float3 finalColor = lerp(mainColor.rgb, furColor, _FurColorBlend);
-
-    // Self-occlusion (AO): root is darker, tip is brighter
-    float ao = lerp(1.0 - _FurAO, 1.0, layer);
-    finalColor *= ao;
-
-    // Simple toon lighting
-    float3 worldNormal = normalize(i.worldNormal);
-    float3 lightDir = normalize(UnityWorldSpaceLightDir(i.worldPos));
-    float3 viewDir = normalize(_WorldSpaceCameraPos - i.worldPos);
-    float NdotL = dot(worldNormal, lightDir);
-    float toonShading = smoothstep(-0.1, 0.3, NdotL);
-
-    // Self-shadow: inner layers receive less light
-    float selfShadow = lerp(1.0 - _FurShadowStrength, 1.0, layer * 0.7 + 0.3);
-    toonShading *= selfShadow;
-
-    // Apply lighting
-    float3 directLight = _LightColor0.rgb * toonShading;
-    float3 ambient = ShadeSH9(float4(worldNormal, 1.0));
-
-    // Runtime branch: FurShell always compiles LV/LTCGI helpers (via NATANE_FORCE_*),
-    // unlike the main shader which uses shader_feature keywords for compile-time stripping.
-    if (_UseLightVolume > 0.5)
-    {
-        float3 L0, L1r, L1g, L1b;
-        LightVolumeSH(i.worldPos, L0, L1r, L1g, L1b);
-
-        float3 directLightLV = LightVolumeEvaluate(worldNormal, L0, L1r, L1g, L1b);
-        float3 indirectLightLV = LightVolumeEvaluate(-worldNormal, L0, L1r, L1g, L1b);
-
-        directLightLV = min(directLightLV, float3(1.1, 1.1, 1.1)) * _LightVolumeIntensity;
-        indirectLightLV = min(indirectLightLV, float3(1.1, 1.1, 1.1)) * _LightVolumeIntensity;
-
-        directLight = max(directLight, directLightLV * toonShading);
-        ambient = max(ambient, indirectLightLV);
-    }
-
-    finalColor *= (directLight + ambient);
-
-    if (_LTCGI > 0.5)
-    {
-        float3 ltcgiDiffuse = 0;
-        float3 ltcgiSpecular = 0;
-        NataneLTCGIContribution(i.worldPos, worldNormal, viewDir, 1.0, i.uv1, ltcgiDiffuse, ltcgiSpecular);
-
-        half3 preLTCGIColor = finalColor;
-        half3 ltcgiLitColor = finalColor * (1.0 + ltcgiDiffuse * _LTCGIIntensity);
-        finalColor = ApplyEffectBlendPost(preLTCGIColor, ltcgiLitColor, _LTCGIBlend, _LTCGIBlendMode);
-
-        float3 furLTCGISpec = ApplyFurMatteQuality(ltcgiSpecular * _LTCGIIntensity * _LTCGISpecular, finalColor, _MatteEffect);
-        finalColor = SafeAdditiveBlend(finalColor, furLTCGISpec, saturate(length(furLTCGISpec) * 0.5));
-    }
-
-    // Specular highlight on fur tips
-    if (_FurSpecular > 0.001)
-    {
-        float3 halfDir = normalize(lightDir + viewDir);
-        float spec = pow(max(0, dot(worldNormal, halfDir)), 40.0) * _FurSpecular * layer;
-        float3 furSpec = _LightColor0.rgb * spec;
-        furSpec = ApplyFurMatteQuality(furSpec, finalColor, _MatteEffect);
-        finalColor += furSpec;
-    }
-
-    // Rim light
-    if (_FurRimLight > 0.001)
-    {
-        float rim = 1.0 - saturate(dot(viewDir, worldNormal));
-        rim = pow(rim, 3.0) * _FurRimLight * layer;
-        float3 furRim = _LightColor0.rgb * rim;
-        furRim = ApplyFurMatteQuality(furRim, finalColor, _MatteEffect);
-        finalColor += furRim;
-    }
+    float3 finalColor = NataneFurShade(i.uv, i.uv1, layer, field, i.worldPos, i.worldNormal);
 
     fixed4 col = fixed4(finalColor, alpha);
     UNITY_APPLY_FOG(i.fogCoord, col);

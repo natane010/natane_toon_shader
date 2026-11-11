@@ -1,0 +1,148 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Line Boil - Natane Toon Shader</title>
+  <link rel="stylesheet" href="../../../styles.css">
+</head>
+<body>
+<header class="site-header"></header>
+<div class="page-wrapper">
+  <aside class="sidebar"></aside>
+  <main class="main-content">
+    <nav class="breadcrumb"></nav>
+    <h1>Line Boil</h1>
+    <p class="page-subtitle">Lines wobble in frame steps like hand-drawn animation. Outlines, hatching, and watercolor grain snap to a new shape every few frames for the warmth of pencil or crayon art. (v1.6.0)</p>
+
+    <div class="feature-preview" aria-hidden="true">
+      <span class="preview-tag">PREVIEW</span>
+      <em class="preview-name">Line Boil</em>
+    </div>
+
+    <h2 id="overview">Overview</h2>
+    <p>This reproduces the "line boil" of hand-drawn animation. Instead of wobbling smoothly, time is quantized to a fixed number of frames and the noise seed is switched on those beats. The drawn line therefore <strong>gets replaced frame by frame</strong>, giving the classic feel of animating on 2s or 3s.</p>
+    <p>It toggles with the keyword <code>_LINE_BOIL</code> and has zero effect when off (zero cost). It applies as position/width jitter on the outline pass, and as UV jitter on hatching, screen tone, and watercolor grain in the fragment stage.</p>
+
+    <h2 id="looks">What you can make</h2>
+    <ul>
+      <li>Pencil-drawn outlines and animation-key-frame-style line wobble</li>
+      <li>Picture-book, crayon, and charcoal textures</li>
+      <li>Manga hatching that subtly drifts</li>
+      <li>Watercolor paper grain that changes every frame</li>
+      <li>Lines that thrash to the beat when combined with AudioLink (via the FX Modulator)</li>
+    </ul>
+
+    <h2 id="key-params">Key parameters</h2>
+
+    <div class="param-card">
+      <div class="param-header">
+        <span class="param-name">Boil FPS</span>
+        <span class="param-prop">_LineBoilFPS</span>
+        <span class="param-badge badge-range">range (1&ndash;24)</span>
+      </div>
+      <div class="param-body">
+        <p>How many times per second the jitter refreshes. Lower is choppier and more old-school; higher trembles more finely.</p>
+        <p class="param-default">Default: 8</p>
+      </div>
+      <div class="param-tip">Around 12 for clean anime, 8 for pencil, and 4 for a stop-motion feel.</div>
+    </div>
+
+    <div class="param-card">
+      <div class="param-header">
+        <span class="param-name">Hold Frames</span>
+        <span class="param-prop">_LineBoilHoldFrames</span>
+        <span class="param-badge badge-range">range (1&ndash;8)</span>
+      </div>
+      <div class="param-body">
+        <p>How many frames each shape is held. 2 gives "animating on 2s", 3 gives "on 3s".</p>
+        <p class="param-default">Default: 1</p>
+      </div>
+      <div class="param-tip">Set 2&ndash;3 for the deliberate pacing of Japanese animation.</div>
+    </div>
+
+    <div class="param-card">
+      <div class="param-header">
+        <span class="param-name">Position Jitter</span>
+        <span class="param-prop">_LineBoilPositionJitter</span>
+        <span class="param-badge badge-range">range (0&ndash;5)</span>
+      </div>
+      <div class="param-body">
+        <p>How much the outline vertices wobble (&times;0.001 object space). Higher makes the line thrash more boldly.</p>
+        <p class="param-default">Default: 1</p>
+      </div>
+      <div class="param-tip">Larger for rough sketches, smaller for clean line art.</div>
+    </div>
+
+    <div class="param-card">
+      <div class="param-header">
+        <span class="param-name">Width Jitter</span>
+        <span class="param-prop">_LineBoilWidthJitter</span>
+        <span class="param-badge badge-range">range (0&ndash;1)</span>
+      </div>
+      <div class="param-body">
+        <p>How much the outline width varies per frame. Adds the pressure variation of a hand-drawn line.</p>
+        <p class="param-default">Default: 0.2</p>
+      </div>
+    </div>
+
+    <div class="param-card">
+      <div class="param-header">
+        <span class="param-name">UV Jitter</span>
+        <span class="param-prop">_LineBoilUVJitter</span>
+        <span class="param-badge badge-range">range (0&ndash;0.05)</span>
+      </div>
+      <div class="param-body">
+        <p>How much the UVs of hatching, screen tone, and watercolor drift. Paper grain and halftone dots shift each frame.</p>
+        <p class="param-default">Default: 0.005</p>
+      </div>
+    </div>
+
+    <h2 id="all-params">All parameters</h2>
+    <table>
+      <thead>
+        <tr><th>Property</th><th>Type / Default</th><th>Description</th></tr>
+      </thead>
+      <tbody>
+        <tr><td><code>_LineBoil</code></td><td>Toggle / 0</td><td>Enable the feature (<code>_LINE_BOIL</code>)</td></tr>
+        <tr><td><code>_LineBoilFPS</code></td><td>Range(1,24) / 8</td><td>Boil refresh frame rate</td></tr>
+        <tr><td><code>_LineBoilPositionJitter</code></td><td>Range(0,5) / 1</td><td>Outline vertex position jitter</td></tr>
+        <tr><td><code>_LineBoilWidthJitter</code></td><td>Range(0,1) / 0.2</td><td>Outline width variation</td></tr>
+        <tr><td><code>_LineBoilUVJitter</code></td><td>Range(0,0.05) / 0.005</td><td>Fragment-side UV jitter</td></tr>
+        <tr><td><code>_LineBoilHoldFrames</code></td><td>Range(1,8) / 1</td><td>Frames the phase is held (2 = on 2s)</td></tr>
+        <tr><td><code>_LineBoilRandomSeed</code></td><td>Float / 0</td><td>Phase seed offset (per-material variation)</td></tr>
+        <tr><td><code>_LineBoilAffectOutline</code></td><td>Toggle / 1</td><td>Apply to outline (position/width)</td></tr>
+        <tr><td><code>_LineBoilAffectHatching</code></td><td>Toggle / 1</td><td>Apply to hatching / screen tone / shadow edge noise UVs</td></tr>
+        <tr><td><code>_LineBoilAffectWatercolor</code></td><td>Toggle / 1</td><td>Apply to watercolor grain UVs</td></tr>
+        <tr><td><code>_LineBoilMaskTex</code></td><td>2D (R) / white</td><td>Mask boil strength via the R channel</td></tr>
+      </tbody>
+    </table>
+
+    <h2 id="presets">Preset values</h2>
+    <table>
+      <thead>
+        <tr><th>Preset</th><th>FPS</th><th>HoldFrames</th><th>PositionJitter</th><th>WidthJitter</th><th>UVJitter</th></tr>
+      </thead>
+      <tbody>
+        <tr><td>Clean Anime</td><td>12</td><td>2</td><td>0.4</td><td>0.10</td><td>0.002</td></tr>
+        <tr><td>Pencil</td><td>8</td><td>2</td><td>1.0</td><td>0.25</td><td>0.006</td></tr>
+        <tr><td>Rough Sketch</td><td>6</td><td>1</td><td>2.5</td><td>0.50</td><td>0.012</td></tr>
+        <tr><td>Stop Motion</td><td>4</td><td>3</td><td>1.5</td><td>0.30</td><td>0.008</td></tr>
+      </tbody>
+    </table>
+
+    <h2 id="tips">Usage Tips</h2>
+    <ul>
+      <li><strong>Choose the targets</strong>: <code>_LineBoilAffectOutline</code> / <code>AffectHatching</code> / <code>AffectWatercolor</code> toggle each target independently. Turn the others off to wobble only the line.</li>
+      <li><strong>Cohesive hand-drawn look</strong>: boil <a href="watercolor.html">Watercolor</a>, <a href="screen-tone.html">Screen Tone</a>, <a href="outline.html">Outline</a>, and <a href="color-quantize.html">Color Quantize</a> at the same low FPS so line, shadow, and paper grain move as one.</li>
+      <li><strong>Mask</strong>: use the R channel of <code>_LineBoilMaskTex</code> to limit where the boil applies.</li>
+      <li>Vertex positions themselves never change, so there is no FORWARD_ADD desync (misalignment under a second light). It also coexists with fwidth-based toon AA.</li>
+    </ul>
+
+    <nav class="page-nav"></nav>
+  </main>
+</div>
+<footer class="site-footer">&copy; 2025 Natane Toon Shader.</footer>
+<script src="../../../nav.js"></script>
+</body>
+</html>

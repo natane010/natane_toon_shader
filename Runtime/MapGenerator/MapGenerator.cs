@@ -80,6 +80,17 @@ public class MapGenSettings
     public float shadowIntensity = 1.0f;
     public int shadowDilation = 4;
 
+    // Face SDF Shadow Map (顔SDF影マップ)
+    // Excluded from "Generate All Maps" on purpose: it only makes sense for a face mesh.
+    public bool generateFaceSdf = false;
+    public int faceSdfResolution = 1024;
+    public int faceSdfAngleSteps = 64;
+    public Vector3 faceSdfForward = new Vector3(0, 0, 1);
+    public Vector3 faceSdfRight = new Vector3(1, 0, 0);
+    public float faceSdfDepthBias = 0.002f;
+    public int faceSdfDilation = 4;
+    public int faceSdfBlur = 1;
+
     // Control Map
     public bool generateControl = true;
     public ControlMapChannel channelR = ControlMapChannel.AO;
@@ -99,6 +110,7 @@ public class MapGenResult
     public Texture2D roughness;
     public Texture2D shadow;
     public Texture2D controlMap;
+    public Texture2D faceSdf;
     public float processingTimeMs;
 }
 
@@ -122,6 +134,7 @@ public class MapGenerator : MonoBehaviour
     [HideInInspector] public Texture2D lastRoughnessMap;
     [HideInInspector] public Texture2D lastShadowMap;
     [HideInInspector] public Texture2D lastControlMap;
+    [HideInInspector] public Texture2D lastFaceSdfMap;
 
     private void OnValidate()
     {

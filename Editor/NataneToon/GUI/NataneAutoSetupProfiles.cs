@@ -240,7 +240,7 @@ namespace NataneToon.Editor
                 floatOverrides = new[]
                 {
                     ("_HairSpecShift1", -0.1f), ("_HairSpecShift2", 0.1f),
-                    ("_HairSpecWidth1", 0.15f), ("_HairSpecIntensity", 1.5f),
+                    ("_HairSpecWidth1", 40f), ("_HairSpecIntensity", 1.5f),
                     ("_OutlineWidth", 0.06f), ("_OutlineTexColorBlend", 0.9f),
                     ("_RimPower", 2.0f), ("_RimIntensity", 2.0f),
                 },
@@ -256,7 +256,7 @@ namespace NataneToon.Editor
                 floatOverrides = new[]
                 {
                     ("_HairSpecShift1", -0.1f), ("_HairSpecShift2", 0.1f),
-                    ("_HairSpecWidth1", 0.15f), ("_HairSpecIntensity", 1.5f),
+                    ("_HairSpecWidth1", 40f), ("_HairSpecIntensity", 1.5f),
                     ("_OutlineWidth", 0.06f), ("_OutlineTexColorBlend", 0.9f),
                     ("_RimPower", 2.0f), ("_RimIntensity", 2.0f),
                 },
@@ -272,7 +272,7 @@ namespace NataneToon.Editor
                 floatOverrides = new[]
                 {
                     ("_HairSpecShift1", -0.1f), ("_HairSpecShift2", 0.1f),
-                    ("_HairSpecWidth1", 0.12f), ("_HairSpecIntensity", 1.2f),
+                    ("_HairSpecWidth1", 64f), ("_HairSpecIntensity", 1.2f),
                     ("_OutlineWidth", 0.04f), ("_OutlineTexColorBlend", 0.9f),
                     ("_RimPower", 2.5f), ("_RimIntensity", 1.5f),
                 },

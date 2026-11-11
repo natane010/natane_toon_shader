@@ -90,6 +90,40 @@ CBUFFER_START(UnityPerMaterial)
     float _HalftoneShadowSoftness;
     float _HalftoneShadowIntensity;
     float _HalftoneShadowBlend;
+    // 漫画表現向けの拡張
+    float _HalftoneShadowPattern;
+    float _HalftoneShadowAngle;
+    float _HalftoneShadowLevels;
+    float _HalftoneShadowSpace;
+    float _HalftoneShadowSurfaceDensity;
+    float _HalftoneShadowDotMin;
+    float _HalftoneShadowDotMax;
+    float _HalftoneShadowAA;
+    // 濃度の基準。0 = トゥーン量子化後 / 1 = 量子化前の連続値（既定）。
+    float _HalftoneShadowDensitySource;
+    // 落ち影を網点の濃度に効かせる量。0 = 落ち影を無視 / 1 = 効かせる（既定）。
+    float _HalftoneShadowCastShadow;
+    // 面に貼り付けたまま、画面上のセルの大きさを一定に保つ（World/UV/Object 用）。
+    float _HalftoneShadowScreenLock;
+    // スクリーン空間のグリッドをオブジェクトへ貼り付ける（Screen 用）。
+    float _HalftoneShadowScreenAnchor;
+    #endif
+
+    // Shadow Bokeh（影の玉ボケ / 木漏れ日）
+    #if defined(_SHADOW_BOKEH)
+    half4 _ShadowBokehColor;
+    float _ShadowBokehIntensity;
+    float _ShadowBokehScale;
+    float _ShadowBokehSize;
+    float _ShadowBokehSoftness;
+    float _ShadowBokehBlades;
+    float _ShadowBokehRimGain;
+    float _ShadowBokehDensity;
+    float _ShadowBokehSpeed;
+    float4 _ShadowBokehDirection;
+    float _ShadowBokehComposite;
+    float _ShadowBokehShadowMin;
+    float _ShadowBokehBlend;
     #endif
 
     // Gradient Base Color
@@ -154,6 +188,8 @@ CBUFFER_START(UnityPerMaterial)
 
     // Ambient Occlusion
     float _AOIntensity;
+    float _AOMultiBounce;            // 0 = off; coloured multi-bounce AO on indirect light
+    float _AOMicroShadow;            // 0 = off; AO-driven micro shadowing of the main light
     float _AOBlend;
     float _AOBlendMode;
     float _AOBlur;
@@ -197,7 +233,23 @@ CBUFFER_START(UnityPerMaterial)
     float _LightColorInfluence;
     float _ShadowReceive;
     float _ShadowSmoothing;
+    // 影の自然さ（単一入口）。回り込み・段階のなじませ・境界幅をまとめて押し上げる。
+    // 個別パラメータを上書きせず「下限を引き上げる」だけなので、手動調整と喧嘩しない。
+    float _ShadowNaturalness;
     float _ShadowMaxDarkness;
+    // Semi-realistic finish controls. All default to "off": 0 strength / mode 0 leaves
+    // every existing material pixel-identical.
+    half4 _ShadowBorderColor;        // tint of the band along the lit / shadow boundary
+    float _ShadowBorderStrength;
+    float _ShadowBorderWidth;
+    float _SpecularShadowMask;       // fades the toon specular inside the shade
+    float _BumpTerminatorStrength;   // softens normal-map light leaks at the terminator
+    float _SpecularAAGeometric;      // widens GGX roughness where the surface curves within a pixel
+    float _HighlightCompress;        // hue-preserving roll-off of over-bright lit colour
+    float _LightVolumeSHMode;        // 0 = linear L1, 1 = ZH3, 2 = Geomerics
+    float _LightVolumeKeyLight;      // 0 = off; treats the Light Volume's dominant direction as a toon key light
+    float _MatteDiffuse;             // 0 = Lambert; strength of the EON rough-diffuse response
+    float _MatteDiffuseRoughness;
     float _SmoothNormalShadingBlend;
     float _SmoothNormalMode;
     float _LightColorMin;
@@ -322,6 +374,8 @@ CBUFFER_START(UnityPerMaterial)
     half4 _SheenColor;
     float _SheenIntensity;
     float _SheenPower;
+    float _SheenModel;               // 0 = classic Fresnel sheen, 1 = Charlie
+    float _SheenRoughness;
     float _SheenBlend;
     float _SheenBlendMode;
     #endif
@@ -421,6 +475,9 @@ CBUFFER_START(UnityPerMaterial)
 
     // Virtual Expression - Dissolve
     #if defined(_DISSOLVE)
+    // マスク使用の可否。Uniform 分岐で読むためキーワードは増やさない
+    // （変種爆発を避けつつ、トグルを実際に効かせるための宣言）。
+    float _UseDissolveMask;
     float _DissolveAmount;
     float _DissolveEdgeWidth;
     half4 _DissolveEdgeColor;
@@ -550,6 +607,9 @@ CBUFFER_START(UnityPerMaterial)
     float _AudioLinkRimIntensity;
     float _AudioLinkHueBand;
     float _AudioLinkHueShiftIntensity;
+    // AudioLink ディゾルブの有効化。従来は宣言だけで誰も読んでいなかったため
+    // インスペクタのトグルが何も変えない状態だった（NPR2026 F4）。
+    float _AudioLinkDissolve;
     float _AudioLinkDissolveBand;
     float _AudioLinkDissolveIntensity;
     float _AudioLinkOutlineBand;
@@ -908,6 +968,7 @@ CBUFFER_START(UnityPerMaterial)
     float _HatchingTiling;
     float4 _HatchingColor;
     float _HatchingBlend;
+    float _HatchingComposite;
     #endif
     #ifdef _WATERCOLOR
     float _WCEdgeDarkening;
@@ -983,6 +1044,24 @@ CBUFFER_START(UnityPerMaterial)
     #if defined(_PERSPECTIVE_FLAT)
     float _PerspectiveFlatAmount;
     #endif
+    #if defined(_FACE_ORTHO)
+    float _FaceOrthoAmount;
+    float _FaceOrthoVRAmount;
+    float4 _FaceOrthoPivot;
+    #endif
+    #if defined(_MIRROR_TEXTURE)
+    half4 _MirrorAltColor;
+    float _MirrorTexBlend;
+    float _MirrorTexApplyMirror;
+    float _MirrorTexApplyCamera;
+    #endif
+    #if defined(GHOST_VARIANT)
+    half4 _GhostRimColor;
+    float _GhostFresnelAlpha;
+    float _GhostFresnelPower;
+    float _GhostRimStrength;
+    float _GhostDepthCutoff;
+    #endif
     #if defined(_DEPTH_COLOR_FADE)
     half4 _DepthFadeColor;
     float _DepthFadeStart;
@@ -991,10 +1070,145 @@ CBUFFER_START(UnityPerMaterial)
     float _DepthFadeDesaturation;
     #endif
 
+    // ===== Expression Effects (v1.6.0 batch 1) =====
+    #if defined(_LINE_BOIL)
+    float _LineBoilFPS;
+    float _LineBoilPositionJitter;
+    float _LineBoilWidthJitter;
+    float _LineBoilUVJitter;
+    float _LineBoilHoldFrames;
+    float _LineBoilRandomSeed;
+    float _LineBoilAffectOutline;
+    float _LineBoilAffectHatching;
+    float _LineBoilAffectWatercolor;
+    #endif
+    #if defined(_SHAPED_HIGHLIGHT)
+    float _ShapedHLShape;
+    half4 _ShapedHLColor;
+    float _ShapedHLIntensity;
+    float _ShapedHLSize;
+    float _ShapedHLSoftness;
+    float4 _ShapedHLStretch;
+    float _ShapedHLRotation;
+    float _ShapedHLLightFollow;
+    float _ShapedHLCameraFollow;
+    float _ShapedHLShape2;
+    float _ShapedHLIntensity2;
+    float _ShapedHLSize2;
+    float _ShapedHLSparkleSpeed;
+    #endif
+
+    // Shadow Shape Rig (NPR2026 P1)
+    // Packed two float4 per slot so four slots cost 8 registers instead of 20 scalars.
+    //   Params = (centerX, centerY, radiusX, radiusY)
+    //   Shape  = (rotationDeg, strength, falloff, lightFollow)
+    #if defined(_SHADOW_SHAPE_RIG)
+    float4 _ShadowRigParams0;
+    float4 _ShadowRigParams1;
+    float4 _ShadowRigParams2;
+    float4 _ShadowRigParams3;
+    float4 _ShadowRigShape0;
+    float4 _ShadowRigShape1;
+    float4 _ShadowRigShape2;
+    float4 _ShadowRigShape3;
+    float _ShadowRigFollowScale;
+    float _ShadowRigMaskStrength;
+    #endif
+
+    #if defined(_TOPOGRAPHIC)
+    float _TopoSpace;
+    float _TopoAxis;
+    float4 _TopoCustomDir;
+    float _TopoMode;
+    float _TopoSpacing;
+    float _TopoOffset;
+    float _TopoSpeed;
+    float _TopoLineWidth;
+    half4 _TopoColor;
+    half4 _TopoColor2;
+    float _TopoEmission;
+    float _TopoNoiseScale;
+    float _TopoNoiseStrength;
+    float _TopoBlend;
+    // 合成方法。Caustics / 影の玉ボケと同じ列挙に揃えている。
+    float _TopoComposite;
+    #endif
+    #if defined(_FX_MODULATOR)
+    float _FXModSource0;
+    float _FXModTarget0;
+    float _FXModAmount0;
+    float _FXModOffset0;
+    float _FXModSpeed0;
+    float _FXModMin0;
+    float _FXModMax0;
+    float _FXModInvert0;
+    float _FXModCurve0;
+    float _FXModManual0;
+    float _FXModDistMin0;
+    float _FXModDistMax0;
+    float _FXModNoiseScale0;
+    float _FXModNoiseSpace0;
+    float _FXModSource1;
+    float _FXModTarget1;
+    float _FXModAmount1;
+    float _FXModOffset1;
+    float _FXModSpeed1;
+    float _FXModMin1;
+    float _FXModMax1;
+    float _FXModInvert1;
+    float _FXModCurve1;
+    float _FXModManual1;
+    float _FXModDistMin1;
+    float _FXModDistMax1;
+    float _FXModNoiseScale1;
+    float _FXModNoiseSpace1;
+    #endif
+
+    // ===== Expression Effects (v1.6.0 batch 2) =====
+    #if defined(_LENTICULAR)
+    float _LenticularFrames;
+    float _LenticularDirection;
+    float _LenticularMode;
+    float _LenticularViewAxis;
+    float _LenticularAngleRange;
+    float _LenticularFrameOffset;
+    float _LenticularStereoMode;
+    float _LenticularEmission;
+    float _LenticularNormalInfluence;
+    float _LenticularBlend;
+    float _LenticularScanScale;
+    float _LenticularSoftness;
+    #endif
+    #if defined(_CAUSTICS)
+    float _CausticsPatternMode;
+    float _CausticsSpace;
+    float _CausticsComposite;
+    half4 _CausticsColor;
+    float _CausticsIntensity;
+    float _CausticsScale;
+    float _CausticsSpeed;
+    float4 _CausticsDirection;
+    float _CausticsDistortion;
+    float _CausticsContrast;
+    #endif
+    #if defined(_PIXEL_ART)
+    float _PixelArtSize;
+    float _PixelLightSteps;
+    float _PixelPalette;
+    float _PixelDither;
+    #endif
+
     // ===== Feature Toggle Properties =====
     // [Toggle(_KEYWORD)] properties used for runtime feature guards.
     // These must be in the CBUFFER for the if(_Prop >= 0.5) checks
     // in Fragment.hlsl to compile.
+    float _LineBoil;
+    float _ShapedHighlight;
+    float _Topographic;
+    float _FXModulator;
+    float _Lenticular;
+    float _Caustics;
+    float _PixelArt;
     float _MirrorControl;
     float _MainTexAnimation;
     float _GlitchStretch;
@@ -1018,6 +1232,7 @@ CBUFFER_START(UnityPerMaterial)
     float _ShadowEdgeNoise;
     float _CastShadowColorEnable;
     float _HalftoneShadow;
+    float _ShadowBokeh;
     float _UseColorQuantize;
     float _UseLUT3D;
     float _UseHatching;
@@ -1087,7 +1302,11 @@ float _VRChatFaceMirrorMode;  // Face mirror mode
 float _VRChatCameraMask;      // Camera layer mask
 
 // Camera Positions & Rotations
+// Guarded: also declared by NataneToonCamera.hlsl for standalone passes
+#ifndef NATANE_VRCHAT_MIRRORCAMPOS_DECLARED
+#define NATANE_VRCHAT_MIRRORCAMPOS_DECLARED
 float3 _VRChatMirrorCameraPos;    // Mirror camera world position
+#endif
 float3 _VRChatScreenCameraPos;    // Screen camera world position
 float4 _VRChatScreenCameraRot;    // Screen camera rotation (quaternion)
 float3 _VRChatPhotoCameraPos;     // Photo camera world position
@@ -1128,7 +1347,9 @@ SamplerState sampler_linear_clamp;
 
     #define NATANE_SAMPLE_REPEAT(tex, uv)   UNITY_SAMPLE_TEX2D_SAMPLER(tex, _MainTex, uv)
     #define NATANE_SAMPLE_REPEAT_R(tex, uv) NATANE_SAMPLE_REPEAT(tex, uv).r
-    #define NATANE_SAMPLE_CLAMP(tex, uv)    UNITY_SAMPLE_TEX2D_SAMPLER(tex, _linear_clamp, uv)
+    // No separate clamp sampler on this API: emulate clamp addressing by
+    // saturating the UV and reusing the _MainTex (repeat) sampler.
+    #define NATANE_SAMPLE_CLAMP(tex, uv)    UNITY_SAMPLE_TEX2D_SAMPLER(tex, _MainTex, saturate(uv))
     #define NATANE_SAMPLE_CLAMP_R(tex, uv)  NATANE_SAMPLE_CLAMP(tex, uv).r
 
     #define NATANE_SAMPLE_REPEAT_LOD(tex, uv, lod) tex2Dlod(tex, float4(uv, 0, lod))
@@ -1166,6 +1387,11 @@ UNITY_DECLARE_TEX2D_NOSAMPLER(_RampTex);
 UNITY_DECLARE_TEX2D_NOSAMPLER(_ShadowReceiveMask);
 #endif
 UNITY_DECLARE_TEX2D_NOSAMPLER(_ShadowColorTex);
+#if defined(_SHADOW_BOKEH)
+// 共有サンプラー経由で読む（NATANE_SAMPLE_SHARED_R）。専用サンプラーを取ると
+// サンプラー予算を消費するため、_CausticsMask と同じ扱いに揃えている。
+UNITY_DECLARE_TEX2D_NOSAMPLER(_ShadowBokehMask);
+#endif
 
 // SDF & Grade Maps
 #if defined(_SDF_MAP)
@@ -1348,6 +1574,17 @@ UNITY_DECLARE_TEX2D_NOSAMPLER(_PBR_OcclusionMap);
 #if defined(_SMOOTH_NORMAL)
 UNITY_DECLARE_TEX2D_NOSAMPLER(_SmoothNormalTex);
 #endif
+// Declared on its own: it used to sit inside the _SMOOTH_NORMAL block, so Face Ortho with a
+// mask failed to compile whenever smooth normals were off (and always in the XRay /
+// Ghost prepass / Screen Edge overlay passes, which have no _SMOOTH_NORMAL keyword).
+#if defined(_FACE_ORTHO_MASK)
+UNITY_DECLARE_TEX2D_NOSAMPLER(_FaceOrthoMaskTex);
+#endif
+
+// Mirror / Camera Alternate Texture
+#if defined(_MIRROR_TEXTURE)
+UNITY_DECLARE_TEX2D_NOSAMPLER(_MirrorAltTex);
+#endif
 
 // Hologram (conditionally compiled)
 #if defined(_HOLOGRAM)
@@ -1390,6 +1627,39 @@ UNITY_DECLARE_SCREENSPACE_TEXTURE(_CameraDepthNormalsTexture);
 #endif
 #ifdef _OUTLINE_HAND_DRAWN
 UNITY_DECLARE_TEX2D_NOSAMPLER(_OutlineNoiseTex);
+#endif
+
+// Expression Effects (v1.6.0 batch 1) — masks / custom SDF (NOSAMPLER, shared samplers)
+#ifdef _LINE_BOIL
+UNITY_DECLARE_TEX2D_NOSAMPLER(_LineBoilMaskTex);
+#endif
+#ifdef _SHAPED_HIGHLIGHT
+UNITY_DECLARE_TEX2D_NOSAMPLER(_ShapedHLTex);
+UNITY_DECLARE_TEX2D_NOSAMPLER(_ShapedHLMask);
+#endif
+#ifdef _TOPOGRAPHIC
+UNITY_DECLARE_TEX2D_NOSAMPLER(_TopoMask);
+#endif
+#ifdef _FX_MODULATOR
+UNITY_DECLARE_TEX2D_NOSAMPLER(_FXModMaskTex);
+#endif
+// Shadow Shape Rig (NPR2026 P1) — one mask shared by all four slots.
+#ifdef _SHADOW_SHAPE_RIG
+UNITY_DECLARE_TEX2D_NOSAMPLER(_ShadowRigMask);
+#endif
+
+// Expression Effects (v1.6.0 batch 2) — atlas / pattern / palette / masks (NOSAMPLER)
+#ifdef _LENTICULAR
+UNITY_DECLARE_TEX2D_NOSAMPLER(_LenticularAtlas);
+UNITY_DECLARE_TEX2D_NOSAMPLER(_LenticularMask);
+#endif
+#ifdef _CAUSTICS
+UNITY_DECLARE_TEX2D_NOSAMPLER(_CausticsTex);
+UNITY_DECLARE_TEX2D_NOSAMPLER(_CausticsMask);
+#endif
+#ifdef _PIXEL_ART
+UNITY_DECLARE_TEX2D_NOSAMPLER(_PixelPaletteTex);
+UNITY_DECLARE_TEX2D_NOSAMPLER(_PixelArtMask);
 #endif
 
 // VAT
@@ -1457,6 +1727,7 @@ static const float2 PoissonDisk32[32] = {
 #if defined(_AUDIOLINK)
 sampler2D _AudioTexture;
 sampler2D _AudioTexture2D;
+float4 _AudioTexture_TexelSize;   // z > 16 only when AudioLink is running in the world
 #endif
 
 // Vertex Input Structure

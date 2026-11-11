@@ -6,7 +6,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 Natane Toon Shader is a Unity package providing a comprehensive cel-shading/NPR toon shader for Unity's Built-in Render Pipeline. It is distributed as a Unity Package Manager (UPM) compatible package and includes extensive editor tooling, material presets, and migration utilities.
 
-**Version**: 1.2.0 (v1.1.5 branch)
+**Version**: see `package.json` (branch `v1.1.5` is the release branch; day-to-day development happens on `develop`)
 **Unity Compatibility**: 2019.4+
 **Target Platform**: Built-in Render Pipeline (VRChat optimized)
 
@@ -93,7 +93,36 @@ When adding a new shader effect (e.g., a new lighting model or visual effect):
    }
    ```
 
-6. **Update all three shader variants**: Main shader, Cutout variant, Transparent variant must all include the new feature.
+6. **Update ALL 12 full shader variants** (`NataneToonShader.shader` + the 11 `Variants/NataneToonShader_*.shader` files that carry the full Properties block; Particle and FakeShadow are separate): each carries its own copy of the `Properties` block and per-pass `#pragma shader_feature_local` lists. Keep them in sync — drift here has caused real compile bugs.
+
+### Shared pass includes (do NOT re-inline)
+
+The OUTLINE and SHADOW_CASTER passes are shared across all variants via includes:
+
+- `Include/Rendering/NataneToonOutlinePass.hlsl` — full outline pass (vert/frag + helpers). Feature blocks are `#ifdef`-guarded; each variant controls availability with its own `#pragma shader_feature_local` list. Changes to outline behavior go HERE, never inline in a `.shader`.
+- `Include/Rendering/NataneToonShadowCasterPass.hlsl` — shadow caster; cutout variants `#define NATANE_SHADOWCASTER_CUTOUT` before including it to get alpha-tested shadows.
+
+### Camera / mirror helpers (use these, do not re-derive)
+
+`Include/Utils/NataneToonCamera.hlsl` (needs only UnityCG; included by Utils and by the outline pass):
+
+- `NataneViewerPos()` / `NataneViewerDistance(worldPos)` — eye-centred, mirror-aware viewer. Use for every DISTANCE-driven effect (fades, LOD, density steps). Never use `_WorldSpaceCameraPos` for those: per-eye distances disagree in VR.
+- `NataneOutlineDepthScale(clipPos, mode)` — the outline width term. Never multiply by `o.pos.z` directly: clip z is invalid under a mirror's oblique projection.
+- `NataneClipToPixel(clipPos)` — clip position to `SV_POSITION` pixels (flip- and stereo-aware). Screen-space patterns use `i.pos.xy`, not `screenUV * _ScreenParams.xy`.
+- `NataneIsObliqueProjection()` / `NataneIsOrthoCamera()` / `NataneIsMirror()` — gate anything that rewrites clip z or reads `_CameraDepthTexture` (mirror cameras have no valid depth texture).
+- World-space vectors (view direction, reflection) need NO mirror compensation: the mirror camera position is already reflected.
+
+### Verifying shader changes
+
+HLSL cannot be compiled outside Unity. After shader edits run, in this order:
+
+1. `python3 Tests/CI/check_shader_parity.py --repo-root .` and `python3 Tests/CI/precommit_check.py --repo-root .`
+2. `Tests/CI/setup-validation-project.sh --unity <Unity executable> --out <dir>` (default variants; fails on warnings)
+3. In the editor: `Tools > Natane > ビルド最適化 Build Optimization > 全検証をまとめて実行` (compiles the keyword sets in `NataneToonBatchVerify.KeywordSetsToCompile`; add a set there for every new keyword-gated code path)
+
+### VRChat tags
+
+Every variant's SubShader Tags must declare `"VRCFallback"` ("Toon", "ToonCutout", or "ToonTransparent" as appropriate) so safety-blocked avatars fall back to a sane toon shader.
 
 ### Adding a New Editor Tool
 
@@ -141,8 +170,9 @@ Material presets use ScriptableObjects stored in `Runtime/Presets/`. When creati
 ### Git Workflow
 
 Current branch structure:
-- **v1.1.5** - Current stable branch (main development)
-- **v1.2.0** - Future feature branch (AudioLink, multiple MatCaps, vertex animation)
+- **develop** - Main development branch (branch feature work off this)
+- **v1.1.5** - Release/distribution branch (VCC releases are tagged here)
+- **gh-pages** - Documentation website
 
 ## Important Files
 

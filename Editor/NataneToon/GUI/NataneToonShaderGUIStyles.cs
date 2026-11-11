@@ -21,19 +21,29 @@ namespace NataneToon.Editor
     /// </summary>
     public static class NataneToonShaderGUIStyles
     {
-        // ===== Section Colors =====
-        private static readonly Color BasicColor       = new Color(0.35f, 0.70f, 0.95f); // 水色
-        private static readonly Color ShadingColor     = new Color(0.55f, 0.45f, 0.85f); // 紫
-        private static readonly Color LightingColor    = new Color(0.95f, 0.75f, 0.30f); // 橙
-        private static readonly Color EffectsColor     = new Color(0.40f, 0.85f, 0.55f); // 緑
-        private static readonly Color EnvironmentColor = new Color(0.45f, 0.80f, 0.90f); // ティール
-        private static readonly Color AdvancedColor    = new Color(0.75f, 0.55f, 0.55f); // 赤茶
-
         // ===== Toggle Status Colors =====
-        public static readonly Color ToggleEnabledColor    = new Color(0.3f, 0.8f, 0.3f);
-        public static readonly Color ToggleDisabledColor   = new Color(0.6f, 0.6f, 0.6f);
-        public static readonly Color ToggleBlockedColor    = new Color(0.9f, 0.6f, 0.2f);
-        public static readonly Color SamplerBlockHintColor = new Color(0.92f, 0.66f, 0.22f);
+        public static Color ToggleEnabledColor { get { return NataneToonColorPalette.BrandPrimary; } }
+        public static Color ToggleDisabledColor { get { return NataneToonEditorTheme.TextMuted; } }
+        public static Color ToggleBlockedColor { get { return NataneToonEditorTheme.Warning; } }
+        public static Color SamplerBlockHintColor { get { return NataneToonEditorTheme.Warning; } }
+
+        /// <summary>
+        /// アクセント地の上に載せる文字色（Pages --accent-ink 相当）。
+        /// 明るいシアン背景では白文字よりダーク文字の方が読める。
+        /// </summary>
+        public static Color AccentInk
+        {
+            get { return NataneToonEditorTheme.AccentInk; }
+        }
+
+        /// <summary>
+        /// テーマ依存スタイルの再構築要否を判定するための合成キー。
+        /// (NataneToonEditorTheme.Version, IsDark) の組が変わったら古いキャッシュは破棄する。
+        /// </summary>
+        private static int CurrentThemeKey()
+        {
+            return NataneToonEditorTheme.CacheKey;
+        }
 
         /// <summary>
         /// セクションカテゴリに対応するカラーを返す
@@ -42,20 +52,20 @@ namespace NataneToon.Editor
         {
             switch (category)
             {
-                case SectionCategory.Basic:       return BasicColor;
-                case SectionCategory.Shading:     return ShadingColor;
-                case SectionCategory.Lighting:    return LightingColor;
-                case SectionCategory.Effects:     return EffectsColor;
-                case SectionCategory.Environment: return EnvironmentColor;
-                case SectionCategory.Advanced:    return AdvancedColor;
-                default:                          return BasicColor;
+                case SectionCategory.Basic:       return NataneToonColorPalette.SectionBasic;
+                case SectionCategory.Shading:     return NataneToonColorPalette.SectionShading;
+                case SectionCategory.Lighting:    return NataneToonColorPalette.SectionLighting;
+                case SectionCategory.Effects:     return NataneToonColorPalette.SectionEffects;
+                case SectionCategory.Environment: return NataneToonColorPalette.SectionEnvironment;
+                case SectionCategory.Advanced:    return NataneToonColorPalette.SectionAdvanced;
+                default:                          return NataneToonColorPalette.SectionBasic;
             }
         }
 
         // ===== Cached GUIStyles =====
 
         private static GUIStyle _boxOuter;
-        private static bool _boxOuterDarkApplied;
+        private static int _boxOuterThemeKey = int.MinValue;
         /// <summary>
         /// セクション外枠ボックス - helpBoxベース、padding(8,8,4,4)、下マージン付き
         /// P-21: ダークテーマ時にコントラストを強化
@@ -64,24 +74,20 @@ namespace NataneToon.Editor
         {
             get
             {
-                if (_boxOuter == null)
+                int themeKey = CurrentThemeKey();
+                if (_boxOuter == null || _boxOuterThemeKey != themeKey)
                 {
                     _boxOuter = new GUIStyle(EditorStyles.helpBox)
                     {
                         padding = new RectOffset(8, 8, 4, 4),
                         margin = new RectOffset(0, 0, 0, 6)
                     };
-                    _boxOuterDarkApplied = false;
-                }
-                // P-21: Dark theme contrast enhancement
-                if (EditorGUIUtility.isProSkin && !_boxOuterDarkApplied)
-                {
-                    Texture2D bgTex = new Texture2D(1, 1);
-                    bgTex.SetPixel(0, 0, new Color(0.25f, 0.25f, 0.25f, 0.3f));
-                    bgTex.Apply();
-                    bgTex.hideFlags = HideFlags.HideAndDontSave;
-                    _boxOuter.normal.background = bgTex;
-                    _boxOuterDarkApplied = true;
+                    // P-21: Dark theme contrast enhancement
+                    if (NataneToonEditorTheme.IsDark)
+                    {
+                        _boxOuter.normal.background = NataneToonEditorTextures.Solid(new Color(0.25f, 0.25f, 0.25f, 0.3f));
+                    }
+                    _boxOuterThemeKey = themeKey;
                 }
                 return _boxOuter;
             }
@@ -147,14 +153,16 @@ namespace NataneToon.Editor
         }
 
         private static GUIStyle _toggleBadgeOn;
+        private static int _toggleBadgeOnThemeKey = int.MinValue;
         /// <summary>
-        /// ON状態バッジ - 緑背景、白文字、小ラベル
+        /// ON状態バッジ - Pages .param-badge パターン（アクセント文字 on アクセント地15%程度の薄色背景）
         /// </summary>
         public static GUIStyle ToggleBadgeOn
         {
             get
             {
-                if (_toggleBadgeOn == null)
+                int themeKey = CurrentThemeKey();
+                if (_toggleBadgeOn == null || _toggleBadgeOnThemeKey != themeKey)
                 {
                     _toggleBadgeOn = new GUIStyle(EditorStyles.miniLabel)
                     {
@@ -163,27 +171,25 @@ namespace NataneToon.Editor
                         fontStyle = FontStyle.Bold,
                         fontSize = 9
                     };
-                    _toggleBadgeOn.normal.textColor = Color.white;
-                    // 緑背景用テクスチャ
-                    Texture2D bgTex = new Texture2D(1, 1);
-                    bgTex.SetPixel(0, 0, new Color(0.2f, 0.7f, 0.3f, 1f));
-                    bgTex.Apply();
-                    bgTex.hideFlags = HideFlags.HideAndDontSave;
-                    _toggleBadgeOn.normal.background = bgTex;
+                    _toggleBadgeOn.normal.textColor = NataneToonEditorTheme.Accent;
+                    _toggleBadgeOn.normal.background = NataneToonEditorTextures.Solid(NataneToonEditorTheme.AccentSoft);
+                    _toggleBadgeOnThemeKey = themeKey;
                 }
                 return _toggleBadgeOn;
             }
         }
 
         private static GUIStyle _toggleBadgeOff;
+        private static int _toggleBadgeOffThemeKey = int.MinValue;
         /// <summary>
-        /// OFF状態バッジ - グレー背景、ミュート文字
+        /// OFF状態バッジ - ミュート文字 on ミュート色8%程度の薄色背景（同じtint-badgeパターン）
         /// </summary>
         public static GUIStyle ToggleBadgeOff
         {
             get
             {
-                if (_toggleBadgeOff == null)
+                int themeKey = CurrentThemeKey();
+                if (_toggleBadgeOff == null || _toggleBadgeOffThemeKey != themeKey)
                 {
                     _toggleBadgeOff = new GUIStyle(EditorStyles.miniLabel)
                     {
@@ -191,19 +197,17 @@ namespace NataneToon.Editor
                         padding = new RectOffset(4, 4, 1, 1),
                         fontSize = 9
                     };
-                    _toggleBadgeOff.normal.textColor = new Color(0.6f, 0.6f, 0.6f, 1f);
-                    // グレー背景用テクスチャ
-                    Texture2D bgTex = new Texture2D(1, 1);
-                    bgTex.SetPixel(0, 0, new Color(0.5f, 0.5f, 0.5f, 0.3f));
-                    bgTex.Apply();
-                    bgTex.hideFlags = HideFlags.HideAndDontSave;
-                    _toggleBadgeOff.normal.background = bgTex;
+                    Color muted = NataneToonEditorTheme.TextMuted;
+                    _toggleBadgeOff.normal.textColor = muted;
+                    _toggleBadgeOff.normal.background = NataneToonEditorTextures.Solid(new Color(muted.r, muted.g, muted.b, 0.08f));
+                    _toggleBadgeOffThemeKey = themeKey;
                 }
                 return _toggleBadgeOff;
             }
         }
 
         private static GUIStyle _categoryDividerLabel;
+        private static int _categoryDividerLabelThemeKey = int.MinValue;
         /// <summary>
         /// カテゴリ区切りラベル - 中央揃え miniLabel、ミュートカラー
         /// </summary>
@@ -211,13 +215,16 @@ namespace NataneToon.Editor
         {
             get
             {
-                if (_categoryDividerLabel == null)
+                int themeKey = CurrentThemeKey();
+                if (_categoryDividerLabel == null || _categoryDividerLabelThemeKey != themeKey)
                 {
                     _categoryDividerLabel = new GUIStyle(EditorStyles.miniLabel)
                     {
                         alignment = TextAnchor.MiddleCenter
                     };
-                    _categoryDividerLabel.normal.textColor = new Color(0.5f, 0.5f, 0.5f, 0.8f);
+                    Color muted = NataneToonEditorTheme.TextMuted;
+                    _categoryDividerLabel.normal.textColor = new Color(muted.r, muted.g, muted.b, 0.8f);
+                    _categoryDividerLabelThemeKey = themeKey;
                 }
                 return _categoryDividerLabel;
             }
@@ -244,6 +251,7 @@ namespace NataneToon.Editor
 
         // P-17: Dependency hint label for disabled feature sections
         private static GUIStyle _dependencyHintLabel;
+        private static int _dependencyHintLabelThemeKey = int.MinValue;
         /// <summary>
         /// 無効な機能セクションに表示するヒントラベル - イタリック、右揃え、半透明
         /// </summary>
@@ -251,16 +259,133 @@ namespace NataneToon.Editor
         {
             get
             {
-                if (_dependencyHintLabel == null)
+                int themeKey = CurrentThemeKey();
+                if (_dependencyHintLabel == null || _dependencyHintLabelThemeKey != themeKey)
                 {
                     _dependencyHintLabel = new GUIStyle(EditorStyles.miniLabel)
                     {
                         fontStyle = FontStyle.Italic,
                         alignment = TextAnchor.MiddleRight
                     };
-                    _dependencyHintLabel.normal.textColor = new Color(0.5f, 0.5f, 0.5f, 0.6f);
+                    Color muted = NataneToonEditorTheme.TextMuted;
+                    _dependencyHintLabel.normal.textColor = new Color(muted.r, muted.g, muted.b, 0.6f);
+                    _dependencyHintLabelThemeKey = themeKey;
                 }
                 return _dependencyHintLabel;
+            }
+        }
+
+        // ===== Hot-path cached styles (OnGUI内での new GUIStyle を排除) =====
+
+        private static GUIStyle _centeredMiniLabel;
+        /// <summary>中央揃え miniLabel（機能オーバービューのチップ等、色は GUI.contentColor で指定）</summary>
+        public static GUIStyle CenteredMiniLabel
+        {
+            get
+            {
+                if (_centeredMiniLabel == null)
+                {
+                    _centeredMiniLabel = new GUIStyle(EditorStyles.miniLabel)
+                    {
+                        alignment = TextAnchor.MiddleCenter
+                    };
+                }
+                return _centeredMiniLabel;
+            }
+        }
+
+        private static GUIStyle _centeredMiniLabelBold;
+        /// <summary>中央揃え miniLabel の太字版</summary>
+        public static GUIStyle CenteredMiniLabelBold
+        {
+            get
+            {
+                if (_centeredMiniLabelBold == null)
+                {
+                    _centeredMiniLabelBold = new GUIStyle(EditorStyles.miniLabel)
+                    {
+                        alignment = TextAnchor.MiddleCenter,
+                        fontStyle = FontStyle.Bold
+                    };
+                }
+                return _centeredMiniLabelBold;
+            }
+        }
+
+        private static GUIStyle _panelTitleLabel;
+        /// <summary>パネル見出し - 太字 fontSize 13（オンボーディング等）</summary>
+        public static GUIStyle PanelTitleLabel
+        {
+            get
+            {
+                if (_panelTitleLabel == null)
+                {
+                    _panelTitleLabel = new GUIStyle(EditorStyles.boldLabel) { fontSize = 13 };
+                }
+                return _panelTitleLabel;
+            }
+        }
+
+        private static GUIStyle _stepNumberLabel;
+        private static int _stepNumberLabelThemeKey = int.MinValue;
+        /// <summary>手順番号ラベル - 太字、中央揃え、アクセント色</summary>
+        public static GUIStyle StepNumberLabel
+        {
+            get
+            {
+                int themeKey = CurrentThemeKey();
+                if (_stepNumberLabel == null || _stepNumberLabelThemeKey != themeKey)
+                {
+                    _stepNumberLabel = new GUIStyle(EditorStyles.boldLabel)
+                    {
+                        alignment = TextAnchor.MiddleCenter,
+                        fontSize = 12
+                    };
+                    _stepNumberLabel.normal.textColor = NataneToonEditorTheme.Accent;
+                    _stepNumberLabelThemeKey = themeKey;
+                }
+                return _stepNumberLabel;
+            }
+        }
+
+        private static GUIStyle _recommendedRangeLabel;
+        private static int _recommendedRangeLabelThemeKey = int.MinValue;
+        /// <summary>推奨値表示ラベル - miniLabel、アクセント色</summary>
+        public static GUIStyle RecommendedRangeLabel
+        {
+            get
+            {
+                int themeKey = CurrentThemeKey();
+                if (_recommendedRangeLabel == null || _recommendedRangeLabelThemeKey != themeKey)
+                {
+                    _recommendedRangeLabel = new GUIStyle(EditorStyles.miniLabel);
+                    _recommendedRangeLabel.normal.textColor = NataneToonEditorTheme.Accent;
+                    _recommendedRangeLabelThemeKey = themeKey;
+                }
+                return _recommendedRangeLabel;
+            }
+        }
+
+        private static GUIStyle _categoryDividerCenteredLabel;
+        private static int _categoryDividerCenteredLabelThemeKey = int.MinValue;
+        /// <summary>カテゴリ区切りの中央ラベル - miniLabel、fontSize 12、ミュート80%</summary>
+        public static GUIStyle CategoryDividerCenteredLabel
+        {
+            get
+            {
+                int themeKey = CurrentThemeKey();
+                if (_categoryDividerCenteredLabel == null || _categoryDividerCenteredLabelThemeKey != themeKey)
+                {
+                    _categoryDividerCenteredLabel = new GUIStyle(EditorStyles.miniLabel)
+                    {
+                        alignment = TextAnchor.MiddleCenter,
+                        fontSize = 12
+                    };
+                    Color muted = NataneToonEditorTheme.TextMuted;
+                    _categoryDividerCenteredLabel.normal.textColor = new Color(muted.r, muted.g, muted.b, 0.8f);
+                    _categoryDividerCenteredLabelThemeKey = themeKey;
+                }
+                return _categoryDividerCenteredLabel;
             }
         }
 
@@ -282,7 +407,7 @@ namespace NataneToon.Editor
         public static void DrawSectionBackground(Rect rect, SectionCategory category)
         {
             Color color = GetSectionColor(category);
-            float alpha = EditorGUIUtility.isProSkin ? 0.15f : 0.08f;
+            float alpha = NataneToonEditorTheme.IsDark ? 0.15f : 0.08f;
             Color bgColor = new Color(color.r, color.g, color.b, alpha);
             EditorGUI.DrawRect(rect, bgColor);
         }

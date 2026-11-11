@@ -1,0 +1,126 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>等高線 / 断層スライス - Natane Toon Shader</title>
+  <link rel="stylesheet" href="../../styles.css">
+</head>
+<body>
+<header class="site-header"></header>
+<div class="page-wrapper">
+  <aside class="sidebar"></aside>
+  <main class="main-content">
+    <nav class="breadcrumb"></nav>
+    <h1>等高線 / 断層スライス</h1>
+    <p class="page-subtitle">表面に等間隔の線や帯を走らせます。地形図の等高線、身体を上昇する SF スキャンライン、3D プリンターの積層線のような、周期的なラインを描けます。(v1.6.0)</p>
+
+    <div class="feature-preview" aria-hidden="true">
+      <span class="preview-tag">PREVIEW</span>
+      <em class="preview-name">Topographic</em>
+    </div>
+
+    <h2 id="overview">概要</h2>
+    <p>空間座標を等間隔でスライスし、等高線 / 断層バンドを Emission 対応色で重ねる機能です。<a href="../advanced/height-fade.html">ハイトフェード</a>が 1 本の境界を作るのに対し、こちらは<strong>複数の線や帯を繰り返し</strong>生成できます。テクスチャ不要で、AudioLink や FX モジュレーターと組み合わせやすいのが特長です。</p>
+    <p>ForwardBase のみで動作し (純粋な加算色のため二重光源に影響しない)、キーワード <code>_TOPOGRAPHIC</code> で切り替わります。OFF 時はゼロコストです。座標空間 (Object/World/View) と軸 (X/Y/Z/Custom) を選べます。</p>
+
+    <h2 id="looks">作れる表現</h2>
+    <ul>
+      <li>地形図の等高線、地層や木目</li>
+      <li>SF スキャンライン、身体を上昇するエネルギー</li>
+      <li>3D プリンターの積層線、ホログラムの断層</li>
+      <li>魔法陣から上昇する光のリング、上から下へ解析されるスキャン演出</li>
+    </ul>
+
+    <h2 id="key-params">主なパラメータ</h2>
+
+    <div class="param-card">
+      <div class="param-header">
+        <span class="param-name">モード</span>
+        <span class="param-prop">_TopoMode</span>
+        <span class="param-badge badge-enum">enum (0〜5)</span>
+      </div>
+      <div class="param-body">
+        <p>線の描き方を選びます: Lines (細い線) / Bands (太い帯) / GradientBands (段階的な色) / DoubleLines (二重線) / PulseRings (移動するリング) / NoiseDistorted (ノイズで歪んだ線)。</p>
+        <p class="param-default">デフォルト: 0 (Lines)</p>
+      </div>
+    </div>
+
+    <div class="param-card">
+      <div class="param-header">
+        <span class="param-name">座標空間 / 軸</span>
+        <span class="param-prop">_TopoSpace / _TopoAxis</span>
+        <span class="param-badge badge-enum">enum</span>
+      </div>
+      <div class="param-body">
+        <p>線を並べる座標空間 (Object / World / View) と軸 (X / Y / Z / Custom) です。World + Y にすると、キャラの位置に関わらず「高さ方向」に線が並びます。</p>
+        <p class="param-default">デフォルト: Space=World / Axis=Y</p>
+      </div>
+      <div class="param-tip">身体を上昇するスキャン線は World + Y、体に貼り付く縞は Object 空間が向いています。</div>
+    </div>
+
+    <div class="param-card">
+      <div class="param-header">
+        <span class="param-name">間隔 / 太さ</span>
+        <span class="param-prop">_TopoSpacing / _TopoLineWidth</span>
+        <span class="param-badge badge-range">range</span>
+      </div>
+      <div class="param-body">
+        <p>線と線の間隔 (Spacing) と、線そのものの太さ (LineWidth) です。</p>
+        <p class="param-default">デフォルト: Spacing 0.1 / LineWidth 0.1</p>
+      </div>
+    </div>
+
+    <div class="param-card">
+      <div class="param-header">
+        <span class="param-name">スクロール速度</span>
+        <span class="param-prop">_TopoSpeed</span>
+        <span class="param-badge badge-float">float</span>
+      </div>
+      <div class="param-body">
+        <p>線が流れる速度です。0 で静止、値を上げると線が軸方向へ流れます。<code>_TopoOffset</code> で位置をずらせます。</p>
+        <p class="param-default">デフォルト: 0</p>
+      </div>
+      <div class="param-tip">FX モジュレーターで <code>TopographicOffset</code> を変調すると、音や時間に合わせて線を動かせます。</div>
+    </div>
+
+    <h2 id="all-params">すべてのパラメータ</h2>
+    <table>
+      <thead>
+        <tr><th>プロパティ</th><th>型 / 既定</th><th>説明</th></tr>
+      </thead>
+      <tbody>
+        <tr><td><code>_Topographic</code></td><td>Toggle / 0</td><td>有効化 (<code>_TOPOGRAPHIC</code>)</td></tr>
+        <tr><td><code>_TopoSpace</code></td><td>Enum(Object/World/View) / World</td><td>座標空間</td></tr>
+        <tr><td><code>_TopoAxis</code></td><td>Enum(X/Y/Z/Custom) / Y</td><td>軸</td></tr>
+        <tr><td><code>_TopoCustomDir</code></td><td>Vector / (0,1,0,0)</td><td>カスタム方向 (Axis=Custom)</td></tr>
+        <tr><td><code>_TopoMode</code></td><td>Enum(0-5) / 0</td><td>Lines/Bands/GradientBands/DoubleLines/PulseRings/NoiseDistorted</td></tr>
+        <tr><td><code>_TopoSpacing</code></td><td>Range(0.001,2) / 0.1</td><td>バンド間隔</td></tr>
+        <tr><td><code>_TopoOffset</code></td><td>Float / 0</td><td>オフセット</td></tr>
+        <tr><td><code>_TopoSpeed</code></td><td>Float / 0</td><td>スクロール速度</td></tr>
+        <tr><td><code>_TopoLineWidth</code></td><td>Range(0.001,0.5) / 0.1</td><td>等高線の太さ</td></tr>
+        <tr><td><code>_TopoColor</code></td><td>Color (HDR) / (1,1,1,1)</td><td>プライマリ色</td></tr>
+        <tr><td><code>_TopoColor2</code></td><td>Color (HDR) / (0,0,0,1)</td><td>セカンダリ色</td></tr>
+        <tr><td><code>_TopoEmission</code></td><td>Range(0,10) / 1</td><td>Emission 強度 (HDR 分は Bloom へ)</td></tr>
+        <tr><td><code>_TopoNoiseScale</code></td><td>Range(0,10) / 1</td><td>ノイズスケール</td></tr>
+        <tr><td><code>_TopoNoiseStrength</code></td><td>Range(0,1) / 0.3</td><td>ノイズ歪み量 (NoiseDistorted で顕著)</td></tr>
+        <tr><td><code>_TopoBlend</code></td><td>Range(0,1) / 1</td><td>ブレンド量</td></tr>
+        <tr><td><code>_TopoMask</code></td><td>2D (R) / white</td><td>マスク</td></tr>
+      </tbody>
+    </table>
+
+    <h2 id="tips">使い方のヒント</h2>
+    <ul>
+      <li><strong>光らせる</strong>: <code>_TopoColor</code> を HDR で 1 以上にし、<code>_TopoEmission</code> を上げると、線が Bloom で発光します。Emission ステージ直後に加算されます。</li>
+      <li><strong>サイバースキャン</strong>: <a href="../../params/effects/glitch.html">グリッチ</a>や X-Ray と組み合わせると、スキャン線が身体を上昇し壁に隠れた部分だけ解析表示される演出が作れます。</li>
+      <li><strong>マスク</strong>: <code>_TopoMask</code> の R チャンネルで適用範囲を制御できます。</li>
+      <li>ForwardBase のみで描画されるため、追加光源 (ForwardAdd) で線が二重に濃くなることはありません。</li>
+    </ul>
+
+    <nav class="page-nav"></nav>
+  </main>
+</div>
+<footer class="site-footer">&copy; 2025 Natane Toon Shader.</footer>
+<script src="../../nav.js"></script>
+</body>
+</html>

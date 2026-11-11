@@ -288,7 +288,7 @@ namespace NataneToon.Editor
 
             if (searchInScenes)
             {
-                Renderer[] renderers = GameObject.FindObjectsOfType<Renderer>(true);
+                Renderer[] renderers = NataneEditorCompat.FindObjectsOfTypeCompat<Renderer>(true);
                 var sceneObjectIdsByMaterialGuid = new Dictionary<string, HashSet<int>>(StringComparer.OrdinalIgnoreCase);
 
                 for (int i = 0; i < renderers.Length; i++)

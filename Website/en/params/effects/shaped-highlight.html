@@ -1,0 +1,126 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Shaped Highlight - Natane Toon Shader</title>
+  <link rel="stylesheet" href="../../../styles.css">
+</head>
+<body>
+<header class="site-header"></header>
+<div class="page-wrapper">
+  <aside class="sidebar"></aside>
+  <main class="main-content">
+    <nav class="breadcrumb"></nav>
+    <h1>Shaped Highlight</h1>
+    <p class="page-subtitle">Turn the specular into a star, heart, or cross instead of a round dot. Reproduce the symbolic highlights illustrators draw &mdash; star sparkles in the eyes, cross flares on a gem. (v1.6.0)</p>
+
+    <div class="feature-preview" aria-hidden="true">
+      <span class="preview-tag">PREVIEW</span>
+      <em class="preview-name">Shaped Highlight</em>
+    </div>
+
+    <h2 id="overview">Overview</h2>
+    <p>Instead of a round specular, this adds a procedural shape &mdash; circle / ring / cross / star / heart / diamond / crescent / line (or a custom SDF texture) &mdash; as the highlight. It targets the <strong>symbolic highlights</strong> of anime and illustration rather than physical reflection.</p>
+    <p>The coordinates are built from the view-space deviation of the half vector and normal (the specular peak), so it aligns naturally with the existing specular. It toggles with <code>_SHAPED_HIGHLIGHT</code> and is zero cost when off. You can layer a second shape or make it sparkle over time.</p>
+
+    <h2 id="looks">What you can make</h2>
+    <ul>
+      <li>Star sparkles in the eyes, cross flares on gems</li>
+      <li>Long thin highlights in hair, sharp light streaks on metal</li>
+      <li>Heart-shaped light, glowing sigils on magic items</li>
+      <li>Comic-style flashes that appear for an instant (sparkle pulse)</li>
+    </ul>
+
+    <h2 id="key-params">Key parameters</h2>
+
+    <div class="param-card">
+      <div class="param-header">
+        <span class="param-name">Shape</span>
+        <span class="param-prop">_ShapedHLShape</span>
+        <span class="param-badge badge-enum">enum (0&ndash;8)</span>
+      </div>
+      <div class="param-body">
+        <p>Pick the highlight shape: Circle / Ring / Cross / Star / Heart / Diamond / Crescent / Line / Custom. Custom uses the SDF texture in <code>_ShapedHLTex</code>.</p>
+        <p class="param-default">Default: 3 (Star)</p>
+      </div>
+      <div class="param-tip">Star / Heart for eyes, Cross / Diamond for gems.</div>
+    </div>
+
+    <div class="param-card">
+      <div class="param-header">
+        <span class="param-name">Highlight Color</span>
+        <span class="param-prop">_ShapedHLColor</span>
+        <span class="param-badge badge-color">color (HDR)</span>
+      </div>
+      <div class="param-body">
+        <p>The highlight color. HDR: values above 1 combine with Bloom for a strong glow.</p>
+        <p class="param-default">Default: (1, 1, 1, 1)</p>
+      </div>
+    </div>
+
+    <div class="param-card">
+      <div class="param-header">
+        <span class="param-name">Size</span>
+        <span class="param-prop">_ShapedHLSize</span>
+        <span class="param-badge badge-range">range (0.01&ndash;2)</span>
+      </div>
+      <div class="param-body">
+        <p>Highlight size. Tune edge softness with <code>_ShapedHLSoftness</code> and non-uniform stretch with <code>_ShapedHLStretch</code>.</p>
+        <p class="param-default">Default: 0.5</p>
+      </div>
+    </div>
+
+    <div class="param-card">
+      <div class="param-header">
+        <span class="param-name">Light Follow / Camera Follow</span>
+        <span class="param-prop">_ShapedHLLightFollow / _ShapedHLCameraFollow</span>
+        <span class="param-badge badge-range">range (0&ndash;1)</span>
+      </div>
+      <div class="param-body">
+        <p>How much the highlight rotation follows the light direction or the camera. 1 fully follows, 0 keeps a fixed rotation.</p>
+        <p class="param-default">Default: LightFollow 1 / CameraFollow 0</p>
+      </div>
+      <div class="param-tip">Raise CameraFollow to keep an eye sparkle always facing the viewer.</div>
+    </div>
+
+    <h2 id="all-params">All parameters</h2>
+    <table>
+      <thead>
+        <tr><th>Property</th><th>Type / Default</th><th>Description</th></tr>
+      </thead>
+      <tbody>
+        <tr><td><code>_ShapedHighlight</code></td><td>Toggle / 0</td><td>Enable (<code>_SHAPED_HIGHLIGHT</code>)</td></tr>
+        <tr><td><code>_ShapedHLShape</code></td><td>Enum(0-8) / 3</td><td>Circle/Ring/Cross/Star/Heart/Diamond/Crescent/Line/Custom</td></tr>
+        <tr><td><code>_ShapedHLColor</code></td><td>Color (HDR) / (1,1,1,1)</td><td>Highlight color</td></tr>
+        <tr><td><code>_ShapedHLIntensity</code></td><td>Range(0,10) / 1</td><td>Intensity</td></tr>
+        <tr><td><code>_ShapedHLSize</code></td><td>Range(0.01,2) / 0.5</td><td>Size</td></tr>
+        <tr><td><code>_ShapedHLSoftness</code></td><td>Range(0.001,1) / 0.1</td><td>Edge softness</td></tr>
+        <tr><td><code>_ShapedHLStretch</code></td><td>Vector / (1,1,0,0)</td><td>XY stretch</td></tr>
+        <tr><td><code>_ShapedHLRotation</code></td><td>Range(0,360) / 0</td><td>Rotation (degrees)</td></tr>
+        <tr><td><code>_ShapedHLLightFollow</code></td><td>Range(0,1) / 1</td><td>Follow light direction</td></tr>
+        <tr><td><code>_ShapedHLCameraFollow</code></td><td>Range(0,1) / 0</td><td>Follow camera</td></tr>
+        <tr><td><code>_ShapedHLShape2</code></td><td>Enum(0-7) / 0</td><td>Secondary shape</td></tr>
+        <tr><td><code>_ShapedHLIntensity2</code></td><td>Range(0,10) / 0</td><td>Secondary intensity (0 = off)</td></tr>
+        <tr><td><code>_ShapedHLSize2</code></td><td>Range(0.01,2) / 0.3</td><td>Secondary size</td></tr>
+        <tr><td><code>_ShapedHLSparkleSpeed</code></td><td>Range(0,20) / 0</td><td>Sparkle pulse speed</td></tr>
+        <tr><td><code>_ShapedHLTex</code></td><td>2D / black</td><td>Custom SDF texture (when Shape=Custom)</td></tr>
+        <tr><td><code>_ShapedHLMask</code></td><td>2D (R) / white</td><td>Mask</td></tr>
+      </tbody>
+    </table>
+
+    <h2 id="tips">Usage Tips</h2>
+    <ul>
+      <li><strong>Tied to specular</strong>: it is added right after the <a href="specular.html">Specular</a> block using a highlight-safe blend (<code>SafeAdditiveBlend</code>), so it holds up even at high intensity.</li>
+      <li><strong>Layer two</strong>: add a secondary shape with <code>_ShapedHLShape2</code> / <code>_ShapedHLIntensity2</code> (e.g. a small star inside a big star).</li>
+      <li><strong>Sparkle</strong>: raise <code>_ShapedHLSparkleSpeed</code> for a twinkling eye glint.</li>
+      <li>Supports <a href="../advanced/distance-fade.html">Distance Fade</a> and fades out automatically at range.</li>
+    </ul>
+
+    <nav class="page-nav"></nav>
+  </main>
+</div>
+<footer class="site-footer">&copy; 2025 Natane Toon Shader.</footer>
+<script src="../../../nav.js"></script>
+</body>
+</html>

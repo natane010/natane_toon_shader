@@ -1,0 +1,149 @@
+// ValidateShaders.cs.txt
+//
+// Batch-mode shader compilation gate. Enumerates every shader the package ships and
+// fails the run if Unity reported a single error or warning for any of them.
+//
+// This file is NOT part of the package's own assemblies — it is copied into the
+// throwaway validation project created by setup-validation-project.sh, where it lands
+// in Assets/Editor/ValidateShaders.cs and compiles against the default Editor assembly.
+//
+// The .txt extension is deliberate. This package lives under Assets/, so a plain .cs
+// here would be swept into Assembly-CSharp — a runtime assembly — and its UnityEditor
+// references would break every player build. Unity ignores .txt, so the file stays inert
+// until the setup script copies it out.
+//
+// Usage (see README.md for the full command):
+//   Unity -batchmode -quit -projectPath <validation-project> \
+//         -executeMethod NataneToonCI.ValidateShaders.RunFromBatch \
+//         -logFile <log>
+//
+// Output is prefixed so CI can grep it out of Unity's very noisy log:
+//   SHADER_TOTAL= / SHADER_ERROR_COUNT= / SHADER_WARNING_COUNT= / SHADER_RESULT=
+
+using System;
+using System.Collections.Generic;
+using System.IO;
+using System.Linq;
+using System.Text;
+using UnityEditor;
+using UnityEditor.Rendering;
+using UnityEngine;
+
+namespace NataneToonCI
+{
+    public static class ValidateShaders
+    {
+        // Only shaders under these path fragments are checked. Without this the gate would
+        // also fail on shaders belonging to unrelated packages pulled in as dependencies.
+        private static readonly string[] IncludedPathFragments =
+        {
+            "com.natane.toonshader",
+            "/NataneToon/",
+        };
+
+        public static void RunFromBatch()
+        {
+            int exitCode = Run();
+
+            // -quit alone always exits 0, so the failure has to be forced explicitly.
+            if (exitCode != 0)
+            {
+                EditorApplication.Exit(exitCode);
+            }
+        }
+
+        public static int Run()
+        {
+            List<Shader> shaders = CollectShaders();
+
+            if (shaders.Count == 0)
+            {
+                Debug.LogError("SHADER_RESULT=NO_SHADERS_FOUND");
+                Debug.LogError(
+                    "[Natane CI] No package shaders were found. Check that the validation project's " +
+                    "Packages/manifest.json points at the repository with a file: reference.");
+                return 2;
+            }
+
+            int errorCount = 0;
+            int warningCount = 0;
+            var report = new StringBuilder();
+
+            foreach (Shader shader in shaders.OrderBy(s => s.name, StringComparer.Ordinal))
+            {
+                // Force a compile so GetShaderMessages has something to report. Without this
+                // an untouched shader can come back clean simply because it was never built.
+                ShaderUtil.ClearShaderMessages(shader);
+                ShaderUtil.GetShaderMessageCount(shader);
+
+                ShaderMessage[] messages = ShaderUtil.GetShaderMessages(shader);
+                if (messages == null || messages.Length == 0)
+                {
+                    continue;
+                }
+
+                foreach (ShaderMessage message in messages)
+                {
+                    bool isError = message.severity == ShaderCompilerMessageSeverity.Error;
+                    if (isError) errorCount++;
+                    else warningCount++;
+
+                    report.AppendLine(
+                        $"  [{(isError ? "ERROR" : "WARNING")}] {shader.name}\n" +
+                        $"      {message.message}\n" +
+                        $"      {message.file}:{message.line} ({message.platform})");
+                }
+            }
+
+            Debug.Log($"SHADER_TOTAL={shaders.Count}");
+            Debug.Log($"SHADER_ERROR_COUNT={errorCount}");
+            Debug.Log($"SHADER_WARNING_COUNT={warningCount}");
+
+            if (errorCount == 0 && warningCount == 0)
+            {
+                Debug.Log("SHADER_RESULT=PASS");
+                Debug.Log($"[Natane CI] {shaders.Count} shaders compiled with no errors or warnings.");
+                return 0;
+            }
+
+            Debug.LogError("SHADER_RESULT=FAIL");
+            Debug.LogError(
+                $"[Natane CI] {errorCount} error(s) and {warningCount} warning(s):\n{report}");
+            return 1;
+        }
+
+        private static List<Shader> CollectShaders()
+        {
+            var shaders = new List<Shader>();
+
+            foreach (string guid in AssetDatabase.FindAssets("t:Shader"))
+            {
+                string path = AssetDatabase.GUIDToAssetPath(guid);
+                if (string.IsNullOrEmpty(path)) continue;
+
+                string normalized = path.Replace('\\', '/');
+                bool included = IncludedPathFragments.Any(
+                    fragment => normalized.IndexOf(fragment, StringComparison.OrdinalIgnoreCase) >= 0);
+                if (!included) continue;
+
+                Shader shader = AssetDatabase.LoadAssetAtPath<Shader>(path);
+                if (shader != null) shaders.Add(shader);
+            }
+
+            return shaders;
+        }
+
+        /// <summary>
+        /// Separate entry point for the compile-error case. When a C# script fails to
+        /// compile, Unity never reaches -executeMethod at all, so the shader gate silently
+        /// "passes" by never running. CI greps the log for this marker to tell the two
+        /// apart; see check-log.sh.
+        /// </summary>
+        public static void WriteRanMarker()
+        {
+            string root = Path.GetDirectoryName(Application.dataPath);
+            if (string.IsNullOrEmpty(root)) return;
+            File.WriteAllText(Path.Combine(root, "shader-validation-ran.marker"), "ran");
+        }
+    }
+}

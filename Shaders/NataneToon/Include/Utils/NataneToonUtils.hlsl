@@ -1,6 +1,11 @@
 #ifndef NATANE_TOON_UTILS_INCLUDED
 #define NATANE_TOON_UTILS_INCLUDED
 
+// Shared SH / LPPV ambient evaluator (NataneShadeSH). Included here because
+// Utils is pulled in by every SH consumer (Fragment, Fur Shell, Background)
+// and always after UnityCG.cginc, satisfying NataneToonSH.hlsl's dependencies.
+#include "../Lighting/NataneToonSH.hlsl"
+
 // ===== NOSAMPLER Function Argument Helpers =====
 // Portable type for passing NOSAMPLER textures as function arguments.
 // SEPARATE platforms (DX11+): Texture2D, others: sampler2D.
@@ -31,11 +36,9 @@
 // Declared here so that any file including Utils alone (e.g. FurShell)
 // gets the VRChat globals without needing the full NataneToonInput.hlsl.
 // NataneToonInput.hlsl guards with the same variable names, so no redefinition occurs.
-#ifndef NATANE_VRCHAT_GLOBALS_DECLARED
-#define NATANE_VRCHAT_GLOBALS_DECLARED
-float _VRChatMirrorMode;
-float _VRChatCameraMode;
-#endif
+// The declarations (and the viewer / projection helpers built on them) live in
+// NataneToonCamera.hlsl so the outline pass can share them without pulling in Utils.
+#include "NataneToonCamera.hlsl"
 
 // Returns true if currently rendering in a VRChat mirror
 float NataneIsMirror()
@@ -818,7 +821,9 @@ float2 ApplyRefractionDistortion(float2 screenUV, float3 worldNormal, float3 vie
 
     // Calculate distortion offset based on refracted direction
     // Project refraction direction to screen space
-    float2 distortion = refractDir.xy * intensity * 0.1;
+    // View space: the offset follows the camera (and the reflected view in mirrors).
+    // World-space XY was only right while looking down the world Z axis.
+    float2 distortion = mul((float3x3)UNITY_MATRIX_V, refractDir).xy * intensity * 0.1;
 
     // Apply distortion to UV
     float2 distortedUV = screenUV + distortion;
@@ -867,15 +872,17 @@ half3 SampleGrabTextureWithBlur(float2 uv, float blurAmount)
 float SampleAudioLink(int band)
 {
     #ifdef _AUDIOLINK
-        // AudioLink standard texture coordinates
-        // Band data is stored in the first row (y = 0.0 to 0.0625)
-        float2 audioUV = float2(0.0, 0.0);
+        // No AudioLink in this world: the global texture is unbound (a 4x4 default), and
+        // sampling it returned a constant that lit every AudioLink effect permanently.
+        if (_AudioTexture_TexelSize.z <= 16.0)
+            return 0.0;
 
-        // Map band to x coordinate (0-3 mapped to texture space)
-        audioUV.x = (float(band) + 0.5) / 4.0; // Center of each band quadrant
-
-        // Sample AudioLink texture
-        float audioValue = tex2D(_AudioTexture, audioUV).r;
+        // AudioLink layout (128x64): ALPASS_AUDIOLINK starts at pixel (0,0). Each of the
+        // four bands is one ROW; x is the history delay, x = 0 being the current value.
+        // The previous mapping put the band on X at y = 0, which read the bass row at
+        // four different delays, so every band reacted to bass.
+        float2 audioUV = float2(0.5 / 128.0, (clamp(float(band), 0.0, 3.0) + 0.5) / 64.0);
+        float audioValue = tex2Dlod(_AudioTexture, float4(audioUV, 0, 0)).r;
         return saturate(audioValue);
     #else
         return 0.0;
@@ -887,21 +894,33 @@ float SampleAudioLink(int band)
 // mode: 0=MotionIncrease, 1=MotionSpeed, 2=SelfIntensity, 3=ColorChord
 float SampleAudioLinkChronotensity(int band, int mode)
 {
-    #ifdef _AUDIOLINK_CHRONOTENSITY
-        // AudioLink Chronotensity data layout (standard 128x64 texture):
-        // ALPASS_CHRONOTENSITY = row 16, 4 rows for 4 bands
-        // Columns correspond to chronotensity modes
+    #ifdef _AUDIOLINK
+        // No AudioLink in this world (see SampleAudioLink).
+        if (_AudioTexture_TexelSize.z <= 16.0)
+            return 0.0;
+
+        // AudioLink layout (128x64): ALPASS_CHRONOTENSITY starts at pixel (16, 28).
+        // x = 16 + mode (0-7), y = 28 + band (0-3). Each texel is an unsigned integer
+        // split over the channels (r + g * 1024 + b * 1024^2 + a * 1024^3) that keeps
+        // growing while the band is active.
+        // This used to be compiled only under _AUDIOLINK_CHRONOTENSITY, a keyword no pass
+        // declares, and read row 16 (not the chronotensity block) as a 0-1 value, so the
+        // FX Modulator "Chronotensity" source was always 0.
         float2 chronoUV = float2(
-            (float(mode) + 0.5) / 128.0,
-            (16.0 + float(band) + 0.5) / 64.0
+            (16.0 + clamp(float(mode), 0.0, 7.0) + 0.5) / 128.0,
+            (28.0 + clamp(float(band), 0.0, 3.0) + 0.5) / 64.0
         );
-        return saturate(tex2Dlod(_AudioTexture, float4(chronoUV, 0, 0)).r);
+        float4 raw = tex2Dlod(_AudioTexture, float4(chronoUV, 0, 0));
+        // Only the low 20 bits are used: exact in float, and the wrap is seamless because
+        // the upper channels carry. One cycle is 2^20 units (about a million, the scale
+        // AudioLink's own examples use).
+        float phase = frac((raw.r + raw.g * 1024.0) / 1048576.0);
+        // Ping-pong so a modulator driven by it never jumps at the wrap.
+        return 1.0 - abs(phase * 2.0 - 1.0);
     #else
         return 0.0;
     #endif
 }
-
-// Convenience overload: sample chronotensity for a single band (MotionIncrease mode)
 float SampleAudioLinkChronotensity(int band)
 {
     return SampleAudioLinkChronotensity(band, 0);
@@ -914,7 +933,8 @@ float SampleAudioLinkChronotensity(int band)
 // Returns 0-1 fade value based on distance
 float CalculateDistanceFade(float3 worldPos, float fadeStart, float fadeEnd)
 {
-    float distance = length(_WorldSpaceCameraPos - worldPos);
+    // Eye-centred / mirror-aware distance: both eyes fade identically.
+    float distance = NataneViewerDistance(worldPos);
     float fade = saturate((distance - fadeStart) / max(fadeEnd - fadeStart, 0.01));
     return 1.0 - fade; // Invert so 1 = visible, 0 = faded
 }
@@ -1319,34 +1339,54 @@ half3 CalculateDripEffectFast(float3 worldPos, float time, half3 dripColor, floa
 #ifndef NATANE_UTILS_STANDALONE
 float2 StabilizeDitherCoord(float2 screenPixelPos)
 {
-    float4 pivotClip = mul(UNITY_MATRIX_VP, float4(unity_ObjectToWorld._m03_m13_m23, 1.0));
-    float2 pivotNDC = pivotClip.xy / pivotClip.w;
-    float2 pivotScreen = (pivotNDC * 0.5 + 0.5) * _ScreenParams.xy;
+    float stabilize = saturate(_DitherStabilize);
+    if (stabilize <= 0.0)
+        return screenPixelPos;   // default: untouched
+
+    float3 pivotWS = unity_ObjectToWorld._m03_m13_m23;
+    float4 pivotClip = mul(UNITY_MATRIX_VP, float4(pivotWS, 1.0));
+    // Pivot beside / behind the camera (your own body in first person): w approaches
+    // zero or goes negative and the projected anchor explodes or mirrors. Keep it in front.
+    if (!NataneIsOrthoCamera())
+        pivotClip.w = max(pivotClip.w, 0.25 * distance(_WorldSpaceCameraPos, pivotWS));
+    // NataneClipToPixel uses the SV_POSITION convention (top-down on D3D, stereo offset),
+    // so the anchor really follows the object instead of sliding at twice its speed vertically.
+    float2 pivotScreen = NataneClipToPixel(pivotClip);
     // pivotScreen を引くと負座標が生じ、fmod() で負のインデックスになる。
     // 十分大きな正のオフセットを加えて常に正を保証する。
     float2 stablePos = screenPixelPos - pivotScreen + 100000.0;
-    return lerp(screenPixelPos, stablePos, saturate(_DitherStabilize));
+    return lerp(screenPixelPos, stablePos, stabilize);
 }
 #endif
 
+// ===== Highlight compression (Khronos PBR Neutral, highlight part only) =====
+// Compresses on the PEAK channel, so no channel clips and the hue is kept; colours
+// below 0.76 pass through untouched. Only the roll-off and the desaturation toward
+// white are used: the tone mapper's dark-end offset is left out so shadows and
+// mid-tones stay exactly as painted. Output peak is always below 1.
+// Reference: Khronos PBR Neutral Tone Mapper (2024), pbrNeutral.glsl.
+half3 NataneNeutralHighlightCompress(half3 c)
+{
+    const half startCompression = 0.76;
+    const half desaturation = 0.15;
+    const half d = 1.0 - startCompression;
+
+    half peak = max(c.r, max(c.g, c.b));
+    half safePeak = max(peak, startCompression);
+    half newPeak = 1.0 - d * d / (safePeak + d - startCompression);
+    half3 compressed = c * (newPeak / safePeak);
+    half g = 1.0 - 1.0 / (desaturation * (safePeak - newPeak) + 1.0);
+    compressed = lerp(compressed, half3(newPeak, newPeak, newPeak), g);
+    return peak < startCompression ? c : compressed;
+}
+
 // ===== Shared Dithering / Alpha Functions =====
-static const float NataneBayer4x4[16] = {
-    0.0/16.0,  8.0/16.0,  2.0/16.0, 10.0/16.0,
-    12.0/16.0, 4.0/16.0, 14.0/16.0,  6.0/16.0,
-    3.0/16.0, 11.0/16.0,  1.0/16.0,  9.0/16.0,
-    15.0/16.0, 7.0/16.0, 13.0/16.0,  5.0/16.0
-};
+// NataneBayer4x4 / NataneBayerThreshold4x4 / NataneFadeDitherScale are defined in
+// NataneToonCamera.hlsl (shared with the outline pass).
 
 float NataneInterleavedGradientNoise(float2 pixelPos)
 {
     return frac(52.9829189 * frac(dot(pixelPos, float2(0.06711056, 0.00583715))));
-}
-
-float NataneBayerThreshold4x4(float2 screenPos, float scale)
-{
-    float2 scaledPos = screenPos * max(scale, 0.0001);
-    int2 coord = int2(fmod(scaledPos, 4.0));
-    return NataneBayer4x4[coord.y * 4 + coord.x];
 }
 
 #if defined(_BLUE_NOISE_DITHER)
@@ -1376,6 +1416,20 @@ float NataneGetDitherThreshold(float2 screenPos, float scale)
     #endif
 }
 
+// Threshold for sliders that use the "x10" scale convention (distance / height /
+// intersection fade, shadow-boundary dithering, dithering alpha). The Bayer cell size
+// follows NataneFadeDitherScale; the optional blue-noise layer keeps its previous input.
+float NataneGetFadeDitherThreshold(float2 screenPos, float sliderScale)
+{
+    float bayer = NataneBayerThreshold4x4(screenPos, NataneFadeDitherScale(sliderScale));
+    #if defined(_BLUE_NOISE_DITHER)
+        float blue = NataneBlueNoiseThreshold(screenPos, sliderScale);
+        return lerp(bayer, blue, saturate(_BlueNoiseAmount));
+    #else
+        return bayer;
+    #endif
+}
+
 #if defined(_DITHERING_ALPHA)
 float BayerMatrix4x4(float2 screenPos)
 {
@@ -1385,7 +1439,7 @@ float BayerMatrix4x4(float2 screenPos)
 // Apply dithering to alpha channel
 float ApplyDitheringAlpha(float alpha, float2 screenPos, float scale)
 {
-    float threshold = NataneGetDitherThreshold(screenPos, scale);
+    float threshold = NataneGetFadeDitherThreshold(screenPos, scale);
     return alpha - threshold;
 }
 #endif // _DITHERING_ALPHA
@@ -1580,7 +1634,10 @@ half3 QuantizeColorHSV(half3 color, float hueLevels, float satLevels, float valL
 // color:   input linear RGB (should be [0,1])
 // lutTex:  the LUT texture sampler
 // lutSize: number of cells per axis (typically 32)
-half3 ApplyLUT3D(half3 color, sampler2D lutTex, float lutSize)
+// lutTex は NOSAMPLER 宣言（Texture2D）なので、引数も NATANE_TEX2D_NS_ARG で受ける。
+// sampler2D で受けていたためコンパイルが通らず、_LUT_3D を実際に有効化した変種だけが
+// 落ちていた（既定 OFF なので長く気付かれなかった）。
+half3 ApplyLUT3D(half3 color, NATANE_TEX2D_NS_ARG(lutTex), float lutSize)
 {
     float blue = color.b * (lutSize - 1.0);
     float blueFloor = floor(blue);
@@ -1599,8 +1656,10 @@ half3 ApplyLUT3D(half3 color, sampler2D lutTex, float lutSize)
     uv2.x = (min(blueFloor + 1.0, lutSize - 1.0) * invSize + color.r * invSize * (1.0 - invSize)) + halfTexel * invSize;
     uv2.y = uv1.y;
 
-    half3 lut1 = tex2D(lutTex, uv1).rgb;
-    half3 lut2 = tex2D(lutTex, uv2).rgb;
+    // LUT は必ず Clamp で引く。Repeat だとストリップの端で色が巻き込み、
+    // 赤や青の最大値付近だけ反対側のスライスの色が混ざる。
+    half3 lut1 = NATANE_SAMPLE_CLAMP(lutTex, uv1).rgb;
+    half3 lut2 = NATANE_SAMPLE_CLAMP(lutTex, uv2).rgb;
 
     return lerp(lut1, lut2, blueFrac);
 }
@@ -1617,24 +1676,59 @@ half3 ApplyLUT3D(half3 color, sampler2D lutTex, float lutSize)
 // tiling:       UV tiling multiplier for hatching pattern
 // hatchColor:   tint colour for hatching strokes
 // blend:        overall blend strength
+/// <param name="shadingValue">
+/// Tone that selects the TAM level: 0 = shadow (densest strokes), 1 = lit (none).
+/// This has to be the SHADING value, not the luminance of the colour so far. Driving it
+/// from the colour hatches anything with a dark albedo — black clothing, dark hair — as
+/// if it were in shadow, no matter how much light is on it.
+/// </param>
+/// <param name="composite">0 = ShadowOnly, 1 = LitOnly, 2 = All. Same enum as
+/// _ShadowBokehComposite.</param>
 half3 ApplyHatching(half3 baseColor, float2 uv, half shadingValue, half maskValue,
-    NATANE_TEX2D_NS_ARG(hatchTex0), NATANE_TEX2D_NS_ARG(hatchTex1), float tiling, half4 hatchColor, float blend)
+    NATANE_TEX2D_NS_ARG(hatchTex0), NATANE_TEX2D_NS_ARG(hatchTex1), float tiling, half4 hatchColor,
+    float blend, int composite)
 {
     float2 hatchUV = uv * tiling;
     half4 h0 = NATANE_SAMPLE_REPEAT(hatchTex0, hatchUV); // RGBA = levels 1-4
     half2 h1 = NATANE_SAMPLE_REPEAT(hatchTex1, hatchUV).rg; // RG = levels 5-6
 
-    // Map shading value to 6 weight slots
+    // Map shading value to 6 weight slots.
+    //
+    // The weights are consecutive differences of saturate(lum - k), which makes them
+    // trapezoids that cross-fade one level into the next and sum to exactly 1.
+    //
+    //   w6 (darkest) = 1 - S(0)     w5 = S(0) - S(1)   w4 = S(1) - S(2)
+    //   w3 = S(2) - S(3)            w2 = S(3) - S(4)   w1 = S(4) - S(5)
+    //   (S(5) is the "no hatching" share, used by nothing.)
+    //
+    // w5 used to be written as 1 - S(1), which is w5 + w6. That over-weighted level 5
+    // by exactly the level-6 share, so across the darkest band the total weight climbed
+    // toward 2 and levels 5 and 6 were drawn on top of each other. Two different stroke
+    // sets showing at once is what made the level boundary read as a hard seam up close.
     half lum = shadingValue * 6.0;
-    half w0 = saturate(lum - 5.0);
-    half w1 = saturate(lum - 4.0) - w0;
-    half w2 = saturate(lum - 3.0) - w0 - w1;
-    half w3 = saturate(lum - 2.0) - w0 - w1 - w2;
-    half w4 = saturate(lum - 1.0) - w0 - w1 - w2 - w3;
-    half w5 = 1.0 - w0 - w1 - w2 - w3 - w4;
+    half s0 = saturate(lum);
+    half s1 = saturate(lum - 1.0);
+    half s2 = saturate(lum - 2.0);
+    half s3 = saturate(lum - 3.0);
+    half s4 = saturate(lum - 4.0);
+    half s5 = saturate(lum - 5.0);
+
+    half w1 = s4 - s5;   // level 1 (lightest, sparsest)
+    half w2 = s3 - s4;
+    half w3 = s2 - s3;
+    half w4 = s1 - s2;
+    half w5 = s0 - s1;
+    half w6 = 1.0 - s0;  // level 6 (darkest, densest)
 
     half hatchValue = w1 * h0.r + w2 * h0.g + w3 * h0.b + w4 * h0.a
-                    + w5 * h1.r + max(0, 1.0 - lum) * h1.g;
+                    + w5 * h1.r + w6 * h1.g;
+
+    // 合成方法。影の玉ボケ / 等高線と同じ列挙・同じ意味に揃えてある。
+    // TAM は本来「面の全部を線で描く」手法なので、既定 (All) では明暗にかかわらず
+    // 階調どおりに線が乗る。アニメ寄りの絵では影の中だけに落としたいことが多く、
+    // その切り替えがこれまで無かった。
+    if (composite == 0)      hatchValue *= 1.0 - shadingValue;   // ShadowOnly
+    else if (composite == 1) hatchValue *= shadingValue;         // LitOnly
 
     return lerp(baseColor, baseColor * hatchColor.rgb, hatchValue * maskValue * blend);
 }
@@ -1926,5 +2020,62 @@ half3 ApplyChromaticAberration(float2 grabUV, float intensity, float blend, half
 // =============================================================================
 // ===== End of Illustration Style Functions ===================================
 // =============================================================================
+
+// =============================================================================
+// ===== Shared Procedural Helpers =============================================
+// =============================================================================
+// ハッシュ定数は「呼び出し側が渡す」設計にしている。シェーダー内には
+// frac(sin(...) * 43758.5453) 系の実装が多数あるが、定数が箇所ごとに異なる。
+// 定数まで統一するとノイズパターンが変わり、既存マテリアルの見た目が変わって
+// しまうため、関数の実体だけを共通化して定数は各呼び出し側に据え置く。
+//
+// 【重要】NataneToonFXModulator.hlsl / NataneToonLineBoil.hlsl からは使えない。
+// OUTLINE パス (NataneToonOutlinePass.hlsl) は Input も Utils も include せず
+// あの2ファイルだけを取り込むため、あちらは self-contained を維持すること。
+// ここを使ってよいのは NataneToonCore.hlsl 経由でのみ読まれるファイル
+// (Caustics / Topographic / Fragment / Lighting など) に限る。
+
+// float2 -> float。k は dot に使うハッシュ定数。
+float NataneHash21(float2 p, float2 k)
+{
+    return frac(sin(dot(p, k)) * 43758.5453);
+}
+
+// float2 -> float2。k0/k1 は各成分の dot に使うハッシュ定数。
+float2 NataneHash22(float2 p, float2 k0, float2 k1)
+{
+    float2 q = float2(dot(p, k0), dot(p, k1));
+    return frac(sin(q) * 43758.5453);
+}
+
+// 座標空間セレクタ。0 UV / 1 Object / 2 World / 3 Triplanar-lite。
+// モード番号は _CausticsSpace の [Enum(UV,0,Object,1,World,2,TriplanarLite,3)]
+// と一致させること（既存マテリアルの値がそのまま意味を保つ）。
+float2 NataneProjectionCoord(float space, float2 uv, float3 objPos, float3 worldPos, float3 worldNormal)
+{
+    if (space < 0.5) return uv;
+    if (space < 1.5) return objPos.xy;
+    if (space < 2.5) return worldPos.xz;
+    // Triplanar-lite: 支配的な法線軸に対して正対する平面を選ぶ。
+    float3 an = abs(worldNormal);
+    if (an.y >= an.x && an.y >= an.z) return worldPos.xz;
+    if (an.x >= an.z)                 return worldPos.zy;
+    return worldPos.xy;
+}
+
+// 光源方向に垂直な平面へワールド座標を投影する（木漏れ日など、光が上から
+// 差し込む表現用）。NataneProjectionCoord とは別関数にしてあるのは、
+// normalize/cross のコストを Caustics 側の既存パスに載せないため。
+//
+// lightDir は「光源へ向かう方向」を想定。真上/真下ライトでは cross(up, axis)
+// が縮退するので up を退避させる（この分岐を外すと基底が壊れる）。
+float2 NataneLightPlaneCoord(float3 worldPos, float3 lightDir)
+{
+    float3 axis = normalize(lightDir);
+    float3 up = (abs(axis.y) > 0.99) ? float3(0.0, 0.0, 1.0) : float3(0.0, 1.0, 0.0);
+    float3 t = normalize(cross(up, axis));
+    float3 b = cross(axis, t);
+    return float2(dot(worldPos, t), dot(worldPos, b));
+}
 
 #endif // NATANE_TOON_UTILS_INCLUDED

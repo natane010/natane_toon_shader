@@ -6,6 +6,10 @@
 // Phong Tessellation with displacement map support
 // ===================================================================
 
+// Only emit hull/domain code on SM4.6+ passes. Lite variants compile their
+// forward passes at target 3.5 (Quest/GLES3) and must not see patch types.
+#if defined(UNITY_CAN_COMPILE_TESSELLATION) && SHADER_TARGET >= 46
+
 #ifdef _TESSELLATION
 
 // ===== Tessellation Control Point =====
@@ -21,6 +25,7 @@ struct TessellationControlPoint
     #if defined(_SMOOTH_NORMAL) || defined(_VERTEX_COLOR_SHADOW)
         float4 color : COLOR;
     #endif
+    UNITY_VERTEX_INPUT_INSTANCE_ID
 };
 
 // ===== Tessellation Factors =====
@@ -35,6 +40,7 @@ TessellationControlPoint tessVert(appdata v)
 {
     TessellationControlPoint o;
     UNITY_SETUP_INSTANCE_ID(v);
+    UNITY_TRANSFER_INSTANCE_ID(v, o);
     o.vertex = v.vertex;
     o.normal = v.normal;
     o.tangent = v.tangent;
@@ -69,13 +75,23 @@ TessellationFactors PatchConstantFunction(InputPatch<TessellationControlPoint, 3
 {
     TessellationFactors f;
 
+    // A pass that is known at compile time to output nothing (e.g. the Screen Edge overlay
+    // while _SCREEN_EDGE is off) culls its patches here instead of rasterising the whole
+    // mesh and discarding every pixel.
+    #if defined(NATANE_CULL_ALL_PATCHES)
+        f.edge[0] = 0.0;
+        f.edge[1] = 0.0;
+        f.edge[2] = 0.0;
+        f.inside  = 0.0;
+    #else
+
     float3 p0 = mul(unity_ObjectToWorld, patch[0].vertex).xyz;
     float3 p1 = mul(unity_ObjectToWorld, patch[1].vertex).xyz;
     float3 p2 = mul(unity_ObjectToWorld, patch[2].vertex).xyz;
     float3 center = (p0 + p1 + p2) / 3.0;
 
     // Distance-based LOD
-    float dist = distance(center, _WorldSpaceCameraPos);
+    float dist = NataneViewerDistance(center);   // same tessellation in both eyes
     float distFactor = saturate(1.0 - (dist - _TessDistanceMin) / max(_TessDistanceMax - _TessDistanceMin, 0.01));
     float factor = max(1.0, distFactor * _TessFactor);
 
@@ -83,6 +99,8 @@ TessellationFactors PatchConstantFunction(InputPatch<TessellationControlPoint, 3
     f.edge[1] = factor;
     f.edge[2] = factor;
     f.inside  = factor;
+
+    #endif // NATANE_CULL_ALL_PATCHES
     return f;
 }
 
@@ -106,8 +124,14 @@ v2f domain(
     OutputPatch<TessellationControlPoint, 3> patch,
     float3 bary : SV_DomainLocation)
 {
-    // Barycentric interpolation of attributes
+    // Re-establish the instance / stereo eye index in the domain stage.
+    // Without this, Single Pass Instanced VR picks the wrong eye matrices
+    // for tessellated geometry (vert() below reads unity_StereoEyeIndex).
     appdata v;
+    UNITY_TRANSFER_INSTANCE_ID(patch[0], v);
+    UNITY_SETUP_INSTANCE_ID(v);
+
+    // Barycentric interpolation of attributes
     v.vertex = patch[0].vertex * bary.x + patch[1].vertex * bary.y + patch[2].vertex * bary.z;
     float3 flatNormal = patch[0].normal * bary.x + patch[1].normal * bary.y + patch[2].normal * bary.z;
     v.normal = normalize(flatNormal);
@@ -170,7 +194,12 @@ struct TessellationFactors
 TessellationFactors PatchConstantFunction(InputPatch<v2f, 3> patch)
 {
     TessellationFactors f;
-    f.edge[0] = f.edge[1] = f.edge[2] = f.inside = 1.0;
+    #if defined(NATANE_CULL_ALL_PATCHES)
+        // Pass has nothing to draw (see the tessellated branch above): cull the patch.
+        f.edge[0] = f.edge[1] = f.edge[2] = f.inside = 0.0;
+    #else
+        f.edge[0] = f.edge[1] = f.edge[2] = f.inside = 1.0;
+    #endif
     return f;
 }
 
@@ -201,5 +230,7 @@ v2f domain(TessellationFactors factors, OutputPatch<v2f, 3> patch, float3 bary :
 }
 
 #endif // _TESSELLATION
+
+#endif // UNITY_CAN_COMPILE_TESSELLATION && SHADER_TARGET >= 46
 
 #endif // NATANE_TOON_TESSELLATION_INCLUDED

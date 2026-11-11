@@ -1,0 +1,104 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>顔直交投影 - Natane Toon Shader</title>
+  <link rel="stylesheet" href="../../styles.css">
+</head>
+<body>
+<header class="site-header"></header>
+<div class="page-wrapper">
+  <aside class="sidebar"></aside>
+  <main class="main-content">
+    <nav class="breadcrumb"></nav>
+    <h1>顔直交投影</h1>
+    <p class="page-subtitle">カメラ距離・FOVによらず顔のプロポーションを理想的に保つ (v1.6.0)</p>
+
+    <h2 id="overview">概要</h2>
+    <p>顔直交投影 (Face Ortho Projection) は、カメラの距離・FOV・種類（デスクトップ / VRChatカメラ / ミラー）にかかわらず、顔の見た目を常に理想的なプロポーションに保つ機能です。ピボット（頭部）を中心に、対象頂点のスクリーン投影を透視投影から直交投影へブレンドします。</p>
+    <p>頂点シェーダーでNDC空間の <code>xy</code> のみを変形するため、深度・ワールド座標・ライティングは通常の透視投影のまま維持され、影・ライト・エフェクトの整合性は保たれます。アウトラインパスにも同一の変形が適用されるため、アウトラインは顔に追従します。</p>
+    <p>キーワード <code>_FACE_ORTHO</code> で制御されます。</p>
+
+    <h2 id="params">パラメータ</h2>
+
+    <div class="param-card">
+      <div class="param-header">
+        <span class="param-name">顔直交投影を有効化</span>
+        <span class="param-prop">_FaceOrtho</span>
+        <span class="param-badge badge-toggle">toggle</span>
+      </div>
+      <div class="param-body">
+        <p>顔直交投影機能のオン/オフを切り替えます。有効にすると <code>_FACE_ORTHO</code> キーワードが設定されます。</p>
+        <p class="param-default">デフォルト: OFF</p>
+      </div>
+      <div class="param-tip">顔専用のマテリアルで有効化するのが基本です。顔以外を含むマテリアルではマスクテクスチャを併用してください。</div>
+    </div>
+
+    <div class="param-card">
+      <div class="param-header">
+        <span class="param-name">直交化の強さ</span>
+        <span class="param-prop">_FaceOrthoAmount</span>
+        <span class="param-badge badge-range">range</span>
+      </div>
+      <div class="param-body">
+        <p>透視投影から直交投影へのブレンド量です。0で通常の透視投影、1で完全な直交投影になります。</p>
+        <p class="param-default">デフォルト: 1.0</p>
+      </div>
+      <div class="param-tip">1.0で「どの距離から見ても崩れない顔」になります。効果を弱めたい場合は0.5前後から調整してください。</div>
+    </div>
+
+    <div class="param-card">
+      <div class="param-header">
+        <span class="param-name">VR時の強さ</span>
+        <span class="param-prop">_FaceOrthoVRAmount</span>
+        <span class="param-badge badge-range">range</span>
+      </div>
+      <div class="param-body">
+        <p>VR（ステレオレンダリング）時に <code>_FaceOrthoAmount</code> の代わりに使われる強さです。完全な直交化は立体視の奥行き知覚と干渉するため、控えめな値が既定になっています。</p>
+        <p class="param-default">デフォルト: 0.3</p>
+      </div>
+      <div class="param-tip">VRで違和感がある場合は0にしてください。デスクトップ・カメラ・ミラーには影響しません。</div>
+    </div>
+
+    <div class="param-card">
+      <div class="param-header">
+        <span class="param-name">ピボット位置</span>
+        <span class="param-prop">_FaceOrthoPivot</span>
+        <span class="param-badge badge-vector">vector</span>
+      </div>
+      <div class="param-body">
+        <p>直交化の中心となるピボット位置（オブジェクト空間）です。SkinnedMeshRendererのルートトランスフォーム基準で、頭部に合わせて設定します。</p>
+        <p class="param-default">デフォルト: (0, 1.4, 0)</p>
+      </div>
+      <div class="param-tip">Humanoidアバターなら概ね Y=1.4 前後です。アバターのスケールに応じて調整してください。ピボットがニアプレーン以遠にない場合は自動的に無効化されます。</div>
+    </div>
+
+    <div class="param-card">
+      <div class="param-header">
+        <span class="param-name">マスクテクスチャ</span>
+        <span class="param-prop">_FaceOrthoMaskTex</span>
+        <span class="param-badge badge-texture">texture</span>
+      </div>
+      <div class="param-body">
+        <p>適用範囲を制御するマスクです。Rチャンネルが適用度になり、白=適用、黒=非適用です。</p>
+        <p class="param-default">デフォルト: white（全面適用）</p>
+      </div>
+      <div class="param-tip">顔以外のジオメトリを含むマテリアルでは必ず設定し、首の境目はグラデーションでぼかすと自然になります。</div>
+    </div>
+
+    <h2 id="tips">使い方のヒント</h2>
+    <ul>
+      <li><strong>基本手順</strong>: 顔のマテリアルで有効化 → ピボットを頭部に合わせる → 必要ならマスクを設定、の3ステップです。</li>
+      <li><strong>近接カメラ対策</strong>: VRChatの手持ちカメラや至近距離のミラーで顔が歪む問題に特に有効です。</li>
+      <li><strong>ライティングの整合性</strong>: FORWARD_BASE / FORWARD_ADD の両方で適用されるため、追加ライトの深度整合も保たれます。</li>
+      <li>関連機能: <a href="perspective-flat.html">パースペクティブフラット</a>（オブジェクト全体の奥行き圧縮）</li>
+    </ul>
+
+    <nav class="page-nav"></nav>
+  </main>
+</div>
+<footer class="site-footer">&copy; 2025 Natane Toon Shader.</footer>
+<script src="../../nav.js"></script>
+</body>
+</html>

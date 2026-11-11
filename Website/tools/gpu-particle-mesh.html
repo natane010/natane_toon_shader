@@ -1,0 +1,78 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>GPUパーティクルメッシュ生成 - Natane Toon Shader</title>
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+<header class="site-header"></header>
+<div class="page-wrapper">
+  <aside class="sidebar"></aside>
+  <main class="main-content">
+    <nav class="breadcrumb"></nav>
+    <h1>GPUパーティクルメッシュ生成</h1>
+    <p class="page-subtitle">ステートレスGPUパーティクル用のクアッドクラウドメッシュを生成 (v1.6.0)</p>
+
+    <div class="tool-meta">
+      <span>メニュー: Tools &gt; Natane &gt; メッシュ Mesh &gt; GPUパーティクルメッシュ生成 GPU Particle Mesh</span>
+      <span>カテゴリ: エフェクト</span>
+    </div>
+
+    <h2 id="overview">概要</h2>
+    <p>GPUパーティクルメッシュ生成は、シェーダー <code>Natane/Effects/GPU Particles (Stateless)</code> 用の静的な「クアッドクラウド」メッシュを生成・保存するツールです。GPUパーティクルは<strong>完全ステートレス</strong>設計で、シミュレーション・CustomRenderTexture・カメラ・GrabPass・実行時スクリプトを一切使用しません。すべてのアニメーションは <code>_Time</code> とメッシュに焼き込んだ乱数シードから計算されるため、VRChatアバターにそのまま乗せても安全です。</p>
+    <p>同じくステートレスな数式ベースの液体表現シェーダー <code>Natane/Effects/Fake Fluid</code>（疑似流体: 充填量・揺れ・泡・フレネル・トゥーン陰影）も v1.6.0 で追加されています。こちらは容器メッシュに割り当てるだけでメッシュ生成は不要です。</p>
+
+    <h2 id="access">アクセス方法</h2>
+    <p>メニュー: <code>Tools &gt; Natane &gt; メッシュ Mesh &gt; GPUパーティクルメッシュ生成 GPU Particle Mesh</code></p>
+
+    <h2 id="features">機能</h2>
+    <ul>
+      <li><strong>パーティクル数</strong> — 既定 256、最大 4096。1パーティクル = 1クアッド（4頂点）</li>
+      <li><strong>スプレッド</strong> — エミッション範囲（XYZボックス）の指定</li>
+      <li><strong>乱数シード</strong> — 再現可能な乱数でメッシュを生成</li>
+      <li><strong>基本ティント / ばらつき</strong> — パーティクル毎の色を頂点カラーへ焼き込み</li>
+      <li><strong>.asset保存</strong> — <code>SaveFilePanelInProject</code> でプロジェクト内にメッシュアセットとして保存</li>
+    </ul>
+
+    <h2 id="usage">使い方</h2>
+    <ol class="tool-steps">
+      <li>ツールを開き、パーティクル数・スプレッド・シード・ティントを設定します</li>
+      <li>クアッドクラウドメッシュを生成し、.asset として保存します</li>
+      <li>生成したメッシュを空の GameObject の MeshFilter に割り当て、MeshRenderer を付けます</li>
+      <li>マテリアルに <code>Natane/Effects/GPU Particles (Stateless)</code> を割り当てます</li>
+      <li>モーションモード（Rise / Fall / Orbit / Burst）とサイズ・速度・フェードなどを調整します</li>
+    </ol>
+
+    <h2 id="technical">技術詳細</h2>
+    <h3>モーションモード (_MotionMode)</h3>
+    <ul>
+      <li><strong>0: Rise</strong> — 火の粉 / 蛍。上昇 + サイン揺らぎ</li>
+      <li><strong>1: Fall</strong> — 桜吹雪 / 雪。下降 + 横ドリフト + ビルボード回転</li>
+      <li><strong>2: Orbit</strong> — キラキラ。オブジェクト原点周りを周回</li>
+      <li><strong>3: Burst</strong> — シード周期で中心から放射</li>
+    </ul>
+    <h3>メッシュ規約</h3>
+    <ul>
+      <li>4頂点すべてが同じ中心座標を持ち、角のオフセットは UV0 と <code>_ParticleSize</code> から頂点シェーダーで復元</li>
+      <li><strong>UV0</strong>: クアッドの角（各成分 0 or 1）。スプライトUVも兼ねる</li>
+      <li><strong>UV1.x</strong>: パーティクル乱数シード [0,1) / <strong>UV1.y</strong>: パーティクルインデックス正規化 [0,1]</li>
+      <li><strong>頂点カラー</strong>: パーティクル毎のティント</li>
+    </ul>
+
+    <h2 id="tips">Tips</h2>
+    <ul class="tool-tips">
+      <li>パーティクル位置は <code>_Time.y * _Speed + seed * _CyclePeriod</code> の純粋関数で、<code>frac()</code> によりシームレスにループします</li>
+      <li>AudioLink変調にも対応しており、クラブイベントでの音楽連動演出に使えます</li>
+      <li>Additiveブレンド / ZWrite Off / Queue Transparent / <code>VRCFallback = Particle</code> でレンダリングされます</li>
+      <li>軽量トゥーンパーティクル用には別途シェーダーバリアント <code>Natane/Toon Shader (Particle)</code>（ブレンドモード切替・ソフトパーティクル・フリップブック・カメラフェード）も利用できます</li>
+    </ul>
+
+    <nav class="page-nav"></nav>
+  </main>
+</div>
+<footer class="site-footer">&copy; 2025 Natane Toon Shader.</footer>
+<script src="../nav.js"></script>
+</body>
+</html>

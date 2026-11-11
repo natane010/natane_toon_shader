@@ -6,11 +6,31 @@ using static NataneToon.Editor.NataneToonLocalization;
 namespace NataneToon.Editor
 {
     /// <summary>
-    /// Generates a grayscale SDF texture from an existing texture and assigns it to the shader.
-    /// Source priority: shadow receive mask > main texture.
+    /// Generates a grayscale <b>mask</b> SDF texture from an existing texture and assigns it
+    /// to the shader. Source priority: shadow receive mask > main texture.
+    ///
+    /// <b>This is not the map that <c>_FACE_SDF_ROTATION</c> wants.</b> What this produces is
+    /// the signed distance field of a mask shape, which carries no light-angle information.
+    /// The rotation-tracking path compares the sampled value against a light-angle threshold,
+    /// so feeding it a distance field makes the shadow transition in an arbitrary order.
+    ///
+    /// For rotation tracking use the Map Generator's "Face SDF Shadow Map" bake, which sweeps
+    /// the light around the mesh and records the actual transition angle per texel.
+    /// See <c>Documentation~/NPR2026_P2_FACE_SDF_BAKE.md</c>.
     /// </summary>
     internal static class NataneToonSdfAutoGenerator
     {
+        /// <summary>
+        /// True when the material is set up for rotation tracking, where this generator's
+        /// output is the wrong kind of map. Callers use it to steer the user to the bake.
+        /// </summary>
+        public static bool IsRotationTrackingMaterial(Material material)
+        {
+            if (material == null) return false;
+            if (material.IsKeywordEnabled("_FACE_SDF_ROTATION")) return true;
+            return material.HasProperty("_FaceSDFRotation") && material.GetFloat("_FaceSDFRotation") >= 0.5f;
+        }
+
         private const float DiagonalDistance = 1.41421356f;
         private const float MaskThreshold = 0.5f;
         private const float AlphaUsageThreshold = 0.05f;

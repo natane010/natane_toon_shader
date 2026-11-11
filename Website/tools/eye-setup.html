@@ -1,0 +1,78 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>目のセットアップ - Natane Toon Shader</title>
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+<header class="site-header"></header>
+<div class="page-wrapper">
+  <aside class="sidebar"></aside>
+  <main class="main-content">
+    <nav class="breadcrumb"></nav>
+    <h1>目のセットアップ</h1>
+    <p class="page-subtitle">目のマテリアル分離とUV再配置を非破壊で行うツール (v1.6.0)</p>
+
+    <div class="tool-meta">
+      <span>メニュー: Tools &gt; Natane &gt; メッシュ Mesh &gt; 目のセットアップ Eye Setup Tool</span>
+      <span>カテゴリ: メッシュ</span>
+    </div>
+
+    <h2 id="overview">概要</h2>
+    <p>目のセットアップツールは、目のポリゴンを専用マテリアルへ分離し（マテリアル分け）、目のUVをテクスチャ全体へ再配置する（UV再配置）ためのエディタウィンドウです。分離した目には専用シェーダー <strong>"Natane/Eye"</strong>（視差・瞳孔サイズ・目の状態など）をそのまま使えます。</p>
+    <p>メッシュは必ず<strong>新規アセット</strong>として保存され、インポート元のFBXメッシュは一切変更されません。レンダラーとマテリアルの変更はすべてUndo可能です。</p>
+
+    <h2 id="access">アクセス方法</h2>
+    <p>メニュー: <code>Tools &gt; Natane &gt; メッシュ Mesh &gt; 目のセットアップ Eye Setup Tool</code></p>
+
+    <h2 id="features">機能</h2>
+    <ul>
+      <li><strong>3つの目の選択方法</strong>
+        <ul>
+          <li><strong>既存マテリアルスロット</strong> — 目が既に専用スロットになっている場合。メッシュは変更せず、そのスロットへ新規 "Natane/Eye" マテリアルを割り当てます</li>
+          <li><strong>UV範囲</strong> — UVプレビュー上をドラッグ（または数値入力）して範囲を指定。UV重心が範囲内の三角形が目として選択されます</li>
+          <li><strong>マスクテクスチャ</strong> — 白=目のマスクテクスチャを指定。UV重心位置の輝度がしきい値以上の三角形が選択されます</li>
+        </ul>
+      </li>
+      <li><strong>3つのUV配置方法</strong>
+        <ul>
+          <li><strong>全体を1ブロック</strong> — サブメッシュ全体のUVをターゲット矩形へ拡大</li>
+          <li><strong>左右を重ねる</strong> — 左右の目のアイランドを検出し、同じ領域に重ねます（VRChatで一般的な構成）。片側の目のU方向反転も可能</li>
+          <li><strong>左右を並べる</strong> — 左右の目を横に並べて配置</li>
+        </ul>
+      </li>
+      <li><strong>UVプレビュー</strong> — 選択（緑）や変更前（グレー）/変更後（緑）を確認できます</li>
+      <li><strong>非破壊ワークフロー</strong> — 新規メッシュを .asset として保存。インポート品メッシュへの書き込み時は自動で複製します</li>
+      <li><strong>マテリアル引き継ぎ</strong> — 新規 "Natane/Eye" マテリアルにメインテクスチャ・ベースカラーを元マテリアルから引き継ぎます</li>
+      <li><strong>書き込み先UVチャンネル選択</strong> — uv0 / uv1 を選択可能。ターゲット矩形とパディングも設定できます</li>
+    </ul>
+
+    <h2 id="usage">使い方</h2>
+    <ol class="tool-steps">
+      <li>対象の SkinnedMeshRenderer / MeshRenderer をウィンドウ上部にセットします（「選択から取得」でHierarchyの選択からも取得できます）</li>
+      <li>「1. マテリアル分け」タブで目の選択方法（既存スロット / UV範囲 / マスク）を選びます</li>
+      <li>プレビューで選択（緑）を確認し、概要欄で変更内容をチェックします</li>
+      <li>「マテリアル分けを実行」を押し、新規メッシュアセットの保存先を選びます（選択した三角形が新しい最終サブメッシュとして分離され、"Natane/Eye" マテリアルが割り当てられます）</li>
+      <li>「2. UV再配置」タブで対象サブメッシュを選びます（分離直後は自動で目のサブメッシュが選択されます）</li>
+      <li>配置方法・ターゲット矩形・パディング・UVチャンネルを設定します</li>
+      <li>プレビューで変更前後を確認し、「UV再配置を実行」を押します</li>
+    </ol>
+
+    <h2 id="tips">Tips</h2>
+    <ul class="tool-tips">
+      <li>UV範囲/マスク選択には uv0 が必要です</li>
+      <li>左右のグループ分けはメッシュ空間のX座標（顔の左右）で行うため、UVが既に重なっている目でも正しく動作します</li>
+      <li>他のサブメッシュと頂点を共有している場合は警告が表示されます（共有頂点のUVも移動します）</li>
+      <li>「左右を重ねる」は左右で1枚のテクスチャを共有する、VRChatで一般的な構成に最適です</li>
+      <li>分離後は "Natane/Eye" シェーダーの<a href="../params/advanced/eye-parallax.html">アイパララックス</a>などの目専用機能がそのまま使えます</li>
+    </ul>
+
+    <nav class="page-nav"></nav>
+  </main>
+</div>
+<footer class="site-footer">&copy; 2025 Natane Toon Shader.</footer>
+<script src="../nav.js"></script>
+</body>
+</html>

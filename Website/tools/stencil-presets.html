@@ -1,0 +1,65 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ステンシルプリセット - Natane Toon Shader</title>
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+<header class="site-header"></header>
+<div class="page-wrapper">
+  <aside class="sidebar"></aside>
+  <main class="main-content">
+    <nav class="breadcrumb"></nav>
+    <h1>ステンシルプリセット</h1>
+    <p class="page-subtitle">覗き窓・隠し模様などのステンシル演出をワンクリック適用 (v1.6.0)</p>
+
+    <div class="tool-meta">
+      <span>場所: マテリアルインスペクタ &gt; Advanced タブ &gt; レンダリング設定 &gt; Stencil &gt; プリセット</span>
+      <span>カテゴリ: シェーダー</span>
+    </div>
+
+    <h2 id="overview">概要</h2>
+    <p>ステンシルプリセットは、ステンシルバッファを使った「マスク越しにだけ見える」演出に必要な設定を、マテリアルインスペクタからワンクリックで適用する機能です。Ref / Comp / Pass の組み合わせを覚えなくても、覗き窓・隠し模様・消える体といったステンシル演出を組めます。</p>
+
+    <h2 id="access">アクセス方法</h2>
+    <p>マテリアルインスペクタ: <code>Advanced タブ &gt; レンダリング設定 &gt; Stencil &gt; プリセット</code></p>
+
+    <h2 id="features">プリセット一覧</h2>
+    <ul>
+      <li><strong>標準</strong> — Ref=0, Comp=Always, Pass=Keep。ステンシル不使用（既定）</li>
+      <li><strong>書き込み</strong> — Ref=1, Comp=Always, Pass=Replace。マスク領域を書き込む側（レンズ・窓・魔法陣など）</li>
+      <li><strong>一致で表示</strong> — Ref=1, Comp=Equal, Pass=Keep。マスク越しにだけ見える側</li>
+      <li><strong>不一致で表示</strong> — Ref=1, Comp=NotEqual, Pass=Keep。マスク領域では消える側</li>
+    </ul>
+
+    <h2 id="usage">使い方</h2>
+    <ol class="tool-steps">
+      <li>マスクにするマテリアル（例: 眼鏡のレンズ、窓、魔法陣）に「書き込み」プリセットを適用します</li>
+      <li>書き込み側の Render Queue を表示側より小さくして、先に描画されるようにします</li>
+      <li>マスク越しに見せたいマテリアルに「一致で表示」を適用します（マスク領域で消したい場合は「不一致で表示」）</li>
+      <li>複数系統のマスクを使う場合は、参照値（1〜255）を系統ごとに変えます</li>
+    </ol>
+
+    <h2 id="examples">演出例</h2>
+    <ul>
+      <li><strong>覗き窓</strong>: レンズ=書き込み、レンズ越しにだけ見える「本当の姿」=一致で表示</li>
+      <li><strong>隠し模様</strong>: 特定のアイテムをかざしたときだけ見えるタトゥー・紋章</li>
+      <li><strong>消える体</strong>: 魔法陣の上では体の一部が消える（不一致で表示）</li>
+    </ul>
+
+    <h2 id="tips">Tips</h2>
+    <ul class="tool-tips">
+      <li>VRChatでは他人のシェーダーもステンシルバッファを共有します。Ref値は控えめにユニークな値を選ぶと事故が減ります</li>
+      <li>プリセット適用後も Ref / Comp / Pass は手動で微調整できます</li>
+      <li>鏡・カメラを使った不思議演出には<a href="../params/advanced/mirror-alt-texture.html">鏡・カメラ写り分けテクスチャ</a>との組み合わせも有効です</li>
+    </ul>
+
+    <nav class="page-nav"></nav>
+  </main>
+</div>
+<footer class="site-footer">&copy; 2025 Natane Toon Shader.</footer>
+<script src="../nav.js"></script>
+</body>
+</html>

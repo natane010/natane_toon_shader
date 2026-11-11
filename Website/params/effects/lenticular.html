@@ -1,0 +1,127 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>レンチキュラー - Natane Toon Shader</title>
+  <link rel="stylesheet" href="../../styles.css">
+</head>
+<body>
+<header class="site-header"></header>
+<div class="page-wrapper">
+  <aside class="sidebar"></aside>
+  <main class="main-content">
+    <nav class="breadcrumb"></nav>
+    <h1>レンチキュラー</h1>
+    <p class="page-subtitle">見る角度によって絵柄そのものが切り替わります。左右から見ると表情が変わる、正面と横で別の顔が現れる、ホログラムカードのような角度依存の演出を作れます。(v1.6.0)</p>
+
+    <div class="feature-preview" aria-hidden="true">
+      <span class="preview-tag">PREVIEW</span>
+      <em class="preview-name">Lenticular</em>
+    </div>
+
+    <h2 id="overview">概要</h2>
+    <p>複数の絵柄を 1 枚のアトラス (横並び / グリッド) に格納し、<strong>視線角度に応じて表示フレームを切り替える</strong>機能です。<a href="../environment/iridescence.html">イリデッセンス</a>が角度で色を変えるのに対し、レンチキュラーは絵柄そのものを差し替えます。</p>
+    <p>角度判定はオブジェクト空間の視線ベクトルで行うため、VRChat のミラーやカメラ位置に依存しにくく安定します。選択したフレームはメイクアップテクスチャ合成の直後 (ベースカラー修飾) に混合されます。キーワード <code>_LENTICULAR</code> で切り替わり、OFF 時はゼロコストです。</p>
+
+    <h2 id="looks">作れる表現</h2>
+    <ul>
+      <li>左右から見ると表情が変わる、正面と横で別の顔が現れる</li>
+      <li>ロゴと文字が切り替わる、カードのイラストが動く</li>
+      <li>瞳が Normal / Heart / Star へ変わる</li>
+      <li>角度によって傷・魔法紋・発光模様が現れる、ホログラムカード風の素材</li>
+    </ul>
+
+    <h2 id="modes">動作モード (<code>_LenticularMode</code>)</h2>
+    <table>
+      <thead>
+        <tr><th>モード</th><th>内容</th></tr>
+      </thead>
+      <tbody>
+        <tr><td>SmoothBlend</td><td>隣接フレームを <code>frac</code> + Softness で滑らかに補間</td></tr>
+        <tr><td>HardStep</td><td><code>round</code> で瞬時に切り替え</td></tr>
+        <tr><td>ScanBlend</td><td>UV 縞 (<code>_LenticularScanScale</code>) で隣接フレームを混在</td></tr>
+        <tr><td>FrontReveal</td><td>正面付近のみ別フレームを出現 (Emission ブースト連動)</td></tr>
+        <tr><td>SideReveal</td><td>斜め付近のみ別フレームを出現 (Emission ブースト連動)</td></tr>
+        <tr><td>Flip</td><td>視線の左右で A/B を切り替え (Softness で中央をクロスフェード)</td></tr>
+      </tbody>
+    </table>
+
+    <h2 id="key-params">主なパラメータ</h2>
+
+    <div class="param-card">
+      <div class="param-header">
+        <span class="param-name">アトラス / フレーム数</span>
+        <span class="param-prop">_LenticularAtlas / _LenticularFrames</span>
+        <span class="param-badge badge-tex">2D + range</span>
+      </div>
+      <div class="param-body">
+        <p>複数フレームを格納したアトラス画像と、その枚数です。<code>_LenticularDirection</code> で横並び (Horizontal) かグリッド (Grid) を選びます。</p>
+        <p class="param-default">デフォルト: Frames 4 / Direction Horizontal</p>
+      </div>
+    </div>
+
+    <div class="param-card">
+      <div class="param-header">
+        <span class="param-name">角度判定軸 / 角度幅</span>
+        <span class="param-prop">_LenticularViewAxis / _LenticularAngleRange</span>
+        <span class="param-badge badge-enum">enum + range</span>
+      </div>
+      <div class="param-body">
+        <p>横振り (X) か縦振り (Y) のどちらで切り替えるか、そしてフレーム全体を何度の範囲にマップするかです。</p>
+        <p class="param-default">デフォルト: ViewAxis X / AngleRange 90</p>
+      </div>
+    </div>
+
+    <div class="param-card">
+      <div class="param-header">
+        <span class="param-name">ステレオモード</span>
+        <span class="param-prop">_LenticularStereoMode</span>
+        <span class="param-badge badge-enum">enum</span>
+      </div>
+      <div class="param-body">
+        <p>VR での角度計算方法です。StereoCenter (既定) は左右の目の視点を平均し、両眼で同じフレームを選ぶことでちらつきを防ぎます。</p>
+        <p class="param-default">デフォルト: StereoCenter</p>
+      </div>
+      <div class="param-tip">VR で使う場合は StereoCenter を維持し、<code>_LenticularSoftness</code> を十分に持たせるとより安定します。</div>
+    </div>
+
+    <h2 id="all-params">すべてのパラメータ</h2>
+    <table>
+      <thead>
+        <tr><th>プロパティ</th><th>型 / 既定</th><th>説明</th></tr>
+      </thead>
+      <tbody>
+        <tr><td><code>_Lenticular</code></td><td>Toggle / 0</td><td>有効化 (<code>_LENTICULAR</code>)</td></tr>
+        <tr><td><code>_LenticularAtlas</code></td><td>2D / white</td><td>複数フレームを格納したアトラス</td></tr>
+        <tr><td><code>_LenticularFrames</code></td><td>Range(1,16) / 4</td><td>フレーム数</td></tr>
+        <tr><td><code>_LenticularDirection</code></td><td>Enum(Horizontal/Grid) / Horizontal</td><td>アトラス配置 (Grid は ceil(&radic;n) 列)</td></tr>
+        <tr><td><code>_LenticularMode</code></td><td>Enum(0-5) / 0</td><td>SmoothBlend/HardStep/ScanBlend/FrontReveal/SideReveal/Flip</td></tr>
+        <tr><td><code>_LenticularViewAxis</code></td><td>Enum(X/Y) / X</td><td>角度判定軸 (X=横振り, Y=縦振り)</td></tr>
+        <tr><td><code>_LenticularAngleRange</code></td><td>Range(1,180) / 90</td><td>フレーム全体をマップする角度幅 (度)</td></tr>
+        <tr><td><code>_LenticularFrameOffset</code></td><td>Float / 0</td><td>基準フレームのオフセット</td></tr>
+        <tr><td><code>_LenticularStereoMode</code></td><td>Enum(PerEye/StereoCenter) / StereoCenter</td><td>VR 角度計算 (既定は両眼中央)</td></tr>
+        <tr><td><code>_LenticularEmission</code></td><td>Range(0,10) / 0</td><td>出現フレームの発光ブースト (HDR)</td></tr>
+        <tr><td><code>_LenticularNormalInfluence</code></td><td>Range(0,1) / 0</td><td>法線によるフレーム選択スキュー</td></tr>
+        <tr><td><code>_LenticularBlend</code></td><td>Range(0,1) / 1</td><td>ベースカラーへの混合量</td></tr>
+        <tr><td><code>_LenticularScanScale</code></td><td>Range(1,200) / 40</td><td>ScanBlend の縞スケール</td></tr>
+        <tr><td><code>_LenticularSoftness</code></td><td>Range(0.001,1) / 0.25</td><td>フレーム境界の補間幅</td></tr>
+        <tr><td><code>_LenticularMask</code></td><td>2D (R) / white</td><td>マスク</td></tr>
+      </tbody>
+    </table>
+
+    <h2 id="tips">使い方のヒント</h2>
+    <ul>
+      <li><strong>VR でのちらつき対策</strong>: StereoCenter (既定) を使い、Softness を十分に持たせると、左右の目で別フレームが選ばれることによるちらつきを抑えられます。</li>
+      <li><strong>アトラスの作り方</strong>: Horizontal は左から順にフレームを並べます。Grid は <code>ceil(&radic;n)</code> 列の行優先で配置します。</li>
+      <li><strong>光らせる</strong>: FrontReveal / SideReveal では、出現フレームに <code>_LenticularEmission</code> の発光ブーストが連動します。</li>
+      <li><strong>マスク</strong>: <code>_LenticularMask</code> の R チャンネルで適用範囲を制御できます。</li>
+    </ul>
+
+    <nav class="page-nav"></nav>
+  </main>
+</div>
+<footer class="site-footer">&copy; 2025 Natane Toon Shader.</footer>
+<script src="../../nav.js"></script>
+</body>
+</html>

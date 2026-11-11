@@ -1,0 +1,105 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Mirror/Camera Alt Texture - Natane Toon Shader</title>
+  <link rel="stylesheet" href="../../../styles.css">
+</head>
+<body>
+<header class="site-header"></header>
+<div class="page-wrapper">
+  <aside class="sidebar"></aside>
+  <main class="main-content">
+    <nav class="breadcrumb"></nav>
+    <h1>Mirror/Camera Alt Texture</h1>
+    <p class="page-subtitle">Swap the look only when seen in a mirror or camera (v1.6.0)</p>
+
+    <h2 id="overview">Overview</h2>
+    <p>Mirror/Camera Alt Texture swaps the base color to an alternate texture and color only when the material is rendered in a VRChat mirror or by the VRChat camera. It enables mysterious effects such as "plain clothes to the eye, but a pattern appears in the mirror" or "a message that only shows up in photos".</p>
+    <p>Shading (toon shadows, rim light, etc.) still applies to the swapped look. To fully hide or show the material in mirrors, use <a href="mirror-control.html">Mirror Control</a> instead.</p>
+    <p>Controlled by the keyword <code>_MIRROR_TEXTURE</code>.</p>
+
+    <h2 id="params">Parameters</h2>
+
+    <div class="param-card">
+      <div class="param-header">
+        <span class="param-name">Alt Texture</span>
+        <span class="param-prop">_MirrorAltTex</span>
+        <span class="param-badge badge-texture">texture</span>
+      </div>
+      <div class="param-body">
+        <p>The alternate texture shown in mirrors/cameras. Sampled with the same UVs as the main texture.</p>
+        <p class="param-default">Default: white</p>
+      </div>
+      <div class="param-tip">Start from the main texture and paint extra patterns or messages onto it for an easy "different self in the mirror".</div>
+    </div>
+
+    <div class="param-card">
+      <div class="param-header">
+        <span class="param-name">Alt Color</span>
+        <span class="param-prop">_MirrorAltColor</span>
+        <span class="param-badge badge-color">color</span>
+      </div>
+      <div class="param-body">
+        <p>Color multiplied onto the alt texture. Works without a texture for simple recolor effects.</p>
+        <p class="param-default">Default: (1, 1, 1, 1)</p>
+      </div>
+      <div class="param-tip">Leaving the texture empty and changing only this color gives a quick "recolored mirror self".</div>
+    </div>
+
+    <div class="param-card">
+      <div class="param-header">
+        <span class="param-name">Blend</span>
+        <span class="param-prop">_MirrorTexBlend</span>
+        <span class="param-badge badge-range">range</span>
+      </div>
+      <div class="param-body">
+        <p>Blend amount from the normal look to the alt look. 0 = normal appearance, 1 = fully swapped.</p>
+        <p class="param-default">Default: 1.0</p>
+      </div>
+      <div class="param-tip">Around 0.5 creates a semi-transparent "double self" effect.</div>
+    </div>
+
+    <div class="param-card">
+      <div class="param-header">
+        <span class="param-name">Apply to Mirror</span>
+        <span class="param-prop">_MirrorTexApplyMirror</span>
+        <span class="param-badge badge-toggle">toggle</span>
+      </div>
+      <div class="param-body">
+        <p>Whether the swap applies to VRChat mirror reflections.</p>
+        <p class="param-default">Default: ON</p>
+      </div>
+      <div class="param-tip">Turn this OFF and enable only "Apply to Camera" for photo-only effects.</div>
+    </div>
+
+    <div class="param-card">
+      <div class="param-header">
+        <span class="param-name">Apply to Camera</span>
+        <span class="param-prop">_MirrorTexApplyCamera</span>
+        <span class="param-badge badge-toggle">toggle</span>
+      </div>
+      <div class="param-body">
+        <p>Whether the swap applies to the VRChat camera (handheld / desktop / screenshots).</p>
+        <p class="param-default">Default: OFF</p>
+      </div>
+      <div class="param-tip">Enable for messages or watermarks that only appear in photos.</div>
+    </div>
+
+    <h2 id="tips">Usage Tips</h2>
+    <ul>
+      <li><strong>A different self in the mirror</strong>: enable Apply to Mirror and set the transformed look as the alt texture — a classic horror/fantasy trick.</li>
+      <li><strong>Photo-only watermark</strong>: enable Apply to Camera so signatures or patterns appear only in screenshots.</li>
+      <li><strong>Double self</strong>: set Blend to 0.5 for a ghostly overlay of two appearances.</li>
+      <li>Uses VRChat-specific global variables; the feature has no effect outside VRChat.</li>
+      <li>Related: <a href="mirror-control.html">Mirror Control</a> (controls visibility itself in mirrors)</li>
+    </ul>
+
+    <nav class="page-nav"></nav>
+  </main>
+</div>
+<footer class="site-footer">&copy; 2025 Natane Toon Shader.</footer>
+<script src="../../../nav.js"></script>
+</body>
+</html>

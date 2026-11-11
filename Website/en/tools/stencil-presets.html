@@ -1,0 +1,65 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Stencil Presets - Natane Toon Shader</title>
+  <link rel="stylesheet" href="../../styles.css">
+</head>
+<body>
+<header class="site-header"></header>
+<div class="page-wrapper">
+  <aside class="sidebar"></aside>
+  <main class="main-content">
+    <nav class="breadcrumb"></nav>
+    <h1>Stencil Presets</h1>
+    <p class="page-subtitle">One-click stencil setups for peepholes, hidden patterns, and more (v1.6.0)</p>
+
+    <div class="tool-meta">
+      <span>Location: Material Inspector &gt; Advanced tab &gt; Rendering Settings &gt; Stencil &gt; Presets</span>
+      <span>Category: Shader</span>
+    </div>
+
+    <h2 id="overview">Overview</h2>
+    <p>Stencil Presets apply the stencil-buffer settings needed for "visible only through a mask" effects with one click from the material inspector. You can build peepholes, hidden patterns, and vanishing-body effects without memorizing Ref / Comp / Pass combinations.</p>
+
+    <h2 id="access">Access</h2>
+    <p>Material inspector: <code>Advanced tab &gt; Rendering Settings &gt; Stencil &gt; Presets</code></p>
+
+    <h2 id="features">Presets</h2>
+    <ul>
+      <li><strong>Default</strong> — Ref=0, Comp=Always, Pass=Keep. Stencil unused (default)</li>
+      <li><strong>Writer</strong> — Ref=1, Comp=Always, Pass=Replace. The material that writes the mask region (lens, window, magic circle)</li>
+      <li><strong>Reader (Equal)</strong> — Ref=1, Comp=Equal, Pass=Keep. Visible only through the mask</li>
+      <li><strong>Reader (NotEqual)</strong> — Ref=1, Comp=NotEqual, Pass=Keep. Disappears within the mask region</li>
+    </ul>
+
+    <h2 id="usage">Usage</h2>
+    <ol class="tool-steps">
+      <li>Apply the "Writer" preset to the masking material (e.g. a glasses lens, window, or magic circle)</li>
+      <li>Give the writer a lower Render Queue than the reader so it draws first</li>
+      <li>Apply "Reader (Equal)" to the material that should only appear through the mask (or "Reader (NotEqual)" to hide it there)</li>
+      <li>When using multiple mask groups, use a different Reference value (1-255) per group</li>
+    </ol>
+
+    <h2 id="examples">Effect Ideas</h2>
+    <ul>
+      <li><strong>Peephole</strong>: lens = Writer; the "true form" visible only through the lens = Reader (Equal)</li>
+      <li><strong>Hidden pattern</strong>: a tattoo or crest that appears only when a specific item is held up</li>
+      <li><strong>Vanishing body</strong>: parts of the body disappear over a magic circle (Reader (NotEqual))</li>
+    </ul>
+
+    <h2 id="tips">Tips</h2>
+    <ul class="tool-tips">
+      <li>In VRChat, other people's shaders share the stencil buffer; picking uncommon Ref values reduces accidents</li>
+      <li>Ref / Comp / Pass can still be fine-tuned manually after applying a preset</li>
+      <li>Combines well with the <a href="../params/advanced/mirror-alt-texture.html">Mirror/Camera Alt Texture</a> for mirror/camera trick effects</li>
+    </ul>
+
+    <nav class="page-nav"></nav>
+  </main>
+</div>
+<footer class="site-footer">&copy; 2025 Natane Toon Shader.</footer>
+<script src="../../nav.js"></script>
+</body>
+</html>

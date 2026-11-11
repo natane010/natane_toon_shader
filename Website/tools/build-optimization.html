@@ -1,0 +1,62 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ビルド時最適化 - Natane Toon Shader</title>
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+<header class="site-header"></header>
+<div class="page-wrapper">
+  <aside class="sidebar"></aside>
+  <main class="main-content">
+    <nav class="breadcrumb"></nav>
+    <h1>ビルド時最適化</h1>
+    <p class="page-subtitle">ビルド・VRChatアップロード時にシェーダーとマテリアルを自動最適化 (v1.6.0)</p>
+
+    <div class="tool-meta">
+      <span>実行タイミング: ビルド時に自動実行（手動操作不要）</span>
+      <span>カテゴリ: 最適化</span>
+    </div>
+
+    <h2 id="overview">概要</h2>
+    <p>Natane Toon Shader は、ビルド時（特に VRChat アバターのアップロード時）にシェーダーとマテリアルを自動的に最適化する仕組みを備えています。ユーザーの操作は不要で、複数のコンポーネントがビルドパイプラインの各段階で連携して動作します。</p>
+
+    <h2 id="features">仕組み</h2>
+    <ul>
+      <li><strong>ビルド前 (NataneBuildFeatureOptimizer)</strong> — 使用機能だけを <code>#define</code> したビルド設定を生成し、未使用キーワードをソースレベルで <code>#undef</code> します</li>
+      <li><strong>シーン処理時 (NataneBuildSceneKeywordSync)</strong> — 全マテリアルのキーワードをプロパティ値と同期してディスク保存します（VRChat の AssetBundle ビルド対応）</li>
+      <li><strong>シェーダーコンパイル時 (NataneShaderVariantStripper)</strong> — <code>IPreprocessShaders</code> により、どのマテリアルからも使われていないキーワードを含むコンパイル済みバリアントを破棄します</li>
+      <li><strong>ビルド後 (NataneBuildOptimizationReport)</strong> — 最適化サマリをコンソールと <code>Logs/NataneBuildOptimizationReport.txt</code> に出力します</li>
+      <li><strong>VRChatアバタービルド前 (NataneVRChatBuildHook)</strong> — キーワード同期と Lite 変換候補の提案を行います（VRChat SDK 導入時のみ有効）</li>
+    </ul>
+
+    <h2 id="report">最適化レポートの内容</h2>
+    <ul>
+      <li><strong>破棄されたバリアント数</strong> — バリアントストリップの集計値（before → after はコンソールにもログ出力）</li>
+      <li><strong>無効化された機能</strong> — 既知キーワードのうち、どのマテリアルでも未使用のもの一覧</li>
+      <li><strong>Lite 変換候補</strong> — GrabPass機能（屈折・Kuwahara・カラーブリーディングなど）を使っていないフル版マテリアル一覧</li>
+      <li><strong>テクスチャ改善提案</strong> — 2048超の maxSize、未圧縮テクスチャなど（提案のみ・自動変更なし）</li>
+    </ul>
+
+    <h2 id="technical">安全性</h2>
+    <ul>
+      <li>バリアント破棄の判定対象は既知の Natane キーワードのみです。<code>multi_compile</code> 由来のビルトインキーワード（<code>DIRECTIONAL</code> / <code>SHADOWS_SCREEN</code> / <code>INSTANCING_ON</code> など）には一切触れません</li>
+      <li>キーワード状態と Toggle プロパティ値のどちらかが有効なら「使用中」とみなす安全側の判定です</li>
+    </ul>
+
+    <h2 id="tips">Tips</h2>
+    <ul class="tool-tips">
+      <li>バリアントストリップを一時的に無効化したい場合は EditorPrefs のキー <code>NataneToon_DisableVariantStripping</code> を <code>true</code> に設定します</li>
+      <li>VRChatのアバタービルドではビルド後レポートは呼ばれないため、Lite 提案は VRChat ビルドフック側でも出力されます</li>
+      <li>手動での事前最適化には<a href="variant-stripper.html">バリアントストリッピング</a>や<a href="shader-variant-collector.html">シェーダーバリアント収集</a>も利用できます</li>
+    </ul>
+
+    <nav class="page-nav"></nav>
+  </main>
+</div>
+<footer class="site-footer">&copy; 2025 Natane Toon Shader.</footer>
+<script src="../nav.js"></script>
+</body>
+</html>

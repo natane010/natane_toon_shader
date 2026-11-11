@@ -1,0 +1,93 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>X-Ray - Natane Toon Shader</title>
+  <link rel="stylesheet" href="../../../styles.css">
+</head>
+<body>
+<header class="site-header"></header>
+<div class="page-wrapper">
+  <aside class="sidebar"></aside>
+  <main class="main-content">
+    <nav class="breadcrumb"></nav>
+    <h1>X-Ray</h1>
+    <p class="page-subtitle">Show only the part hidden behind walls and other objects, in a separate color, outline, or pattern. A dedicated variant for see-through silhouettes, target markers, and the "visible when hidden" ghost look. (v1.6.0)</p>
+
+    <div class="feature-preview" aria-hidden="true">
+      <span class="preview-tag">PREVIEW</span>
+      <em class="preview-name">X-Ray</em>
+    </div>
+
+    <h2 id="overview">Overview</h2>
+    <p>X-Ray is a <strong>dedicated shader variant</strong>, <code>Natane/Toon Shader (X-Ray)</code>, for occluded silhouettes. Because it needs an extra depth-test pass, it is not built into the normal shader and ships as a separate variant, generated from the Cutout variant.</p>
+    <p>The visible (non-occluded) part renders normally through the full toon feature set (<code>ZTest LEqual</code>). In addition, an <strong>X-RAY pass</strong> is drawn right after OUTLINE and before the forward passes. That pass uses <code>ZTest Greater</code> to draw only fragments behind the depth buffer &mdash; i.e. the occluded part.</p>
+    <p>It shares the standard <code>vert</code>, so vertex deformations such as VAT, Smear, Perspective Flat, and Face Ortho keep the see-through silhouette consistent with the visible surface. Stencil is declared at the SubShader level and applies to the X-RAY pass too.</p>
+
+    <h2 id="modes">Display modes (<code>_XRayMode</code>)</h2>
+    <table>
+      <thead>
+        <tr><th>Value</th><th>Mode</th><th>Description</th></tr>
+      </thead>
+      <tbody>
+        <tr><td>0</td><td>OutlineOnly</td><td>Keep only the Fresnel edge (thickness via <code>_XRayOutlineWidth</code>)</td></tr>
+        <tr><td>1</td><td>SolidFill</td><td>Flat fill by <code>_XRayOccludedAlpha</code></td></tr>
+        <tr><td>2</td><td>DitherFill</td><td>Bayer 4x4 dither halftone fill (screen-pixel based)</td></tr>
+        <tr><td>3</td><td>Scanline</td><td>Scanlines (screen space or world Y)</td></tr>
+        <tr><td>4</td><td>Fresnel</td><td>Rim-gradient fill + additive edge glow (default)</td></tr>
+        <tr><td>5</td><td>Pulse</td><td>Alpha pulses via a time sine wave (<code>_XRayPulseSpeed</code>)</td></tr>
+        <tr><td>6</td><td>DepthGradient</td><td>Fades with view depth (<code>_XRayDepthFade</code>)</td></tr>
+      </tbody>
+    </table>
+    <p>Wireframe mode is intentionally omitted (it would need a geometry shader / barycentric coordinates). Use OutlineOnly / Scanline for line-based looks.</p>
+
+    <h2 id="params">Parameters</h2>
+    <table>
+      <thead>
+        <tr><th>Property</th><th>Description</th><th>Default</th></tr>
+      </thead>
+      <tbody>
+        <tr><td><code>_XRayColor</code> (HDR)</td><td>Color of the occluded part; glows when combined with Bloom</td><td>(0.3, 0.8, 1.5, 1)</td></tr>
+        <tr><td><code>_XRayOccludedAlpha</code></td><td>Base opacity of the occluded part</td><td>0.6</td></tr>
+        <tr><td><code>_XRayMode</code></td><td>Display mode (table above)</td><td>4 (Fresnel)</td></tr>
+        <tr><td><code>_XRayOutlineWidth</code></td><td>Fresnel outline width for OutlineOnly (pow)</td><td>4</td></tr>
+        <tr><td><code>_XRayDepthFade</code></td><td>View-depth fade distance for DepthGradient</td><td>10</td></tr>
+        <tr><td><code>_XRayScanlineScale</code></td><td>Scanline spacing</td><td>80</td></tr>
+        <tr><td><code>_XRayScanlineSpeed</code></td><td>Scanline scroll speed</td><td>1</td></tr>
+        <tr><td><code>_XRayScanlineSpace</code></td><td>Scanline space (0=screen, 1=world Y)</td><td>0</td></tr>
+        <tr><td><code>_XRayFresnelPower</code></td><td>Edge sharpness for Fresnel</td><td>2.5</td></tr>
+        <tr><td><code>_XRayPulseSpeed</code></td><td>Blink speed for Pulse</td><td>3</td></tr>
+        <tr><td><code>_XRaySrcBlend</code> / <code>_XRayDstBlend</code></td><td>X-RAY pass blend factors (use One One for additive)</td><td>SrcAlpha / OneMinusSrcAlpha</td></tr>
+        <tr><td>Stencil (<code>_StencilRef</code> etc.)</td><td>SubShader-level Stencil control (all passes)</td><td>&mdash;</td></tr>
+      </tbody>
+    </table>
+    <p>Masked by texture alpha (<code>_MainTex.a &times; _Color.a</code>) with a small clip threshold, so cutout holes do not glow through walls.</p>
+
+    <h2 id="usage">Main uses</h2>
+    <ul>
+      <li>World effects / self-occluding props: character outlines through walls, target markers, highlighting hidden performers or items</li>
+      <li>Cyber-scan effects (combine with Topographic for scan lines + see-through)</li>
+      <li>The "visible when hidden" look for ghosts and spirits</li>
+    </ul>
+
+    <h3 id="vrc">Behavior in VRChat</h3>
+    <ul>
+      <li><strong>On avatars</strong>: it shows "you, seen through another player's world geometry (walls)". As long as another player's mesh writes depth, your X-Ray silhouette is visible behind it. The far side of your own mesh (self-occlusion) also shows.</li>
+      <li>Safety-blocked avatars fall back to a normal toon cutout via <code>VRCFallback = "ToonCutout"</code>.</li>
+    </ul>
+
+    <h2 id="limits">Known limitations</h2>
+    <ul>
+      <li><strong>Draw order (transparent sorting)</strong>: the X-RAY pass is <code>LightMode = "Always"</code>, so it can show through transparent objects drawn later. This is a structural transparent-sorting limit, the same as Ghost and ordinary transparent shaders.</li>
+      <li>Wireframe mode is not supported (see above).</li>
+      <li>DepthGradient approximates using the fragment's own view depth to avoid extra depth sampling.</li>
+    </ul>
+
+    <nav class="page-nav"></nav>
+  </main>
+</div>
+<footer class="site-footer">&copy; 2025 Natane Toon Shader.</footer>
+<script src="../../../nav.js"></script>
+</body>
+</html>

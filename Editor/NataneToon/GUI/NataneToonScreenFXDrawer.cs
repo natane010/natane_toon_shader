@@ -95,9 +95,18 @@ namespace NataneToon.Editor
 
         private void DrawHeader()
         {
-            EditorGUILayout.BeginVertical(EditorStyles.helpBox);
-            EditorGUILayout.LabelField(L("ナタネ スクリーンFXオーバーレイ", "Natane Screen FX Overlay"), HeaderStyle);
-            EditorGUILayout.EndVertical();
+            NataneToonInspectorComponents.DrawInspectorHeader(
+                "Natane Toon Shader",
+                L("カメラ全体のスクリーン演出", "Full-screen Camera Effects"),
+                "Screen FX",
+                "GrabPass",
+                NataneInspectorStatus.Warning,
+                () =>
+                {
+                    NataneToonLocalization.ToggleLanguage();
+                    materialEditor?.Repaint();
+                },
+                null);
         }
 
         private void DrawBlendSection()

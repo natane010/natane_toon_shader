@@ -25,6 +25,12 @@ namespace NataneToon.Editor
         public const float SPACE_STANDARD = 10f;
         public const float SPACE_LARGE    = 15f;
 
+        // インスペクター全体の余白を4px単位で揃える。
+        public const float INSPECTOR_SPACE_XS = 4f;
+        public const float INSPECTOR_SPACE_SM = 8f;
+        public const float INSPECTOR_SPACE_MD = 12f;
+        public const float INSPECTOR_SPACE_LG = 16f;
+
         // ===== Padding =====
         public const float INDENT_STANDARD = 15f;
 
@@ -36,12 +42,25 @@ namespace NataneToon.Editor
 
         // ===== Tab Active Indicator (H-5) =====
         public const float TAB_INDICATOR_HEIGHT = 2f;
-        public static readonly Color TAB_ACTIVE_INDICATOR_COLOR = new Color(0.3f, 0.6f, 1f, 1f);
+        public static Color TAB_ACTIVE_INDICATOR_COLOR
+        {
+            get { return NataneToonEditorTheme.Accent; }
+        }
 
         // ===== Inspector Header =====
         public const float HEADER_LANG_BUTTON_WIDTH = 30f;
         public const float HEADER_ACTION_BUTTON_WIDTH = 50f;
         public const float HEADER_SMALL_BUTTON_HEIGHT = 20f;
+
+        public const float INSPECTOR_HEADER_HEIGHT = 32f;
+        public const float INSPECTOR_SECTION_HEADER_HEIGHT = 27f;
+        public const float INSPECTOR_CONTROL_HEIGHT = 22f;
+        public const float INSPECTOR_PRIMARY_BUTTON_HEIGHT = 30f;
+
+        // 幅に応じて表示密度を切り替える境界値。
+        public const float INSPECTOR_WIDTH_COMPACT = 340f;
+        public const float INSPECTOR_WIDTH_NARROW = 420f;
+        public const float INSPECTOR_WIDTH_WIDE = 520f;
 
         // ===== Search Bar =====
         public const float SEARCH_LABEL_WIDTH = 60f;

@@ -1,0 +1,116 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ピクセルアート - Natane Toon Shader</title>
+  <link rel="stylesheet" href="../../styles.css">
+</head>
+<body>
+<header class="site-header"></header>
+<div class="page-wrapper">
+  <aside class="sidebar"></aside>
+  <main class="main-content">
+    <nav class="breadcrumb"></nav>
+    <h1>ピクセルアート</h1>
+    <p class="page-subtitle">3D モデルをドット絵風に見せます。テクスチャをピクセル単位に丸め、ライティングと色を段階化して、レトロゲームや PS1 風のルックを作れます。(v1.6.0)</p>
+
+    <div class="feature-preview" aria-hidden="true">
+      <span class="preview-tag">PREVIEW</span>
+      <em class="preview-name">Pixel Art</em>
+    </div>
+
+    <h2 id="overview">概要</h2>
+    <p>UV のピクセル化、ライティング / 色の量子化、パレット LUT、ディザを実装した機能です。<a href="color-quantize.html">カラー量子化</a>が色数だけを減らすのに対し、こちらは<strong>空間的な解像度も落とします</strong>。キーワード <code>_PIXEL_ART</code> で切り替わり、OFF 時はゼロコストです。</p>
+    <p><strong>ミラー安全な設計</strong>: Screen Pixelation と Object-Stable Pixelation は意図的に非対応です。スクリーン空間スナップは VR で両眼にピクセル継ぎ目が出て安全でなく、Object-Stable 再投影は高コストのためです。本機能はミラー安全なテクスチャ空間 + 色空間のサブセットを提供します。</p>
+
+    <h2 id="looks">作れる表現</h2>
+    <ul>
+      <li>3D キャラクターのドット絵化、PS1 / レトロ 3D 風</li>
+      <li>2D ゲームのスプライト風、ボクセルゲーム風</li>
+      <li>低解像度ホラー、一部分だけデジタル化する演出</li>
+      <li>ダメージ時にピクセル崩壊する表現、現実と仮想空間を切り替える表現</li>
+    </ul>
+
+    <h2 id="key-params">主なパラメータ</h2>
+
+    <div class="param-card">
+      <div class="param-header">
+        <span class="param-name">仮想解像度</span>
+        <span class="param-prop">_PixelArtSize</span>
+        <span class="param-badge badge-range">range (4〜512)</span>
+      </div>
+      <div class="param-body">
+        <p>UV をスナップする仮想解像度です。小さいほど粗い (大きな) ドットになり、レトロ感が強まります。</p>
+        <p class="param-default">デフォルト: 64</p>
+      </div>
+      <div class="param-tip">ファミコン風なら 32〜64、少し細かいドットなら 128 前後が目安です。</div>
+    </div>
+
+    <div class="param-card">
+      <div class="param-header">
+        <span class="param-name">量子化段階数</span>
+        <span class="param-prop">_PixelLightSteps</span>
+        <span class="param-badge badge-range">range (2〜32)</span>
+      </div>
+      <div class="param-body">
+        <p>ライティング / 色を何段階に丸めるかです。少ないほどベタ塗りのドット絵らしくなります。</p>
+        <p class="param-default">デフォルト: 6</p>
+      </div>
+    </div>
+
+    <div class="param-card">
+      <div class="param-header">
+        <span class="param-name">パレット LUT</span>
+        <span class="param-prop">_PixelPalette / _PixelPaletteTex</span>
+        <span class="param-badge badge-toggle">toggle + 2D</span>
+      </div>
+      <div class="param-body">
+        <p>有効にすると、輝度で横方向パレット LUT (<code>_PixelPaletteTex</code>) をサンプルし、使用色を制限します。ゲームボーイ風の限定色パレットなどが作れます。</p>
+        <p class="param-default">デフォルト: OFF</p>
+      </div>
+      <div class="param-tip">パレット置換は ForwardBase のみで行われます (加算パスでベースの色を置き換えないため)。</div>
+    </div>
+
+    <div class="param-card">
+      <div class="param-header">
+        <span class="param-name">ディザ量</span>
+        <span class="param-prop">_PixelDither</span>
+        <span class="param-badge badge-range">range (0〜1)</span>
+      </div>
+      <div class="param-body">
+        <p>Bayer ディザの量です。量子化前に加算され、段階の少ない色でもバンディング (縞) を緩和します。</p>
+        <p class="param-default">デフォルト: 0</p>
+      </div>
+    </div>
+
+    <h2 id="all-params">すべてのパラメータ</h2>
+    <table>
+      <thead>
+        <tr><th>プロパティ</th><th>型 / 既定</th><th>説明</th></tr>
+      </thead>
+      <tbody>
+        <tr><td><code>_PixelArt</code></td><td>Toggle / 0</td><td>有効化 (<code>_PIXEL_ART</code>)</td></tr>
+        <tr><td><code>_PixelArtSize</code></td><td>Range(4,512) / 64</td><td>仮想解像度 (UV スナップ)</td></tr>
+        <tr><td><code>_PixelLightSteps</code></td><td>Range(2,32) / 6</td><td>ライティング / 色の量子化段階数</td></tr>
+        <tr><td><code>_PixelPalette</code></td><td>Toggle / 0</td><td>パレット LUT を使用</td></tr>
+        <tr><td><code>_PixelPaletteTex</code></td><td>2D / white</td><td>横方向パレット LUT (輝度でサンプル)</td></tr>
+        <tr><td><code>_PixelDither</code></td><td>Range(0,1) / 0</td><td>Bayer ディザ量</td></tr>
+        <tr><td><code>_PixelArtMask</code></td><td>2D (R) / white</td><td>マスク</td></tr>
+      </tbody>
+    </table>
+
+    <h2 id="tips">使い方のヒント</h2>
+    <ul>
+      <li><strong>適用箇所</strong>: UV ピクセル化は UV アニメーション確定直後に <code>mainUV</code> のみをスナップします。他の UV 駆動機能はネイティブ解像度を維持します。色 / ライト量子化はライティング後にポスタライズします。</li>
+      <li><strong>レトロゲーム調のまとめ方</strong>: <a href="../advanced/perspective-flat.html">パースペクティブフラット</a>・<a href="color-quantize.html">カラー量子化</a>・ディザ・ピクセルアウトラインを組み合わせると、3D モデルが低解像度の 2D スプライトに近づきます。</li>
+      <li><strong>マスク</strong>: <code>_PixelArtMask</code> の R チャンネルで、一部分だけデジタル化する演出ができます。</li>
+    </ul>
+
+    <nav class="page-nav"></nav>
+  </main>
+</div>
+<footer class="site-footer">&copy; 2025 Natane Toon Shader.</footer>
+<script src="../../nav.js"></script>
+</body>
+</html>

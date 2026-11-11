@@ -1,0 +1,126 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>形状付きハイライト - Natane Toon Shader</title>
+  <link rel="stylesheet" href="../../styles.css">
+</head>
+<body>
+<header class="site-header"></header>
+<div class="page-wrapper">
+  <aside class="sidebar"></aside>
+  <main class="main-content">
+    <nav class="breadcrumb"></nav>
+    <h1>形状付きハイライト</h1>
+    <p class="page-subtitle">反射光を丸ではなく星・ハート・十字などの形にできます。瞳の星形ハイライトや宝石の十字反射など、イラストで描き込まれる記号的な光をそのまま再現します。(v1.6.0)</p>
+
+    <div class="feature-preview" aria-hidden="true">
+      <span class="preview-tag">PREVIEW</span>
+      <em class="preview-name">Shaped Highlight</em>
+    </div>
+
+    <h2 id="overview">概要</h2>
+    <p>通常の丸いスペキュラの代わりに、円 / リング / 十字 / 星 / ハート / ダイヤ / 三日月 / ライン等のプロシージャル形状 (またはカスタム SDF テクスチャ) をハイライトとして加算します。物理的な反射ではなく、アニメやイラストで描かれる<strong>記号的なハイライト</strong>を狙った機能です。</p>
+    <p>座標はハーフベクトルと法線のビュー空間偏差 (スペキュラのピーク中心) から作られるため、既存スペキュラと自然に整合します。キーワード <code>_SHAPED_HIGHLIGHT</code> で切り替わり、OFF 時はゼロコストです。2 つ目の形状を重ねたり、時間で明滅させることもできます。</p>
+
+    <h2 id="looks">作れる表現</h2>
+    <ul>
+      <li>瞳の星形ハイライト、宝石の十字反射</li>
+      <li>髪の細長いハイライト、金属の鋭い光条</li>
+      <li>ハート型の光、魔法アイテムの発光記号</li>
+      <li>一瞬だけ現れる漫画的な光 (スパークル明滅)</li>
+    </ul>
+
+    <h2 id="key-params">主なパラメータ</h2>
+
+    <div class="param-card">
+      <div class="param-header">
+        <span class="param-name">形状</span>
+        <span class="param-prop">_ShapedHLShape</span>
+        <span class="param-badge badge-enum">enum (0〜8)</span>
+      </div>
+      <div class="param-body">
+        <p>ハイライトの形を選びます: Circle / Ring / Cross / Star / Heart / Diamond / Crescent / Line / Custom。Custom を選ぶと <code>_ShapedHLTex</code> の SDF テクスチャを使います。</p>
+        <p class="param-default">デフォルト: 3 (Star)</p>
+      </div>
+      <div class="param-tip">瞳なら Star / Heart、宝石なら Cross / Diamond が定番です。</div>
+    </div>
+
+    <div class="param-card">
+      <div class="param-header">
+        <span class="param-name">ハイライト色</span>
+        <span class="param-prop">_ShapedHLColor</span>
+        <span class="param-badge badge-color">color (HDR)</span>
+      </div>
+      <div class="param-body">
+        <p>ハイライトの色です。HDR のため 1 を超える値で Bloom と組み合わせると強く発光します。</p>
+        <p class="param-default">デフォルト: (1, 1, 1, 1)</p>
+      </div>
+    </div>
+
+    <div class="param-card">
+      <div class="param-header">
+        <span class="param-name">サイズ</span>
+        <span class="param-prop">_ShapedHLSize</span>
+        <span class="param-badge badge-range">range (0.01〜2)</span>
+      </div>
+      <div class="param-body">
+        <p>ハイライトの大きさです。<code>_ShapedHLSoftness</code> でエッジの柔らかさ、<code>_ShapedHLStretch</code> で縦横の伸縮を調整できます。</p>
+        <p class="param-default">デフォルト: 0.5</p>
+      </div>
+    </div>
+
+    <div class="param-card">
+      <div class="param-header">
+        <span class="param-name">ライト追従 / カメラ追従</span>
+        <span class="param-prop">_ShapedHLLightFollow / _ShapedHLCameraFollow</span>
+        <span class="param-badge badge-range">range (0〜1)</span>
+      </div>
+      <div class="param-body">
+        <p>ハイライトの回転を、ライト方向またはカメラ向きにどれだけ追従させるかです。1 で完全追従、0 で固定回転になります。</p>
+        <p class="param-default">デフォルト: LightFollow 1 / CameraFollow 0</p>
+      </div>
+      <div class="param-tip">瞳のキラキラを常に正面に見せたいときは CameraFollow を上げてください。</div>
+    </div>
+
+    <h2 id="all-params">すべてのパラメータ</h2>
+    <table>
+      <thead>
+        <tr><th>プロパティ</th><th>型 / 既定</th><th>説明</th></tr>
+      </thead>
+      <tbody>
+        <tr><td><code>_ShapedHighlight</code></td><td>Toggle / 0</td><td>有効化 (<code>_SHAPED_HIGHLIGHT</code>)</td></tr>
+        <tr><td><code>_ShapedHLShape</code></td><td>Enum(0-8) / 3</td><td>Circle/Ring/Cross/Star/Heart/Diamond/Crescent/Line/Custom</td></tr>
+        <tr><td><code>_ShapedHLColor</code></td><td>Color (HDR) / (1,1,1,1)</td><td>ハイライト色</td></tr>
+        <tr><td><code>_ShapedHLIntensity</code></td><td>Range(0,10) / 1</td><td>強度</td></tr>
+        <tr><td><code>_ShapedHLSize</code></td><td>Range(0.01,2) / 0.5</td><td>サイズ</td></tr>
+        <tr><td><code>_ShapedHLSoftness</code></td><td>Range(0.001,1) / 0.1</td><td>エッジのソフトさ</td></tr>
+        <tr><td><code>_ShapedHLStretch</code></td><td>Vector / (1,1,0,0)</td><td>XY 方向の伸縮</td></tr>
+        <tr><td><code>_ShapedHLRotation</code></td><td>Range(0,360) / 0</td><td>回転 (度)</td></tr>
+        <tr><td><code>_ShapedHLLightFollow</code></td><td>Range(0,1) / 1</td><td>ライト方向への追従</td></tr>
+        <tr><td><code>_ShapedHLCameraFollow</code></td><td>Range(0,1) / 0</td><td>カメラ向きへの追従</td></tr>
+        <tr><td><code>_ShapedHLShape2</code></td><td>Enum(0-7) / 0</td><td>セカンダリ形状</td></tr>
+        <tr><td><code>_ShapedHLIntensity2</code></td><td>Range(0,10) / 0</td><td>セカンダリ強度 (0 で無効)</td></tr>
+        <tr><td><code>_ShapedHLSize2</code></td><td>Range(0.01,2) / 0.3</td><td>セカンダリサイズ</td></tr>
+        <tr><td><code>_ShapedHLSparkleSpeed</code></td><td>Range(0,20) / 0</td><td>スパークル明滅速度</td></tr>
+        <tr><td><code>_ShapedHLTex</code></td><td>2D / black</td><td>カスタム SDF テクスチャ (Shape=Custom 時)</td></tr>
+        <tr><td><code>_ShapedHLMask</code></td><td>2D (R) / white</td><td>マスク</td></tr>
+      </tbody>
+    </table>
+
+    <h2 id="tips">使い方のヒント</h2>
+    <ul>
+      <li><strong>スペキュラと連動</strong>: <a href="specular.html">スペキュラー</a>ブロック直後に加算されます。白飛びしにくい合成 (<code>SafeAdditiveBlend</code>) を使うため、強度を上げても破綻しにくくなっています。</li>
+      <li><strong>2 つ重ねる</strong>: <code>_ShapedHLShape2</code> / <code>_ShapedHLIntensity2</code> でセカンダリ形状を追加できます (大きな星の中に小さな星、など)。</li>
+      <li><strong>明滅</strong>: <code>_ShapedHLSparkleSpeed</code> を上げると、瞳のキラッとした点滅を演出できます。</li>
+      <li><a href="../advanced/distance-fade.html">距離フェード</a>に対応し、遠距離では自動的にフェードします。</li>
+    </ul>
+
+    <nav class="page-nav"></nav>
+  </main>
+</div>
+<footer class="site-footer">&copy; 2025 Natane Toon Shader.</footer>
+<script src="../../nav.js"></script>
+</body>
+</html>

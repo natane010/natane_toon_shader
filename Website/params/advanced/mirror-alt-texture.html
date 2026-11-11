@@ -1,0 +1,105 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>鏡・カメラ写り分けテクスチャ - Natane Toon Shader</title>
+  <link rel="stylesheet" href="../../styles.css">
+</head>
+<body>
+<header class="site-header"></header>
+<div class="page-wrapper">
+  <aside class="sidebar"></aside>
+  <main class="main-content">
+    <nav class="breadcrumb"></nav>
+    <h1>鏡・カメラ写り分けテクスチャ</h1>
+    <p class="page-subtitle">ミラーやカメラに映るときだけ別の見た目に切り替える (v1.6.0)</p>
+
+    <h2 id="overview">概要</h2>
+    <p>鏡・カメラ写り分けテクスチャ (Mirror/Camera Alt Texture) は、VRChatのミラーやカメラに映ったときだけ、ベースカラーを別のテクスチャ・カラーに切り替える機能です。「直接見ると普通の服なのに鏡の中では模様が浮かぶ」「写真にだけ写るメッセージ」といった不思議系の演出が作れます。</p>
+    <p>陰影・リムライト等のシェーディングは切り替え後の見た目にもそのまま適用されます。ミラー内で完全に消えたい／ミラーにだけ映りたい場合は<a href="mirror-control.html">ミラーコントロール</a>を使ってください。</p>
+    <p>キーワード <code>_MIRROR_TEXTURE</code> で制御されます。</p>
+
+    <h2 id="params">パラメータ</h2>
+
+    <div class="param-card">
+      <div class="param-header">
+        <span class="param-name">写り分けテクスチャ</span>
+        <span class="param-prop">_MirrorAltTex</span>
+        <span class="param-badge badge-texture">texture</span>
+      </div>
+      <div class="param-body">
+        <p>ミラー・カメラ内で表示される代替テクスチャです。メインテクスチャと同じUVでサンプリングされます。</p>
+        <p class="param-default">デフォルト: white</p>
+      </div>
+      <div class="param-tip">メインテクスチャをベースに模様やメッセージを描き足したテクスチャを用意すると「鏡の中だけ違う姿」が簡単に作れます。</div>
+    </div>
+
+    <div class="param-card">
+      <div class="param-header">
+        <span class="param-name">写り分けカラー</span>
+        <span class="param-prop">_MirrorAltColor</span>
+        <span class="param-badge badge-color">color</span>
+      </div>
+      <div class="param-body">
+        <p>写り分けテクスチャに乗算されるカラーです。テクスチャなしでも色違いの演出が可能です。</p>
+        <p class="param-default">デフォルト: (1, 1, 1, 1)</p>
+      </div>
+      <div class="param-tip">テクスチャを設定せずにこのカラーだけ変えると、「鏡の中の自分だけ色違い」を手軽に実現できます。</div>
+    </div>
+
+    <div class="param-card">
+      <div class="param-header">
+        <span class="param-name">切り替えの強さ</span>
+        <span class="param-prop">_MirrorTexBlend</span>
+        <span class="param-badge badge-range">range</span>
+      </div>
+      <div class="param-body">
+        <p>通常の見た目から写り分けテクスチャへのブレンド量です。0で通常の見た目、1で完全に切り替わります。</p>
+        <p class="param-default">デフォルト: 1.0</p>
+      </div>
+      <div class="param-tip">0.5前後にすると半透過的な「二重の姿」のような表現になります。</div>
+    </div>
+
+    <div class="param-card">
+      <div class="param-header">
+        <span class="param-name">ミラーに適用</span>
+        <span class="param-prop">_MirrorTexApplyMirror</span>
+        <span class="param-badge badge-toggle">toggle</span>
+      </div>
+      <div class="param-body">
+        <p>VRChatミラーの反射に写り分けを適用するかどうかを切り替えます。</p>
+        <p class="param-default">デフォルト: ON</p>
+      </div>
+      <div class="param-tip">カメラだけに写したい場合はOFFにして「カメラに適用」のみONにします。</div>
+    </div>
+
+    <div class="param-card">
+      <div class="param-header">
+        <span class="param-name">カメラに適用</span>
+        <span class="param-prop">_MirrorTexApplyCamera</span>
+        <span class="param-badge badge-toggle">toggle</span>
+      </div>
+      <div class="param-body">
+        <p>VRChatカメラ（手持ち / デスクトップ / スクリーンショット）での撮影に写り分けを適用するかどうかを切り替えます。</p>
+        <p class="param-default">デフォルト: OFF</p>
+      </div>
+      <div class="param-tip">ONにすると「写真にだけ写るメッセージ・透かし」が作れます。</div>
+    </div>
+
+    <h2 id="tips">使い方のヒント</h2>
+    <ul>
+      <li><strong>鏡の中の別の姿</strong>: ミラーに適用をON、写り分けテクスチャに変化後の姿を設定。ホラー・ファンタジー演出の定番です。</li>
+      <li><strong>写真だけの透かし</strong>: カメラに適用をONにすると、スクリーンショットにだけサインや模様が写り込みます。</li>
+      <li><strong>二重の姿</strong>: 切り替えの強さを0.5にして、二つの見た目を重ねた霊的な表現に。</li>
+      <li>VRChat専用のグローバル変数を使用するため、VRChat外ではこの機能は効果がありません。</li>
+      <li>関連機能: <a href="mirror-control.html">ミラーコントロール</a>（ミラー内での表示/非表示そのものの制御）</li>
+    </ul>
+
+    <nav class="page-nav"></nav>
+  </main>
+</div>
+<footer class="site-footer">&copy; 2025 Natane Toon Shader.</footer>
+<script src="../../nav.js"></script>
+</body>
+</html>

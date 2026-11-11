@@ -4,119 +4,121 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Natane Toon Shader - VRChat対応 高機能トゥーンシェーダー</title>
-    <meta name="description" content="Natane Toon Shader は Unity Built-in RP 向けの高機能トゥーンシェーダーです。AudioLink、マルチMatCap、ホログラム、SSS、59種プリセットなど豊富な機能を搭載し、VRChat に最適化されています。">
-    <link rel="stylesheet" href="styles.css">
-    <script src="nav.js"></script>
+    <meta name="description" content="Natane Toon Shader は Unity Built-in RP / URP 向けの高機能トゥーンシェーダーです。豊富な表現機能と制作支援ツールで、思いどおりのルックづくりを支えます。">
+    <link rel="icon" href="assets/natane-studio-icon.jpg">
+    <link rel="stylesheet" href="styles.css?v=studio-4">
+    <script src="nav.js?v=studio-4"></script>
+    <script src="home.js?v=studio-4"></script>
 </head>
-<body>
+<body class="home-page">
 
 <header class="site-header"></header>
 
 <div class="page-wrapper no-sidebar">
     <main class="main-content">
 
-        <!-- Hero -->
-        <section class="hero">
-            <h1>Natane Toon Shader</h1>
-            <div class="version-badge">v1.3.0 | Built-in RP | Unity 2019.4+</div>
-            <p class="description">
-                VRChat対応の高機能トゥーンシェーダー。<br>
-                AudioLink、マルチMatCap、ホログラム、グリッチ、デカル、<br>
-                SSS、溶解エフェクトなど豊富な機能を搭載。<br>
-                27以上のエディタツールと59種のプリセットで、効率的なワークフローを実現します。
-            </p>
+        <section class="home-hero">
+            <div class="hero-copy">
+                <p class="eyebrow">NATANE STUDIO / TOON SHADER</p>
+                <h1><span class="hero-title-primary">描きたい質感を、</span> <span class="hero-title-secondary">思いどおりに。</span></h1>
+                <p class="hero-lead">
+                    キャラクターの個性を引き出す、VRChat対応トゥーンシェーダー。<br>
+                    繊細な光から大胆な演出まで、アーティストの感覚を止めない制作環境を届けます。
+                </p>
+                <div class="hero-actions">
+                    <a class="button-primary" href="#docs">はじめる</a>
+                    <a class="button-secondary" href="vcc://vpm/addRepo?url=https://natanetoon.com/index.json">VCCで導入</a>
+                    <a class="button-secondary" href="#features">機能一覧</a>
+                </div>
+                <div class="compatibility-list" aria-label="対応環境">
+                    <span data-release-version>v1.6.5</span>
+                    <span>Built-in RP</span>
+                    <span>URP / Unity 6</span>
+                    <span>Unity 2019.4+</span>
+                </div>
+            </div>
+
+            <div class="hero-visual" aria-label="モデル画像差し込み予定領域">
+                <div class="visual-grid" aria-hidden="true"></div>
+                <div class="visual-line visual-line-a" aria-hidden="true"></div>
+                <div class="visual-line visual-line-b" aria-hidden="true"></div>
+                <div class="visual-placeholder">
+                    <span class="placeholder-index">VISUAL 01</span>
+                    <strong>MODEL VISUAL</strong>
+                    <span>IMAGE COMING SOON</span>
+                </div>
+                <img class="studio-seal" src="assets/natane-studio-icon.jpg" alt="Natane Studio">
+                <p class="visual-note">ここにモデル画像を配置予定</p>
+            </div>
         </section>
 
-        <!-- VCC Button -->
-        <section class="vcc-section">
-            <a class="vcc-button" href="vcc://vpm/addRepo?url=https://natanetoon.com/index.json">VCC に追加する</a>
-            <div class="manual-url">
-                <p>手動で追加する場合、VCCの Settings &gt; Packages &gt; Add Repository に以下のURLを入力:</p>
+        <section class="home-facts" aria-label="Natane Toon Shaderの概要">
+            <div class="fact-item"><strong>59</strong><span>LOOK PRESETS</span></div>
+            <div class="fact-item"><strong>27+</strong><span>EDITOR TOOLS</span></div>
+            <div class="fact-item"><strong>JA / EN</strong><span>DOCUMENTATION</span></div>
+            <details class="install-details">
+                <summary>手動インストール</summary>
+                <p>VCCの Settings &gt; Packages &gt; Add Repository に追加</p>
                 <code>https://natanetoon.com/index.json</code>
-            </div>
+            </details>
         </section>
 
-        <!-- Documentation Cards -->
-        <h2 id="docs">ドキュメント</h2>
-        <div class="cards-grid">
-            <a class="card-link" href="params/basic/main-texture.html">
-                <div class="card-icon">🎨</div>
-                <h3>基本</h3>
-                <p>メインテクスチャ、メイクアップ、シェーディング</p>
-            </a>
-            <a class="card-link" href="params/lighting/lighting-general.html">
-                <div class="card-icon">💡</div>
-                <h3>ライティング</h3>
-                <p>光源制御、バックライト、VRC Light Volumes</p>
-            </a>
-            <a class="card-link" href="params/effects/specular.html">
-                <div class="card-icon">✨</div>
-                <h3>エフェクト</h3>
-                <p>MatCap、アウトライン、ホログラム、グリッチ</p>
-            </a>
-            <a class="card-link" href="params/environment/reflection.html">
-                <div class="card-icon">🌐</div>
-                <h3>環境</h3>
-                <p>リフレクション、虹色効果、屈折</p>
-            </a>
-            <a class="card-link" href="params/advanced/normal-map.html">
-                <div class="card-icon">⚙️</div>
-                <h3>詳細</h3>
-                <p>AudioLink、VAT、Distance Fade</p>
-            </a>
-            <a class="card-link" href="tools/index.html">
-                <div class="card-icon">🛠️</div>
-                <h3>エディタツール</h3>
-                <p>27+の制作支援ツール</p>
-            </a>
-        </div>
+        <section class="home-section" id="whats-new">
+            <div class="section-heading">
+                <p class="section-index">01 / LATEST UPDATE</p>
+                <div>
+                    <h2><span data-release-version>v1.6.5</span> の新機能</h2>
+                    <p>ビルド最適化ワークスペースと表現機能を拡充したアップデート。</p>
+                </div>
+            </div>
 
-        <!-- Feature Highlights -->
-        <h2 id="features">主な機能</h2>
-        <div class="highlights">
-            <div class="highlight-item">
-                <span>🖌️</span>
-                セルシェーディング
+            <div class="feature-showcase" data-home-featured></div>
+            <div class="update-list" data-home-updates aria-label="その他の新機能"></div>
+
+            <div class="home-subheading">
+                <p class="section-index">表現機能アップデート</p>
+                <h3>手描き・角度・スキャンなど、8つの新しい見た目</h3>
             </div>
-            <div class="highlight-item">
-                <span>🎵</span>
-                AudioLink
+            <div class="feature-showcase" data-home-expression aria-label="表現機能アップデート"></div>
+        </section>
+
+        <section class="home-section" id="docs">
+            <div class="section-heading">
+                <p class="section-index">02 / DOCUMENTATION</p>
+                <div>
+                    <h2>必要な情報へ、迷わず。</h2>
+                    <p>目的別に整理されたパラメータ解説とツールガイド。</p>
+                </div>
             </div>
-            <div class="highlight-item">
-                <span>🔮</span>
-                マルチMatCap
+
+            <div class="documentation-grid" data-home-docs></div>
+        </section>
+
+        <section class="home-section" id="features">
+            <div class="section-heading">
+                <p class="section-index">03 / CAPABILITIES</p>
+                <div>
+                    <h2>ひとつのシェーダーで、<br>多彩なルックを。</h2>
+                </div>
             </div>
-            <div class="highlight-item">
-                <span>📡</span>
-                ホログラム / グリッチ
+            <div class="capability-list" data-home-capabilities></div>
+        </section>
+
+        <section class="home-cta">
+            <img src="assets/natane-studio-icon.jpg" alt="" aria-hidden="true">
+            <div>
+                <p class="eyebrow">START CREATING</p>
+                <h2>あなたのルックづくりを、ここから。</h2>
             </div>
-            <div class="highlight-item">
-                <span>🫧</span>
-                SSS
-            </div>
-            <div class="highlight-item">
-                <span>🏷️</span>
-                デカル / 溶解
-            </div>
-            <div class="highlight-item">
-                <span>💡</span>
-                VRC Light Volumes / LTCGI
-            </div>
-            <div class="highlight-item">
-                <span>📦</span>
-                59種プリセット
-            </div>
-            <div class="highlight-item">
-                <span>🇯🇵</span>
-                日本語UI
-            </div>
-        </div>
+            <a class="button-primary" href="vcc://vpm/addRepo?url=https://natanetoon.com/index.json">VCCに追加</a>
+        </section>
 
     </main>
 </div>
 
 <footer class="site-footer">
-    &copy; 2025 Natane Toon Shader. All rights reserved.
+    <span>&copy; 2026 Natane Studio</span>
+    <span>Natane Toon Shader</span>
 </footer>
 
 </body>

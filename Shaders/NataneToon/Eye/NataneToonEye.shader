@@ -929,10 +929,9 @@ Shader "Natane/Eye"
                     NTEye_ApplyIrisRing(proceduralCol, irisWorkingUV, workingViewDir, eyeCenter);
                     NTEye_ApplyTexturePolish(proceduralCol, texCol, irisWorkingUV, eyeCenter);
                     NTEye_ApplyRealisticEye(proceduralCol, irisWorkingUV, glareUV, workingViewDir, eyeCenter);
-                    return proceduralCol;
+                    col = proceduralCol;
                 }
-
-                if (_EyeState == 4)
+                else if (_EyeState == 4)
                 {
                     float nervousThickness = _NervousLinesThickness * .1;
                     proceduralCol.rgb = _NervousBackgroundColor;
@@ -978,8 +977,10 @@ Shader "Natane/Eye"
                     NTEye_ApplyIrisRing(proceduralCol, irisWorkingUV, workingViewDir, eyeCenter);
                     NTEye_ApplyTexturePolish(proceduralCol, texCol, irisWorkingUV, eyeCenter);
                     NTEye_ApplyRealisticEye(proceduralCol, irisWorkingUV, glareUV, workingViewDir, eyeCenter);
-                    return proceduralCol;
+                    col = proceduralCol;
                 }
+                else
+                {
 
                 if (_UseTexture > 0.5)
                 {
@@ -1093,6 +1094,8 @@ Shader "Natane/Eye"
                 NTEye_ApplyIrisRing(col, irisWorkingUV, workingViewDir, eyeCenter);
                 NTEye_ApplyTexturePolish(col, texCol, irisWorkingUV, eyeCenter);
                 NTEye_ApplyRealisticEye(col, irisWorkingUV, glareUV, workingViewDir, eyeCenter);
+
+                } // else (_EyeState 0/1/2)
 
                 return col;
             }

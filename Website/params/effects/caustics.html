@@ -1,0 +1,122 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>コースティクス - Natane Toon Shader</title>
+  <link rel="stylesheet" href="../../styles.css">
+</head>
+<body>
+<header class="site-header"></header>
+<div class="page-wrapper">
+  <aside class="sidebar"></aside>
+  <main class="main-content">
+    <nav class="breadcrumb"></nav>
+    <h1>サーフェス・コースティクス</h1>
+    <p class="page-subtitle">キャラや小物の表面を、複雑な光模様が流れます。水中のキャラクター、水面の反射光、魔力が皮膚を流れる表現、木漏れ日のような揺らめく光を作れます。(v1.6.0)</p>
+
+    <div class="feature-preview" aria-hidden="true">
+      <span class="preview-tag">PREVIEW</span>
+      <em class="preview-name">Caustics</em>
+    </div>
+
+    <h2 id="overview">概要</h2>
+    <p>表面を流れる<strong>コースティクス (集光模様)</strong> を描く機能です。Procedural モードは Voronoi と sin 波を組み合わせて軽量に生成し、Texture モードは 2 枚のテクスチャをスクロール乗算します。ForwardBase のみで描画され、キーワード <code>_CAUSTICS</code> で切り替わります。OFF 時はゼロコストです。</p>
+    <p>座標空間 (UV / Object / World / Triplanar-lite) と合成方式 (EmissionAdd / BaseMultiply / LitOnly / ShadowOnly) を選べます。Quest (<code>_QUEST_LITE</code>) では自動的に軽量パターンへ切り替わります。</p>
+
+    <h2 id="looks">作れる表現</h2>
+    <ul>
+      <li>水中にいるキャラクター、水面から反射した揺れる光</li>
+      <li>魔力が皮膚や衣装を流れる表現、結晶内部を移動する光</li>
+      <li>ステンドグラスから差し込む色光、木漏れ日</li>
+      <li>炎やオーロラによる光の揺らぎ、ライブステージの投影ライト</li>
+    </ul>
+
+    <h2 id="key-params">主なパラメータ</h2>
+
+    <div class="param-card">
+      <div class="param-header">
+        <span class="param-name">パターン生成方式</span>
+        <span class="param-prop">_CausticsPatternMode</span>
+        <span class="param-badge badge-enum">enum</span>
+      </div>
+      <div class="param-body">
+        <p>Procedural (軽量・テクスチャ不要) か Texture (<code>_CausticsTex</code> を 2 枚スクロール乗算) を選びます。</p>
+        <p class="param-default">デフォルト: Procedural</p>
+      </div>
+    </div>
+
+    <div class="param-card">
+      <div class="param-header">
+        <span class="param-name">合成方式</span>
+        <span class="param-prop">_CausticsComposite</span>
+        <span class="param-badge badge-enum">enum</span>
+      </div>
+      <div class="param-body">
+        <p>模様の重ね方です。EmissionAdd (加算・発光) / BaseMultiply (明部ブースト) / LitOnly (光の当たる面のみ) / ShadowOnly (影の面のみ)。</p>
+        <p class="param-default">デフォルト: EmissionAdd</p>
+      </div>
+      <div class="param-tip">水中感は EmissionAdd、皮膚を流れる魔力は LitOnly が向いています。</div>
+    </div>
+
+    <div class="param-card">
+      <div class="param-header">
+        <span class="param-name">座標空間</span>
+        <span class="param-prop">_CausticsSpace</span>
+        <span class="param-badge badge-enum">enum</span>
+      </div>
+      <div class="param-body">
+        <p>模様を貼る座標空間です。UV / Object / World / TriplanarLite (主要軸平面) から選びます。World にするとキャラが動いても光が空間に固定されます。</p>
+        <p class="param-default">デフォルト: World</p>
+      </div>
+    </div>
+
+    <div class="param-card">
+      <div class="param-header">
+        <span class="param-name">スケール / 速度</span>
+        <span class="param-prop">_CausticsScale / _CausticsSpeed</span>
+        <span class="param-badge badge-range">range + float</span>
+      </div>
+      <div class="param-body">
+        <p>模様の大きさ (Scale) と流れる速度 (Speed) です。<code>_CausticsDirection</code> で移動方向を、<code>_CausticsDistortion</code> で歪みを調整できます。</p>
+        <p class="param-default">デフォルト: Scale 4 / Speed 0.5</p>
+      </div>
+    </div>
+
+    <h2 id="all-params">すべてのパラメータ</h2>
+    <table>
+      <thead>
+        <tr><th>プロパティ</th><th>型 / 既定</th><th>説明</th></tr>
+      </thead>
+      <tbody>
+        <tr><td><code>_Caustics</code></td><td>Toggle / 0</td><td>有効化 (<code>_CAUSTICS</code>)</td></tr>
+        <tr><td><code>_CausticsPatternMode</code></td><td>Enum(Procedural/Texture) / Procedural</td><td>生成方式</td></tr>
+        <tr><td><code>_CausticsTex</code></td><td>2D / black</td><td>Texture モード用 (2 枚スクロール乗算)</td></tr>
+        <tr><td><code>_CausticsSpace</code></td><td>Enum(UV/Object/World/TriplanarLite) / World</td><td>座標空間</td></tr>
+        <tr><td><code>_CausticsComposite</code></td><td>Enum(EmissionAdd/BaseMultiply/LitOnly/ShadowOnly) / EmissionAdd</td><td>合成方式</td></tr>
+        <tr><td><code>_CausticsColor</code></td><td>Color (HDR) / (0.6,0.9,1,1)</td><td>光模様の色</td></tr>
+        <tr><td><code>_CausticsIntensity</code></td><td>Range(0,10) / 1</td><td>強度</td></tr>
+        <tr><td><code>_CausticsScale</code></td><td>Range(0.1,20) / 4</td><td>模様のスケール</td></tr>
+        <tr><td><code>_CausticsSpeed</code></td><td>Float / 0.5</td><td>移動速度</td></tr>
+        <tr><td><code>_CausticsDirection</code></td><td>Vector / (1,0.5,0,0)</td><td>移動方向 (XY)</td></tr>
+        <tr><td><code>_CausticsDistortion</code></td><td>Range(0,1) / 0.2</td><td>歪み量 (sin ワープ)</td></tr>
+        <tr><td><code>_CausticsContrast</code></td><td>Range(0.1,8) / 2</td><td>コントラスト (pow)</td></tr>
+        <tr><td><code>_CausticsMask</code></td><td>2D (R) / white</td><td>マスク</td></tr>
+      </tbody>
+    </table>
+
+    <h2 id="tips">使い方のヒント</h2>
+    <ul>
+      <li><strong>Quest 対応</strong>: <a href="../advanced/quest-lite.html">Quest 軽量モード</a> (<code>_QUEST_LITE</code>) 時は、重い 3&times;3 セル走査を行わず軽量パターンへ自動で切り替わります。</li>
+      <li><strong>光らせる</strong>: EmissionAdd では <code>_CausticsColor</code> を HDR で 1 以上にすると Bloom で発光します。</li>
+      <li><strong>ホログラムカード</strong>: レンチキュラー・イリデッセンス・形状付きハイライトと組み合わせると、角度で絵柄が変わり表面に虹色と光模様が走る素材になります。</li>
+      <li><strong>マスク</strong>: <code>_CausticsMask</code> の R チャンネルで適用範囲を制御できます。</li>
+    </ul>
+
+    <nav class="page-nav"></nav>
+  </main>
+</div>
+<footer class="site-footer">&copy; 2025 Natane Toon Shader.</footer>
+<script src="../../nav.js"></script>
+</body>
+</html>

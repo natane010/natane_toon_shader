@@ -186,7 +186,7 @@ namespace NataneToon.Editor
         {
             EditorGUILayout.Space(5);
             Rect rect = EditorGUILayout.GetControlRect(false, 1);
-            EditorGUI.DrawRect(rect, new Color(0.5f, 0.5f, 0.5f, 1));
+            EditorGUI.DrawRect(rect, NataneToonEditorTheme.BorderStrong);
             EditorGUILayout.Space(5);
         }
 
@@ -201,17 +201,10 @@ namespace NataneToon.Editor
             float lineY = rect.y + rect.height * 0.5f;
 
             // Determine colors based on theme
-            bool isDark = EditorGUIUtility.isProSkin;
-            Color lineColor = isDark ? new Color(0.5f, 0.5f, 0.5f, 0.6f) : new Color(0.3f, 0.3f, 0.3f, 0.5f);
-            Color textColor = isDark ? new Color(0.6f, 0.6f, 0.6f, 0.8f) : new Color(0.4f, 0.4f, 0.4f, 0.8f);
+            Color lineColor = NataneToonEditorTheme.BorderStrong;
 
             // Measure text width
-            GUIStyle labelStyle = new GUIStyle(EditorStyles.miniLabel)
-            {
-                alignment = TextAnchor.MiddleCenter,
-                normal = { textColor = textColor },
-                fontSize = 12
-            };
+            GUIStyle labelStyle = NataneToonShaderGUIStyles.CategoryDividerCenteredLabel;
             GUIContent content = new GUIContent(label);
             float textWidth = labelStyle.CalcSize(content).x + 16; // padding
 
@@ -644,10 +637,24 @@ namespace NataneToon.Editor
                     foreach (var contributor in samplerBudget.Contributors)
                     {
                         string name = NataneToonSamplerBudgetEstimator.GetDisplayName(contributor);
+                        // "__" 始まりは共有コスト/リザーブの擬似エントリで、単体ではOFFにできない
+                        bool isToggleable = material != null && !contributor.Keyword.StartsWith("__");
+
+                        EditorGUILayout.BeginHorizontal();
                         EditorGUILayout.LabelField(
                             L($"  • {name} を OFF → -{contributor.SamplerCost} samplers",
                               $"  • Turn off {name} → -{contributor.SamplerCost} samplers"),
                             EditorStyles.miniLabel);
+                        if (isToggleable && GUILayout.Button(
+                                new GUIContent(
+                                    L("OFFにする", "Turn Off"),
+                                    L($"{name} を無効化してサンプラーを {contributor.SamplerCost} 節約します",
+                                      $"Disable {name} to free {contributor.SamplerCost} sampler(s)")),
+                                EditorStyles.miniButton, GUILayout.Width(70)))
+                        {
+                            DisableFeatureKeyword(material, contributor.Keyword);
+                        }
+                        EditorGUILayout.EndHorizontal();
                     }
                 }
             }
@@ -717,6 +724,30 @@ namespace NataneToon.Editor
             if (estimate.IsNearLimit) return new Color(0.95f, 0.65f, 0.2f);
             if (estimate.IsWarning) return new Color(0.95f, 0.82f, 0.24f);
             return new Color(0.32f, 0.78f, 0.44f);
+        }
+
+        /// <summary>
+        /// 超過提案の「OFFにする」ボタン用: 機能キーワードをUndo付きで無効化する。
+        /// インスペクタートグルと状態が食い違わないよう、対応するToggleプロパティも0にする。
+        /// </summary>
+        private static void DisableFeatureKeyword(Material material, string keyword)
+        {
+            if (material == null || string.IsNullOrEmpty(keyword))
+            {
+                return;
+            }
+
+            Undo.RecordObject(material, L("サンプラー削減: 機能をOFF", "Sampler Reduction: Turn Off Feature"));
+            material.DisableKeyword(keyword);
+            foreach (var mapping in NataneShaderKeywordSynchronizer.KeywordMappings)
+            {
+                if (mapping.keyword == keyword && material.HasProperty(mapping.propertyName))
+                {
+                    material.SetFloat(mapping.propertyName, 0f);
+                    break;
+                }
+            }
+            EditorUtility.SetDirty(material);
         }
 
         private static string GetSamplerBudgetStatus(NataneToonSamplerBudgetEstimator.SamplerBudgetEstimate estimate)

@@ -1,0 +1,141 @@
+name: PR Validate
+
+# build-listing.yml はリリース専用（タグ push）で、PR や push では何も走っていなかった。
+# その結果 Tests/Editor の EditMode テストもシェーダーのコンパイル検証も手動実行が前提になり、
+# レビュー時に「壊れていないこと」を機械的に保証できなかった。
+#
+# static ジョブは Unity ライセンス不要で、このリポジトリで最も事故が起きている
+# 「変種間ドリフト」を直接押さえる。まずこれを required check にする想定。
+# tests / shaders は UNITY_LICENSE の登録が前提なので、整備が終わるまで
+# continue-on-error で並走させ、安定してから昇格させる。
+
+on:
+  pull_request:
+    branches:
+      - develop
+      - 'v*'
+  push:
+    branches:
+      - develop
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  # ---------------------------------------------------------------------------
+  # Unity 不要の静的チェック。数十秒で終わるので、まずここを通す。
+  # ---------------------------------------------------------------------------
+  static:
+    name: Static checks (no Unity)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          # precommit_check.py の Documentation~ 未追跡検査が git 履歴を見るため。
+          fetch-depth: 0
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Shader variant parity (W3)
+        run: python Tests/CI/check_shader_parity.py --repo-root .
+
+      - name: Pre-commit checks — .meta / Documentation~ / version (W8, W9)
+        run: python Tests/CI/precommit_check.py --repo-root .
+
+      - name: Validation project scaffolding is buildable (W2)
+        # Unity は起動しないが、スクリプトが manifest.json を組み立てられることは確認する。
+        # ここが壊れていると shaders ジョブが原因不明で落ちる。
+        run: |
+          Tests/CI/setup-validation-project.sh --no-run --out "${RUNNER_TEMP}/val-scaffold"
+          test -f "${RUNNER_TEMP}/val-scaffold/Packages/manifest.json"
+          test -f "${RUNNER_TEMP}/val-scaffold/Assets/Editor/ValidateShaders.cs"
+          cat "${RUNNER_TEMP}/val-scaffold/Packages/manifest.json"
+
+  # ---------------------------------------------------------------------------
+  # EditMode テスト。Tests/Editor の資産（整合監査ゲートを含む）を自動で効かせる。
+  # ---------------------------------------------------------------------------
+  tests:
+    name: EditMode tests (Unity 2022.3.28f1)
+    runs-on: ubuntu-latest
+    # UNITY_LICENSE が未登録の間は落ちても PR をブロックしない。
+    continue-on-error: true
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          lfs: true
+
+      - name: Cache Library
+        uses: actions/cache@v4
+        with:
+          path: Library
+          key: Library-tests-${{ hashFiles('package.json') }}
+          restore-keys: Library-tests-
+
+      - name: Run EditMode tests
+        uses: game-ci/unity-test-runner@v4
+        env:
+          UNITY_LICENSE: ${{ secrets.UNITY_LICENSE }}
+        with:
+          unityVersion: 2022.3.28f1
+          testMode: editmode
+          artifactsPath: test-results
+          githubToken: ${{ secrets.GITHUB_TOKEN }}
+          checkName: EditMode Test Results
+
+      - name: Upload results
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: editmode-test-results
+          path: test-results
+
+  # ---------------------------------------------------------------------------
+  # シェーダーのコンパイル検証。error / warning を両方ゼロに保つ。
+  # ---------------------------------------------------------------------------
+  shaders:
+    name: Shader compilation (Unity 2022.3.28f1)
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    # Unity 本体を含む公式イメージ内で、ローカルと同じ setup-validation-project.sh を回す。
+    # game-ci/unity-builder の buildMethod では呼べない: ValidateShaders は
+    # 検証プロジェクト側にコピーされて初めて存在するクラスであり、
+    # このリポジトリのアセンブリには含まれていない（含めると Assembly-CSharp に
+    # UnityEditor 参照が混ざってプレイヤービルドが壊れる）。
+    container:
+      image: unityci/editor:ubuntu-2022.3.28f1-base-3
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Activate Unity license
+        env:
+          UNITY_LICENSE: ${{ secrets.UNITY_LICENSE }}
+        run: |
+          if [ -z "${UNITY_LICENSE}" ]; then
+            echo "UNITY_LICENSE secret is not set — skipping shader validation."
+            echo "SKIPPED=1" >> "$GITHUB_ENV"
+            exit 0
+          fi
+          mkdir -p /root/.local/share/unity3d/Unity
+          printf '%s' "${UNITY_LICENSE}" > /root/.local/share/unity3d/Unity/Unity_lic.ulf
+
+      - name: Validate shaders
+        if: env.SKIPPED != '1'
+        run: |
+          Tests/CI/setup-validation-project.sh \
+            --unity /opt/unity/Editor/Unity \
+            --out "${RUNNER_TEMP}/val-2022"
+
+      - name: Upload validation log
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: shader-validation-log
+          path: ${{ runner.temp }}/val-2022/validate.log
+          if-no-files-found: ignore

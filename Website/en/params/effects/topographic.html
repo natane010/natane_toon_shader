@@ -1,0 +1,126 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Topographic - Natane Toon Shader</title>
+  <link rel="stylesheet" href="../../../styles.css">
+</head>
+<body>
+<header class="site-header"></header>
+<div class="page-wrapper">
+  <aside class="sidebar"></aside>
+  <main class="main-content">
+    <nav class="breadcrumb"></nav>
+    <h1>Topographic / Slice Lines</h1>
+    <p class="page-subtitle">Run evenly spaced lines or bands across the surface. Draw periodic lines like map contours, sci-fi scan lines rising up the body, or 3D-printer layer lines. (v1.6.0)</p>
+
+    <div class="feature-preview" aria-hidden="true">
+      <span class="preview-tag">PREVIEW</span>
+      <em class="preview-name">Topographic</em>
+    </div>
+
+    <h2 id="overview">Overview</h2>
+    <p>This slices space at even intervals and overlays contour / slice bands in an Emission-capable color. Where <a href="../advanced/height-fade.html">Height Fade</a> makes a single boundary, this generates <strong>repeating lines and bands</strong>. It needs no texture and pairs well with AudioLink and the FX Modulator.</p>
+    <p>It runs in ForwardBase only (pure additive color, so it does not affect additional lights) and toggles with <code>_TOPOGRAPHIC</code>, with zero cost when off. Choose the coordinate space (Object/World/View) and axis (X/Y/Z/Custom).</p>
+
+    <h2 id="looks">What you can make</h2>
+    <ul>
+      <li>Map contour lines, rock strata, and wood grain</li>
+      <li>Sci-fi scan lines and energy rising up the body</li>
+      <li>3D-printer layer lines and hologram slices</li>
+      <li>Rings of light rising from a magic circle, top-to-bottom scan effects</li>
+    </ul>
+
+    <h2 id="key-params">Key parameters</h2>
+
+    <div class="param-card">
+      <div class="param-header">
+        <span class="param-name">Mode</span>
+        <span class="param-prop">_TopoMode</span>
+        <span class="param-badge badge-enum">enum (0&ndash;5)</span>
+      </div>
+      <div class="param-body">
+        <p>How the lines are drawn: Lines (thin) / Bands (thick) / GradientBands (stepped color) / DoubleLines / PulseRings (moving rings) / NoiseDistorted (noise-warped lines).</p>
+        <p class="param-default">Default: 0 (Lines)</p>
+      </div>
+    </div>
+
+    <div class="param-card">
+      <div class="param-header">
+        <span class="param-name">Space / Axis</span>
+        <span class="param-prop">_TopoSpace / _TopoAxis</span>
+        <span class="param-badge badge-enum">enum</span>
+      </div>
+      <div class="param-body">
+        <p>The coordinate space (Object / World / View) and axis (X / Y / Z / Custom). World + Y stacks the lines along "height" regardless of where the character stands.</p>
+        <p class="param-default">Default: Space=World / Axis=Y</p>
+      </div>
+      <div class="param-tip">World + Y for scan lines rising up the body; Object space for stripes glued to the mesh.</div>
+    </div>
+
+    <div class="param-card">
+      <div class="param-header">
+        <span class="param-name">Spacing / Line Width</span>
+        <span class="param-prop">_TopoSpacing / _TopoLineWidth</span>
+        <span class="param-badge badge-range">range</span>
+      </div>
+      <div class="param-body">
+        <p>The gap between lines (Spacing) and the thickness of each line (LineWidth).</p>
+        <p class="param-default">Default: Spacing 0.1 / LineWidth 0.1</p>
+      </div>
+    </div>
+
+    <div class="param-card">
+      <div class="param-header">
+        <span class="param-name">Scroll Speed</span>
+        <span class="param-prop">_TopoSpeed</span>
+        <span class="param-badge badge-float">float</span>
+      </div>
+      <div class="param-body">
+        <p>How fast the lines flow. 0 is static; higher values scroll the lines along the axis. Use <code>_TopoOffset</code> to shift their position.</p>
+        <p class="param-default">Default: 0</p>
+      </div>
+      <div class="param-tip">Modulate <code>TopographicOffset</code> with the FX Modulator to move the lines to music or time.</div>
+    </div>
+
+    <h2 id="all-params">All parameters</h2>
+    <table>
+      <thead>
+        <tr><th>Property</th><th>Type / Default</th><th>Description</th></tr>
+      </thead>
+      <tbody>
+        <tr><td><code>_Topographic</code></td><td>Toggle / 0</td><td>Enable (<code>_TOPOGRAPHIC</code>)</td></tr>
+        <tr><td><code>_TopoSpace</code></td><td>Enum(Object/World/View) / World</td><td>Coordinate space</td></tr>
+        <tr><td><code>_TopoAxis</code></td><td>Enum(X/Y/Z/Custom) / Y</td><td>Axis</td></tr>
+        <tr><td><code>_TopoCustomDir</code></td><td>Vector / (0,1,0,0)</td><td>Custom direction (Axis=Custom)</td></tr>
+        <tr><td><code>_TopoMode</code></td><td>Enum(0-5) / 0</td><td>Lines/Bands/GradientBands/DoubleLines/PulseRings/NoiseDistorted</td></tr>
+        <tr><td><code>_TopoSpacing</code></td><td>Range(0.001,2) / 0.1</td><td>Band spacing</td></tr>
+        <tr><td><code>_TopoOffset</code></td><td>Float / 0</td><td>Offset</td></tr>
+        <tr><td><code>_TopoSpeed</code></td><td>Float / 0</td><td>Scroll speed</td></tr>
+        <tr><td><code>_TopoLineWidth</code></td><td>Range(0.001,0.5) / 0.1</td><td>Contour line width</td></tr>
+        <tr><td><code>_TopoColor</code></td><td>Color (HDR) / (1,1,1,1)</td><td>Primary color</td></tr>
+        <tr><td><code>_TopoColor2</code></td><td>Color (HDR) / (0,0,0,1)</td><td>Secondary color</td></tr>
+        <tr><td><code>_TopoEmission</code></td><td>Range(0,10) / 1</td><td>Emission strength (HDR overshoot drives Bloom)</td></tr>
+        <tr><td><code>_TopoNoiseScale</code></td><td>Range(0,10) / 1</td><td>Noise scale</td></tr>
+        <tr><td><code>_TopoNoiseStrength</code></td><td>Range(0,1) / 0.3</td><td>Noise warp amount (strong in NoiseDistorted)</td></tr>
+        <tr><td><code>_TopoBlend</code></td><td>Range(0,1) / 1</td><td>Blend amount</td></tr>
+        <tr><td><code>_TopoMask</code></td><td>2D (R) / white</td><td>Mask</td></tr>
+      </tbody>
+    </table>
+
+    <h2 id="tips">Usage Tips</h2>
+    <ul>
+      <li><strong>Make it glow</strong>: push <code>_TopoColor</code> above 1 in HDR and raise <code>_TopoEmission</code> so the lines bloom. It is added right after the Emission stage.</li>
+      <li><strong>Cyber scan</strong>: combine with <a href="glitch.html">Glitch</a> and X-Ray so scan lines rise up the body while wall-hidden parts read as analyzed.</li>
+      <li><strong>Mask</strong>: control the affected area with the R channel of <code>_TopoMask</code>.</li>
+      <li>It renders in ForwardBase only, so additional lights (ForwardAdd) never double the line intensity.</li>
+    </ul>
+
+    <nav class="page-nav"></nav>
+  </main>
+</div>
+<footer class="site-footer">&copy; 2025 Natane Toon Shader.</footer>
+<script src="../../../nav.js"></script>
+</body>
+</html>

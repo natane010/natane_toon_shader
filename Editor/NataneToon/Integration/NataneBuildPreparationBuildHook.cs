@@ -16,6 +16,32 @@ namespace NataneToon.Editor
             NataneShaderKeywordSynchronizer.SynchronizeAllNataneMaterials();
 
             NataneBuildPreparationService.PrepareForBuild(forceRefresh: false, logSummary: true);
+
+            // Build Usage Snapshot を 1 回生成しビルドセッションへ格納する（消費は後続ステージ）。
+            // 生成失敗はエラーログのみで既存処理を継続する（現行挙動を維持）。
+            try
+            {
+                NataneBuildSession.BeginBuildSession();
+                // キーワードは上で既にディスク同期済みのため saveSyncToDisk:false（重複 SaveAssets を回避）。
+                SnapshotBuildResult result = NataneBuildUsageSnapshotBuilder.Build(
+                    report != null ? report.summary.platform : EditorUserBuildSettings.activeBuildTarget,
+                    scenePathsOrNull: null,
+                    saveSyncToDisk: false);
+
+                if (result.Succeeded)
+                {
+                    NataneBuildUsageSnapshotStore.Save(result.Snapshot);
+                    NataneBuildSession.SetSnapshot(result.Snapshot);
+                }
+                else
+                {
+                    Debug.LogError($"[Natane Snapshot] ビルド前 Snapshot 生成に失敗しました: {result.FailureReason}");
+                }
+            }
+            catch (System.Exception ex)
+            {
+                Debug.LogError($"[Natane Snapshot] ビルド前 Snapshot 生成で例外が発生しました: {ex.Message}");
+            }
         }
     }
 }

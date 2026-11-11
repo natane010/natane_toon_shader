@@ -1,8 +1,8 @@
 {
   "name": "com.natane.toonshader",
   "displayName": "Natane Toon Shader",
-  "version": "1.5.13",
-  "unity": "2019.4",
+  "version": "1.7.0",
+  "unity": "2022.3",
   "description": "A comprehensive cel-shading/NPR toon shader for Unity Built-in Render Pipeline. NEW v1.2.0: AudioLink support (club events), Multiple MatCaps (2nd/3rd), Distance Fade, Vertex Animation (wind/breath), Hologram/Glitch effects, Decal system, Backface Texture, Video/Render Texture support, LTCGI integration, Dithering Alpha, Shadow Color Texture, Rim Direction Control, Multi-Color Outlines. Features material preset system with 59 defaults (30 character, 10 Toon/NPR styles), intelligent inspector UI, parameter sharing, visual preset browser, material validator (VRChat optimization), interactive help system (24 glossary terms, 6 tutorials), batch processor (5 modes), realtime preview, color palette management, scene material editor, texture optimizer, cubemap reflection, environmental rim, parallax mapping, refraction, advanced lighting, VRC Light Volumes support, SSS, virtual expressions, mask textures, particle system editor, shader prewarming (VRChat-safe), asset reference checker, mask texture brush, lilToon prefab migration. NEW v1.3.x: Specular Intensity control, Dither Stabilize (Object-Relative dithering), Procedural MatCap, Light Snap, Angel Ring (hair highlight), Light Volume Specular, Kuwahara Filter, Color Bleeding, Watercolor Effect, 3D LUT, Fake Reflection, Eye Parallax, Screen Edge Effect, Perspective Flat, Normal Warp. Full Japanese UI localization. Designer-friendly with comprehensive non-engineer support tools.",
   "keywords": [
     "shader",

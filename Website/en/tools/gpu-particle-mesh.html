@@ -1,0 +1,78 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>GPU Particle Mesh Generator - Natane Toon Shader</title>
+  <link rel="stylesheet" href="../../styles.css">
+</head>
+<body>
+<header class="site-header"></header>
+<div class="page-wrapper">
+  <aside class="sidebar"></aside>
+  <main class="main-content">
+    <nav class="breadcrumb"></nav>
+    <h1>GPU Particle Mesh Generator</h1>
+    <p class="page-subtitle">Generate quad-cloud meshes for the stateless GPU particle shader (v1.6.0)</p>
+
+    <div class="tool-meta">
+      <span>Menu: Tools &gt; Natane &gt; Mesh &gt; GPU Particle Mesh</span>
+      <span>Category: Effect</span>
+    </div>
+
+    <h2 id="overview">Overview</h2>
+    <p>The GPU Particle Mesh Generator creates and saves static "quad cloud" meshes for the <code>Natane/Effects/GPU Particles (Stateless)</code> shader. The GPU particles are <strong>fully stateless</strong>: no simulation, CustomRenderTexture, camera, GrabPass, or runtime scripts. All animation is computed as a pure function of <code>_Time</code> and per-particle random seeds baked into the mesh, so it is safe to put directly on VRChat avatars.</p>
+    <p>v1.6.0 also adds the equally stateless math-based liquid shader <code>Natane/Effects/Fake Fluid</code> (fake fluid: fill amount, wobble, foam, fresnel, toon shading). It is assigned directly to a container mesh and needs no generated mesh.</p>
+
+    <h2 id="access">Access</h2>
+    <p>Menu: <code>Tools &gt; Natane &gt; Mesh &gt; GPU Particle Mesh</code></p>
+
+    <h2 id="features">Features</h2>
+    <ul>
+      <li><strong>Particle count</strong> — default 256, up to 4096; one particle = one quad (4 vertices)</li>
+      <li><strong>Spread</strong> — emission range (XYZ box)</li>
+      <li><strong>Random seed</strong> — reproducible mesh generation</li>
+      <li><strong>Base tint / variation</strong> — per-particle colors baked into vertex colors</li>
+      <li><strong>.asset saving</strong> — saved into the project via <code>SaveFilePanelInProject</code></li>
+    </ul>
+
+    <h2 id="usage">Usage</h2>
+    <ol class="tool-steps">
+      <li>Open the tool and set the particle count, spread, seed, and tint</li>
+      <li>Generate the quad-cloud mesh and save it as a .asset</li>
+      <li>Assign the mesh to an empty GameObject's MeshFilter and add a MeshRenderer</li>
+      <li>Assign a material using <code>Natane/Effects/GPU Particles (Stateless)</code></li>
+      <li>Tune the motion mode (Rise / Fall / Orbit / Burst), size, speed, and fades</li>
+    </ol>
+
+    <h2 id="technical">Technical Details</h2>
+    <h3>Motion Modes (_MotionMode)</h3>
+    <ul>
+      <li><strong>0: Rise</strong> — embers / fireflies; rising with sine sway</li>
+      <li><strong>1: Fall</strong> — cherry blossoms / snow; falling with lateral drift and billboard rotation</li>
+      <li><strong>2: Orbit</strong> — sparkles orbiting the object origin</li>
+      <li><strong>3: Burst</strong> — radiating from the center on a per-seed cycle</li>
+    </ul>
+    <h3>Mesh Convention</h3>
+    <ul>
+      <li>All 4 vertices share the same center position; corner offsets are reconstructed in the vertex shader from UV0 and <code>_ParticleSize</code></li>
+      <li><strong>UV0</strong>: quad corner (each component 0 or 1); doubles as sprite UV</li>
+      <li><strong>UV1.x</strong>: particle random seed [0,1) / <strong>UV1.y</strong>: normalized particle index [0,1]</li>
+      <li><strong>Vertex color</strong>: per-particle tint</li>
+    </ul>
+
+    <h2 id="tips">Tips</h2>
+    <ul class="tool-tips">
+      <li>Particle position is the pure function <code>_Time.y * _Speed + seed * _CyclePeriod</code>, looping seamlessly via <code>frac()</code></li>
+      <li>AudioLink modulation is supported for music-reactive effects at club events</li>
+      <li>Rendered with additive blending / ZWrite Off / Transparent queue / <code>VRCFallback = Particle</code></li>
+      <li>For lightweight toon particles, the separate <code>Natane/Toon Shader (Particle)</code> variant is also available (blend mode switching, soft particles, flipbook, camera fade)</li>
+    </ul>
+
+    <nav class="page-nav"></nav>
+  </main>
+</div>
+<footer class="site-footer">&copy; 2025 Natane Toon Shader.</footer>
+<script src="../../nav.js"></script>
+</body>
+</html>

@@ -67,6 +67,12 @@ namespace NataneToon.Editor
                 DrawSDFShadowMapControls(material, drawToggle, drawProperty, drawHelpToggle);
             }
 
+            if (isSectionAvailable == null || isSectionAvailable("ShadowShapeRig"))
+            {
+                EditorGUILayout.Space(10);
+                DrawShadowShapeRigControls(material, drawToggle, drawProperty, drawHelpToggle);
+            }
+
             EditorGUILayout.Space(10);
             DrawShadingGradeMapControls(drawToggle, drawProperty, drawHelpToggle);
 
@@ -454,6 +460,89 @@ namespace NataneToon.Editor
                 MessageType.Info);
         }
 
+        /// <summary>
+        /// Shadow Shape Rig (NPR2026 P1) のスロットUI。
+        ///
+        /// シェーダー側は 1 スロット = Vector 2 本にパックしてある（CBUFFER を節約するため）が、
+        /// 生の Vector4 のまま出すと「x が中心 X で z が半径 X」という対応を暗記させることになる。
+        /// ラベル付きの 2 行へ分解して描く。
+        /// </summary>
+        public static void DrawShadowShapeRigControls(
+            Material material,
+            DrawToggleDelegate drawToggle,
+            DrawPropertyDelegate drawProperty,
+            DrawHelpToggleDelegate drawHelpToggle)
+        {
+            bool enabled = drawToggle("_SHADOW_SHAPE_RIG", "_ShadowShapeRig",
+                L("影シェイプリグを有効化", "Enable Shadow Shape Rig"));
+
+            drawHelpToggle(
+                "ShadowShapeRig",
+                L("影の境界を楕円で局所的に押し出す／へこませる機能です。" +
+                  "半径が 0 のスロットは無効として扱われ、コストもほぼかかりません。",
+                  "Locally pushes the shading boundary out or in with ellipses. " +
+                  "A slot with zero radius is treated as unused and costs almost nothing."),
+                MessageType.Info);
+
+            if (!enabled) return;
+
+            EditorGUI.indentLevel++;
+
+            for (int slot = 0; slot < 4; slot++)
+            {
+                EditorGUILayout.Space(4);
+                EditorGUILayout.LabelField(
+                    L($"リグ {slot}", $"Rig {slot}"), EditorStyles.boldLabel);
+
+                DrawRigSlot(material, slot);
+            }
+
+            EditorGUILayout.Space(6);
+            drawProperty("_ShadowRigFollowScale", L("ライト追従の移動量", "Light Follow Scale"));
+            drawProperty("_ShadowRigMask", L("適用マスク (R)", "Rig Mask (R)"));
+            drawProperty("_ShadowRigMaskStrength", L("マスクの効き", "Mask Strength"));
+
+            EditorGUI.indentLevel--;
+        }
+
+        private static void DrawRigSlot(Material material, int slot)
+        {
+            string paramsName = "_ShadowRigParams" + slot;
+            string shapeName = "_ShadowRigShape" + slot;
+
+            if (material == null || !material.HasProperty(paramsName) || !material.HasProperty(shapeName))
+            {
+                return;
+            }
+
+            Vector4 prm = material.GetVector(paramsName);
+            Vector4 shape = material.GetVector(shapeName);
+
+            EditorGUI.BeginChangeCheck();
+
+            var center = EditorGUILayout.Vector2Field(L("中心 (UV)", "Center (UV)"), new Vector2(prm.x, prm.y));
+            var radius = EditorGUILayout.Vector2Field(L("半径 X / Y", "Radius X / Y"), new Vector2(prm.z, prm.w));
+            float rotation = EditorGUILayout.Slider(L("回転 (度)", "Rotation (deg)"), shape.x, 0f, 360f);
+            float strength = EditorGUILayout.Slider(L("強さ（負で影を増やす）", "Strength (negative grows the shadow)"), shape.y, -1f, 1f);
+            float falloff = EditorGUILayout.Slider(L("ふちの減衰", "Falloff"), shape.z, 0f, 1f);
+            float lightFollow = EditorGUILayout.Slider(L("ライト追従", "Light Follow"), shape.w, -1f, 1f);
+
+            if (EditorGUI.EndChangeCheck())
+            {
+                Undo.RecordObject(material, "Edit Shadow Rig Slot");
+                material.SetVector(paramsName, new Vector4(center.x, center.y, Mathf.Max(radius.x, 0f), Mathf.Max(radius.y, 0f)));
+                material.SetVector(shapeName, new Vector4(rotation, strength, falloff, lightFollow));
+                EditorUtility.SetDirty(material);
+            }
+
+            if (radius.x <= 0f || radius.y <= 0f)
+            {
+                EditorGUILayout.LabelField(
+                    L("  （半径が 0 のため無効）", "  (disabled: radius is zero)"),
+                    EditorStyles.miniLabel);
+            }
+        }
+
         public static void DrawSDFShadowMapControls(
             Material material,
             DrawToggleDelegate drawToggle,
@@ -462,7 +551,13 @@ namespace NataneToon.Editor
         {
             bool useSDFMap = drawToggle("_SDF_MAP", "_UseSDFMap", L("Use SDF Shadow Map", "Use SDF Shadow Map"));
             EditorGUILayout.Space(4);
-            if (GUILayout.Button(L("SDFを自動生成して適用", "Generate and Assign SDF"), GUILayout.Height(22)))
+
+            // この生成器が作るのは「マスクの符号付き距離場」で、回転追従が要求する
+            // 「ライト角のフィールド」ではない。両者は意味が違うので、回転追従が有効な
+            // マテリアルでは Map Generator のベイクへ誘導する。
+            bool rotationTracking = NataneToonSdfAutoGenerator.IsRotationTrackingMaterial(material);
+
+            if (GUILayout.Button(L("Mask SDF を生成（回転追従なし）", "Generate Mask SDF (no rotation tracking)"), GUILayout.Height(22)))
             {
                 bool generated = NataneToonSdfAutoGenerator.TryGenerateAndAssign(material, out string message);
                 if (generated)
@@ -471,16 +566,37 @@ namespace NataneToon.Editor
                 }
 
                 EditorUtility.DisplayDialog(
-                    generated ? L("SDF生成", "SDF Generation") : L("SDF生成に失敗", "SDF Generation Failed"),
+                    generated ? L("Mask SDF 生成", "Mask SDF Generation") : L("Mask SDF 生成に失敗", "Mask SDF Generation Failed"),
                     message,
                     L("閉じる", "Close"));
                 GUI.changed = true;
             }
 
             EditorGUILayout.HelpBox(
-                L("Shadow Receive Mask を優先し、なければ Main Texture の alpha / グレースケールから SDF を自動生成して適用します。",
-                  "Automatically generates and assigns an SDF from Shadow Receive Mask first, then falls back to Main Texture alpha or grayscale."),
+                L("Shadow Receive Mask を優先し、なければ Main Texture の alpha / グレースケールから" +
+                  "「マスクの符号付き距離場」を生成します。ライト角の情報は含まれないため、" +
+                  "Face SDF Rotation と組み合わせても影の遷移順序は正しくなりません。",
+                  "Generates the signed distance field of a mask, using Shadow Receive Mask first and " +
+                  "falling back to Main Texture alpha or grayscale. It carries no light-angle information, " +
+                  "so it cannot drive Face SDF Rotation correctly."),
                 MessageType.None);
+
+            if (rotationTracking)
+            {
+                EditorGUILayout.HelpBox(
+                    L("Face SDF Rotation が有効です。回転追従には Map Generator の" +
+                      "「顔SDF影マップ」ベイクを使ってください。上のボタンで作れるマスク SDF では" +
+                      "影の遷移順序が破綻します。",
+                      "Face SDF Rotation is enabled. Use the Map Generator's \"Face SDF Shadow Map\" bake " +
+                      "for rotation tracking — the mask SDF above will make the shadow transition in the " +
+                      "wrong order."),
+                    MessageType.Warning);
+
+                if (GUILayout.Button(L("Map Generator を開く", "Open Map Generator"), GUILayout.Height(20)))
+                {
+                    EditorApplication.ExecuteMenuItem("Tools/MapGenerator/Map Generator Window");
+                }
+            }
 
             if (useSDFMap)
             {

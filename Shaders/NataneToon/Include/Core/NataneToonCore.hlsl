@@ -38,6 +38,21 @@
 // Organized by functionality for better maintainability
 #include "NataneToonInput.hlsl"
 #include "../Utils/NataneToonUtils.hlsl"
+// Expression effect modules (v1.6.0 batch 1). Included after Utils so the
+// FX Modulator can call SampleAudioLink*; all four are #ifdef-guarded internally.
+#include "../Effects/NataneToonLineBoil.hlsl"
+#include "../Effects/NataneToonShapedHighlight.hlsl"
+#include "../Effects/NataneToonTopographic.hlsl"
+#include "../Effects/NataneToonFXModulator.hlsl"
+// Expression effect modules (v1.6.0 batch 2). All #ifdef-guarded internally.
+#include "../Effects/NataneToonLenticular.hlsl"
+#include "../Effects/NataneToonCaustics.hlsl"
+#include "../Effects/NataneToonShadowBokeh.hlsl"
+#include "../Effects/NataneToonHalftone.hlsl"
+#include "../Effects/NataneToonPixelArt.hlsl"
+// Shadow Shape Rig (NPR2026 P1). Must come before Lighting: ApplyShadowShapeRig
+// lives in Lighting and calls NataneRigWeight from here.
+#include "../Effects/NataneToonShadowShapeRig.hlsl"
 #include "../Lighting/NataneToonLighting.hlsl"
 #include "../Lighting/NataneToonLightmap.hlsl"
 #include "../Lighting/NataneToonPBR.hlsl"

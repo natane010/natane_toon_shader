@@ -6,6 +6,32 @@
   "packages": {
     "com.natane.toonshader": {
       "versions": {
+        "1.6.0": {
+          "name": "com.natane.toonshader",
+          "displayName": "Natane Toon Shader",
+          "version": "1.6.0",
+          "unity": "2019.4",
+          "description": "A comprehensive cel-shading/NPR toon shader for Unity Built-in Render Pipeline (with conditional URP support on Unity 6). NEW v1.6.0: Face Ortho Projection, Mirror/Camera Alt Texture, Ghost variant (artifact-free transparency), Particle variant, stateless GPU Particles, Fake Fluid, Eye Setup Tool, Unity 6 URP (GPU Resident Drawer), VRCFallback tags, Stencil Presets, automatic build-time optimization.",
+          "author": {
+            "name": "Natane",
+            "url": "https://github.com/natane010"
+          },
+          "url": "https://github.com/natane010/natane_toon_shader/releases/download/v1.6.0/com.natane.toonshader-1.6.0.zip",
+          "license": "MIT",
+          "keywords": [
+            "shader",
+            "toon",
+            "cel-shading",
+            "npr",
+            "vrchat",
+            "urp",
+            "particles",
+            "ghost"
+          ],
+          "vpmDependencies": {},
+          "legacyFolders": {},
+          "legacyFiles": {}
+        },
         "1.4.2": {
           "name": "com.natane.toonshader",
           "displayName": "Natane Toon Shader",

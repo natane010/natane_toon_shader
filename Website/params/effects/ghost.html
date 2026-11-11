@@ -1,0 +1,105 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ゴースト - Natane Toon Shader</title>
+  <link rel="stylesheet" href="../../styles.css">
+</head>
+<body>
+<header class="site-header"></header>
+<div class="page-wrapper">
+  <aside class="sidebar"></aside>
+  <main class="main-content">
+    <nav class="breadcrumb"></nav>
+    <h1>ゴースト</h1>
+    <p class="page-subtitle">破綻しない半透明の幽霊表現 — Natane/Toon Shader (Ghost) バリアント (v1.6.0)</p>
+
+    <h2 id="overview">概要</h2>
+    <p>ゴーストは半透明の「幽霊」表現に特化したシェーダーバリアント <code>Natane/Toon Shader (Ghost)</code> です。通常の半透明シェーダーで起きる自己重なりの破綻（体の前後が二重にブレンドされて濃くなる／裏面が透けて見える）が、構造的に発生しないように設計されています。</p>
+    <p>仕組みは<strong>深度プリパス</strong>方式です。最初のパスが色を書かずに深度だけを書き込み（<code>ColorMask 0</code> + <code>ZWrite On</code>）、続くフォワードパスが <code>ZTest Equal</code> で描画するため、各ピクセルで必ず最前面の1層だけがシェーディング・ブレンドされます。VAT・スメア・パースペクティブフラットなどの頂点変形を有効にしても、プリパスは同じ頂点処理を共有するため深度は本体と一致します。</p>
+    <p>見た目はフレネル状のアルファ（正面ほど透明、輪郭側ほど不透明）と、フレネルに沿った加算リム発光の組み合わせです。全体の透明度は <code>_Color</code> のアルファで調整し、フレネルアルファはその上に乗算されます。</p>
+
+    <h2 id="params">パラメータ</h2>
+
+    <div class="param-card">
+      <div class="param-header">
+        <span class="param-name">縁の色</span>
+        <span class="param-prop">_GhostRimColor</span>
+        <span class="param-badge badge-color">color (HDR)</span>
+      </div>
+      <div class="param-body">
+        <p>輪郭（シルエット）に加算されるリムの色です。HDRカラーのため、1を超える値でBloomと組み合わせると発光が強調されます。</p>
+        <p class="param-default">デフォルト: (0.4, 0.8, 1.2, 1)</p>
+      </div>
+      <div class="param-tip">青白いスペクトル色が幽霊表現の定番です。ワールドにBloomがあると縁が幻想的に光ります。</div>
+    </div>
+
+    <div class="param-card">
+      <div class="param-header">
+        <span class="param-name">中心の透け具合</span>
+        <span class="param-prop">_GhostFresnelAlpha</span>
+        <span class="param-badge badge-range">range</span>
+      </div>
+      <div class="param-body">
+        <p>フレネルによる中心部のフェード量です。0でフレネルによるアルファ変化なし、1で視線に正対する中心部が最大限に透けます。</p>
+        <p class="param-default">デフォルト: 0.7</p>
+      </div>
+      <div class="param-tip">「中は透けているが縁は見える」霊的な質感の要になるパラメータです。</div>
+    </div>
+
+    <div class="param-card">
+      <div class="param-header">
+        <span class="param-name">フレネルの鋭さ</span>
+        <span class="param-prop">_GhostFresnelPower</span>
+        <span class="param-badge badge-float">float</span>
+      </div>
+      <div class="param-body">
+        <p>フレネルカーブの指数です。大きいほど透ける範囲が広がり、縁だけが細く残ります。</p>
+        <p class="param-default">デフォルト: 2.5</p>
+      </div>
+      <div class="param-tip">縁を細くシャープにしたいときは値を上げ、ふんわり残したいときは下げてください。</div>
+    </div>
+
+    <div class="param-card">
+      <div class="param-header">
+        <span class="param-name">縁の発光強度</span>
+        <span class="param-prop">_GhostRimStrength</span>
+        <span class="param-badge badge-float">float</span>
+      </div>
+      <div class="param-body">
+        <p>縁に加算されるリム発光の強度です。0で発光なしになります。</p>
+        <p class="param-default">デフォルト: 1.0</p>
+      </div>
+      <div class="param-tip">このバリアントにはアウトラインパスがないため、輪郭的な表現はこのリム発光で代用してください。</div>
+    </div>
+
+    <div class="param-card">
+      <div class="param-header">
+        <span class="param-name">深度カットオフ</span>
+        <span class="param-prop">_GhostDepthCutoff</span>
+        <span class="param-badge badge-range">range</span>
+      </div>
+      <div class="param-body">
+        <p>深度プリパスで描画する最低アルファです。テクスチャのアルファがこの値未満の箇所は深度から除外され、完全に見えない部分が他の半透明を遮らないようにします。</p>
+        <p class="param-default">デフォルト: 0.02</p>
+      </div>
+      <div class="param-tip">アルファの薄い髪の毛先などが「見えない壁」になる場合は、この値を少し上げてください。</div>
+    </div>
+
+    <h2 id="tips">使い方のヒント</h2>
+    <ul>
+      <li><strong>足元を消す</strong>: 「下半身が空気に溶ける」表現には<a href="../advanced/height-fade.html">ハイトフェード</a>をアルファモード・Y軸で併用してください。深度プリパスとも整合するため破綻しません。</li>
+      <li><strong>全体の透明度</strong>: <code>_Color</code> のアルファで調整します。透明度を上げてもシルエットは常に1枚のガラスのようにきれいに見えます。</li>
+      <li><strong>アウトラインなし</strong>: 単一レイヤーで描画する性質上、アウトラインパスは意図的に削除されています。</li>
+      <li><strong>影は落としません</strong>: 半透明オブジェクトが不透明な影を落とすのを避けるため、ShadowCasterパスはありません。</li>
+      <li>Render Queue は Transparent で、<code>VRCFallback = ToonTransparent</code> を宣言しています。</li>
+    </ul>
+
+    <nav class="page-nav"></nav>
+  </main>
+</div>
+<footer class="site-footer">&copy; 2025 Natane Toon Shader.</footer>
+<script src="../../nav.js"></script>
+</body>
+</html>

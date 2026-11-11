@@ -1,0 +1,122 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Caustics - Natane Toon Shader</title>
+  <link rel="stylesheet" href="../../../styles.css">
+</head>
+<body>
+<header class="site-header"></header>
+<div class="page-wrapper">
+  <aside class="sidebar"></aside>
+  <main class="main-content">
+    <nav class="breadcrumb"></nav>
+    <h1>Surface Caustics</h1>
+    <p class="page-subtitle">Complex light patterns flow across the surface of characters and props. Make an underwater character, rippling reflected light, magic streaming across skin, or dappled sunlight. (v1.6.0)</p>
+
+    <div class="feature-preview" aria-hidden="true">
+      <span class="preview-tag">PREVIEW</span>
+      <em class="preview-name">Caustics</em>
+    </div>
+
+    <h2 id="overview">Overview</h2>
+    <p>This draws flowing <strong>caustics (focused light patterns)</strong> over the surface. The Procedural mode combines Voronoi and sine waves for a lightweight result; the Texture mode scroll-multiplies two texture samples. It renders in ForwardBase only and toggles with <code>_CAUSTICS</code>, with zero cost when off.</p>
+    <p>Choose the coordinate space (UV / Object / World / Triplanar-lite) and the composite mode (EmissionAdd / BaseMultiply / LitOnly / ShadowOnly). On Quest (<code>_QUEST_LITE</code>) it automatically switches to a lightweight pattern.</p>
+
+    <h2 id="looks">What you can make</h2>
+    <ul>
+      <li>An underwater character; rippling light reflected off water</li>
+      <li>Magic flowing across skin and clothing; light moving inside a crystal</li>
+      <li>Colored light through stained glass; dappled sunlight through leaves</li>
+      <li>Shimmer from fire or aurora; projected stage lighting</li>
+    </ul>
+
+    <h2 id="key-params">Key parameters</h2>
+
+    <div class="param-card">
+      <div class="param-header">
+        <span class="param-name">Pattern Mode</span>
+        <span class="param-prop">_CausticsPatternMode</span>
+        <span class="param-badge badge-enum">enum</span>
+      </div>
+      <div class="param-body">
+        <p>Procedural (lightweight, no texture) or Texture (scroll-multiplies two samples of <code>_CausticsTex</code>).</p>
+        <p class="param-default">Default: Procedural</p>
+      </div>
+    </div>
+
+    <div class="param-card">
+      <div class="param-header">
+        <span class="param-name">Composite</span>
+        <span class="param-prop">_CausticsComposite</span>
+        <span class="param-badge badge-enum">enum</span>
+      </div>
+      <div class="param-body">
+        <p>How the pattern is combined. EmissionAdd (additive glow) / BaseMultiply (lit-area boost) / LitOnly (lit faces only) / ShadowOnly (shadowed faces only).</p>
+        <p class="param-default">Default: EmissionAdd</p>
+      </div>
+      <div class="param-tip">EmissionAdd for an underwater feel; LitOnly for magic flowing across skin.</div>
+    </div>
+
+    <div class="param-card">
+      <div class="param-header">
+        <span class="param-name">Space</span>
+        <span class="param-prop">_CausticsSpace</span>
+        <span class="param-badge badge-enum">enum</span>
+      </div>
+      <div class="param-body">
+        <p>The coordinate space for the pattern: UV / Object / World / TriplanarLite (major-axis plane). World keeps the light fixed in space as the character moves.</p>
+        <p class="param-default">Default: World</p>
+      </div>
+    </div>
+
+    <div class="param-card">
+      <div class="param-header">
+        <span class="param-name">Scale / Speed</span>
+        <span class="param-prop">_CausticsScale / _CausticsSpeed</span>
+        <span class="param-badge badge-range">range + float</span>
+      </div>
+      <div class="param-body">
+        <p>The pattern size (Scale) and flow speed (Speed). Set the flow direction with <code>_CausticsDirection</code> and warping with <code>_CausticsDistortion</code>.</p>
+        <p class="param-default">Default: Scale 4 / Speed 0.5</p>
+      </div>
+    </div>
+
+    <h2 id="all-params">All parameters</h2>
+    <table>
+      <thead>
+        <tr><th>Property</th><th>Type / Default</th><th>Description</th></tr>
+      </thead>
+      <tbody>
+        <tr><td><code>_Caustics</code></td><td>Toggle / 0</td><td>Enable (<code>_CAUSTICS</code>)</td></tr>
+        <tr><td><code>_CausticsPatternMode</code></td><td>Enum(Procedural/Texture) / Procedural</td><td>Generation mode</td></tr>
+        <tr><td><code>_CausticsTex</code></td><td>2D / black</td><td>For Texture mode (two scrolling samples multiplied)</td></tr>
+        <tr><td><code>_CausticsSpace</code></td><td>Enum(UV/Object/World/TriplanarLite) / World</td><td>Coordinate space</td></tr>
+        <tr><td><code>_CausticsComposite</code></td><td>Enum(EmissionAdd/BaseMultiply/LitOnly/ShadowOnly) / EmissionAdd</td><td>Composite mode</td></tr>
+        <tr><td><code>_CausticsColor</code></td><td>Color (HDR) / (0.6,0.9,1,1)</td><td>Light pattern color</td></tr>
+        <tr><td><code>_CausticsIntensity</code></td><td>Range(0,10) / 1</td><td>Intensity</td></tr>
+        <tr><td><code>_CausticsScale</code></td><td>Range(0.1,20) / 4</td><td>Pattern scale</td></tr>
+        <tr><td><code>_CausticsSpeed</code></td><td>Float / 0.5</td><td>Flow speed</td></tr>
+        <tr><td><code>_CausticsDirection</code></td><td>Vector / (1,0.5,0,0)</td><td>Flow direction (XY)</td></tr>
+        <tr><td><code>_CausticsDistortion</code></td><td>Range(0,1) / 0.2</td><td>Warp amount (sin warp)</td></tr>
+        <tr><td><code>_CausticsContrast</code></td><td>Range(0.1,8) / 2</td><td>Contrast (pow)</td></tr>
+        <tr><td><code>_CausticsMask</code></td><td>2D (R) / white</td><td>Mask</td></tr>
+      </tbody>
+    </table>
+
+    <h2 id="tips">Usage Tips</h2>
+    <ul>
+      <li><strong>Quest-ready</strong>: under <a href="../advanced/quest-lite.html">Quest Lite Mode</a> (<code>_QUEST_LITE</code>) it skips the heavy 3&times;3 cell scan and switches to a lightweight pattern automatically.</li>
+      <li><strong>Make it glow</strong>: in EmissionAdd, push <code>_CausticsColor</code> above 1 in HDR to bloom.</li>
+      <li><strong>Hologram card</strong>: combine with Lenticular, Iridescence, and Shaped Highlight so the artwork changes with angle while rainbow and light patterns run across the surface.</li>
+      <li><strong>Mask</strong>: control the affected area with the R channel of <code>_CausticsMask</code>.</li>
+    </ul>
+
+    <nav class="page-nav"></nav>
+  </main>
+</div>
+<footer class="site-footer">&copy; 2025 Natane Toon Shader.</footer>
+<script src="../../../nav.js"></script>
+</body>
+</html>

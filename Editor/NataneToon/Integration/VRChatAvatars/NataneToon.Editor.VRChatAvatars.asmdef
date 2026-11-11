@@ -1,0 +1,31 @@
+{
+    "name": "NataneToon.Editor.VRChatAvatars",
+    "rootNamespace": "",
+    "references": [
+        "NataneToon.Editor",
+        "NataneToon.Runtime",
+        "VRC.SDKBase.Editor",
+        "VRCSDKBase",
+        "VRC.SDK3A.Editor",
+        "VRCSDK3A"
+    ],
+    "includePlatforms": [
+        "Editor"
+    ],
+    "excludePlatforms": [],
+    "allowUnsafeCode": false,
+    "overrideReferences": false,
+    "precompiledReferences": [],
+    "autoReferenced": true,
+    "defineConstraints": [
+        "NATANE_VRC_AVATARS"
+    ],
+    "versionDefines": [
+        {
+            "name": "com.vrchat.avatars",
+            "expression": "",
+            "define": "NATANE_VRC_AVATARS"
+        }
+    ],
+    "noEngineReferences": false
+}

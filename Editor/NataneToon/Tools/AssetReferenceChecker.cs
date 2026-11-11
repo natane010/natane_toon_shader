@@ -735,7 +735,7 @@ namespace NataneToon.Editor
                     })
                     .ToArray();
             }
-            return Object.FindObjectsOfType<T>();
+            return NataneEditorCompat.FindObjectsOfTypeCompat<T>();
         }
     }
 }

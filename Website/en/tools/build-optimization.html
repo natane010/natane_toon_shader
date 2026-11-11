@@ -1,0 +1,62 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Build Optimization - Natane Toon Shader</title>
+  <link rel="stylesheet" href="../../styles.css">
+</head>
+<body>
+<header class="site-header"></header>
+<div class="page-wrapper">
+  <aside class="sidebar"></aside>
+  <main class="main-content">
+    <nav class="breadcrumb"></nav>
+    <h1>Build Optimization</h1>
+    <p class="page-subtitle">Automatic shader and material optimization at build / VRChat upload time (v1.6.0)</p>
+
+    <div class="tool-meta">
+      <span>Runs: automatically at build time (no manual action needed)</span>
+      <span>Category: Optimization</span>
+    </div>
+
+    <h2 id="overview">Overview</h2>
+    <p>Natane Toon Shader automatically optimizes shaders and materials at build time — especially when uploading VRChat avatars. No user action is required; several components cooperate at each stage of the build pipeline.</p>
+
+    <h2 id="features">How It Works</h2>
+    <ul>
+      <li><strong>Pre-build (NataneBuildFeatureOptimizer)</strong> — generates build settings that <code>#define</code> only the features in use and <code>#undef</code>s unused keywords at the source level</li>
+      <li><strong>Scene processing (NataneBuildSceneKeywordSync)</strong> — syncs every material's keywords with its property values and saves to disk (covers VRChat's AssetBundle builds)</li>
+      <li><strong>Shader compilation (NataneShaderVariantStripper)</strong> — via <code>IPreprocessShaders</code>, discards compiled variants containing keywords not used by any material</li>
+      <li><strong>Post-build (NataneBuildOptimizationReport)</strong> — writes an optimization summary to the console and <code>Logs/NataneBuildOptimizationReport.txt</code></li>
+      <li><strong>Pre-VRChat-avatar-build (NataneVRChatBuildHook)</strong> — keyword sync plus Lite conversion suggestions (compiled only when the VRChat SDK is present)</li>
+    </ul>
+
+    <h2 id="report">Report Contents</h2>
+    <ul>
+      <li><strong>Stripped variant count</strong> — totals from the variant stripper (before → after is also logged to the console)</li>
+      <li><strong>Disabled features</strong> — known keywords unused by every material</li>
+      <li><strong>Lite conversion candidates</strong> — full-version materials that use no GrabPass features (refraction, Kuwahara, color bleeding, etc.)</li>
+      <li><strong>Texture suggestions</strong> — maxSize above 2048, uncompressed textures, etc. (suggestions only; nothing is changed automatically)</li>
+    </ul>
+
+    <h2 id="technical">Safety</h2>
+    <ul>
+      <li>Variant stripping only considers known Natane keywords; built-in <code>multi_compile</code> keywords (<code>DIRECTIONAL</code> / <code>SHADOWS_SCREEN</code> / <code>INSTANCING_ON</code>, etc.) are never touched</li>
+      <li>A keyword counts as "in use" if either the keyword state or the toggle property value is enabled — a conservative rule</li>
+    </ul>
+
+    <h2 id="tips">Tips</h2>
+    <ul class="tool-tips">
+      <li>To temporarily disable variant stripping, set the EditorPrefs key <code>NataneToon_DisableVariantStripping</code> to <code>true</code></li>
+      <li>VRChat avatar builds do not invoke the post-build report, so Lite suggestions are also emitted by the VRChat build hook</li>
+      <li>For manual up-front optimization, see <a href="variant-stripper.html">Variant Stripping Settings</a> and the <a href="shader-variant-collector.html">Shader Variant Collector</a></li>
+    </ul>
+
+    <nav class="page-nav"></nav>
+  </main>
+</div>
+<footer class="site-footer">&copy; 2025 Natane Toon Shader.</footer>
+<script src="../../nav.js"></script>
+</body>
+</html>

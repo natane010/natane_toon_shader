@@ -1,0 +1,78 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Eye Setup Tool - Natane Toon Shader</title>
+  <link rel="stylesheet" href="../../styles.css">
+</head>
+<body>
+<header class="site-header"></header>
+<div class="page-wrapper">
+  <aside class="sidebar"></aside>
+  <main class="main-content">
+    <nav class="breadcrumb"></nav>
+    <h1>Eye Setup Tool</h1>
+    <p class="page-subtitle">Non-destructive eye material separation and UV relayout (v1.6.0)</p>
+
+    <div class="tool-meta">
+      <span>Menu: Tools &gt; Natane &gt; Mesh &gt; Eye Setup Tool</span>
+      <span>Category: Mesh</span>
+    </div>
+
+    <h2 id="overview">Overview</h2>
+    <p>The Eye Setup Tool separates eye polygons into their own material slot (material separation) and remaps the eye UVs to fill the texture (UV relayout). The separated eyes can directly use the dedicated <strong>"Natane/Eye"</strong> shader (parallax, pupil size, eye states, etc.).</p>
+    <p>Meshes are always saved as <strong>new assets</strong>; the imported FBX mesh is never modified. All renderer and material changes are undoable.</p>
+
+    <h2 id="access">Access</h2>
+    <p>Menu: <code>Tools &gt; Natane &gt; Mesh &gt; Eye Setup Tool</code></p>
+
+    <h2 id="features">Features</h2>
+    <ul>
+      <li><strong>Three eye selection methods</strong>
+        <ul>
+          <li><strong>Existing Material Slot</strong> — when the eyes already have their own slot; the mesh is untouched and a new "Natane/Eye" material is assigned to that slot</li>
+          <li><strong>UV Rect</strong> — drag a rectangle on the UV preview (or type min/max values); triangles whose UV centroid is inside are selected</li>
+          <li><strong>Mask Texture</strong> — provide a mask (white = eye); triangles whose UV-centroid luminance exceeds the threshold are selected</li>
+        </ul>
+      </li>
+      <li><strong>Three UV layouts</strong>
+        <ul>
+          <li><strong>Single block</strong> — scale the whole submesh's UVs into the target rect</li>
+          <li><strong>Overlap left/right</strong> — detect the left/right eye islands and overlap them (both eyes share one texture region — the common VRChat pattern), with optional horizontal mirroring of one eye</li>
+          <li><strong>Side by side</strong> — place the left and right eyes next to each other</li>
+        </ul>
+      </li>
+      <li><strong>UV preview</strong> — inspect the selection (green) and before (gray) / after (green) states</li>
+      <li><strong>Non-destructive workflow</strong> — new meshes are saved as .asset files; imported meshes are duplicated automatically before writing</li>
+      <li><strong>Material inheritance</strong> — the new "Natane/Eye" material inherits the main texture and base color from the source material</li>
+      <li><strong>Target UV channel</strong> — write to uv0 or uv1; target rect and padding are configurable</li>
+    </ul>
+
+    <h2 id="usage">Usage</h2>
+    <ol class="tool-steps">
+      <li>Set the target SkinnedMeshRenderer / MeshRenderer at the top of the window ("From Selection" picks it from the Hierarchy selection)</li>
+      <li>In the "1. Material Separation" tab, choose how eye geometry is identified (existing slot / UV rect / mask)</li>
+      <li>Check the selection (green) in the preview and review the summary of changes</li>
+      <li>Press "Apply Material Separation" and choose where to save the new mesh asset (the selected triangles become a new last submesh with a new "Natane/Eye" material)</li>
+      <li>In the "2. UV Relayout" tab, pick the target submesh (the eye submesh is preselected right after separation)</li>
+      <li>Set the layout, target rect, padding, and UV channel</li>
+      <li>Check before/after in the preview and press "Apply UV Relayout"</li>
+    </ol>
+
+    <h2 id="tips">Tips</h2>
+    <ul class="tool-tips">
+      <li>UV rect / mask selection requires uv0</li>
+      <li>Left/right grouping uses mesh-space X (the sides of the face), so it also works when the eye UVs already overlap</li>
+      <li>A warning is shown when vertices are shared with other submeshes (their UVs move as well)</li>
+      <li>"Overlap left/right" fits the common VRChat setup where both eyes share one texture region</li>
+      <li>After separation, eye-specific features such as <a href="../params/advanced/eye-parallax.html">Eye Parallax</a> of the "Natane/Eye" shader work out of the box</li>
+    </ul>
+
+    <nav class="page-nav"></nav>
+  </main>
+</div>
+<footer class="site-footer">&copy; 2025 Natane Toon Shader.</footer>
+<script src="../../nav.js"></script>
+</body>
+</html>

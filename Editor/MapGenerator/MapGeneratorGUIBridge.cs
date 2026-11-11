@@ -273,7 +273,11 @@ public static class MapGeneratorGUIBridge
         mesh = null;
         renderer = null;
 
-        var renderers = Object.FindObjectsOfType<Renderer>();
+#if UNITY_2022_2_OR_NEWER
+        var renderers = UnityEngine.Object.FindObjectsByType<Renderer>(FindObjectsSortMode.None);
+#else
+        var renderers = UnityEngine.Object.FindObjectsOfType<Renderer>();
+#endif
         foreach (var r in renderers)
         {
             if (r.sharedMaterials == null) continue;

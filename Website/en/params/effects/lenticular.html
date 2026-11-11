@@ -1,0 +1,127 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Lenticular - Natane Toon Shader</title>
+  <link rel="stylesheet" href="../../../styles.css">
+</head>
+<body>
+<header class="site-header"></header>
+<div class="page-wrapper">
+  <aside class="sidebar"></aside>
+  <main class="main-content">
+    <nav class="breadcrumb"></nav>
+    <h1>Lenticular</h1>
+    <p class="page-subtitle">The picture itself changes with the viewing angle. Make expressions shift left to right, a different face appear from the side, or angle-dependent effects like a hologram card. (v1.6.0)</p>
+
+    <div class="feature-preview" aria-hidden="true">
+      <span class="preview-tag">PREVIEW</span>
+      <em class="preview-name">Lenticular</em>
+    </div>
+
+    <h2 id="overview">Overview</h2>
+    <p>Store several images in one atlas (horizontal strip or grid) and <strong>switch the displayed frame by viewing angle</strong>. Where <a href="../environment/iridescence.html">Iridescence</a> shifts color with angle, Lenticular swaps the artwork itself.</p>
+    <p>The angle is measured from the object-space view vector, so it stays stable regardless of VRChat mirrors or camera position. The chosen frame is mixed in right after makeup texture compositing (base color modification). It toggles with <code>_LENTICULAR</code> and is zero cost when off.</p>
+
+    <h2 id="looks">What you can make</h2>
+    <ul>
+      <li>Expressions that change left to right; a different face from the side</li>
+      <li>A logo that switches to text; card artwork that animates</li>
+      <li>Eyes that morph between Normal / Heart / Star</li>
+      <li>Scars, magic sigils, or glowing marks that appear at an angle &mdash; a hologram-card material</li>
+    </ul>
+
+    <h2 id="modes">Modes (<code>_LenticularMode</code>)</h2>
+    <table>
+      <thead>
+        <tr><th>Mode</th><th>Description</th></tr>
+      </thead>
+      <tbody>
+        <tr><td>SmoothBlend</td><td>Blends adjacent frames with <code>frac</code> + Softness</td></tr>
+        <tr><td>HardStep</td><td>Snaps instantly with <code>round</code></td></tr>
+        <tr><td>ScanBlend</td><td>Mixes adjacent frames via UV stripes (<code>_LenticularScanScale</code>)</td></tr>
+        <tr><td>FrontReveal</td><td>Reveals a different frame near the front (linked to Emission boost)</td></tr>
+        <tr><td>SideReveal</td><td>Reveals a different frame at an angle (linked to Emission boost)</td></tr>
+        <tr><td>Flip</td><td>Switches A/B by view side (cross-fades the center via Softness)</td></tr>
+      </tbody>
+    </table>
+
+    <h2 id="key-params">Key parameters</h2>
+
+    <div class="param-card">
+      <div class="param-header">
+        <span class="param-name">Atlas / Frame Count</span>
+        <span class="param-prop">_LenticularAtlas / _LenticularFrames</span>
+        <span class="param-badge badge-tex">2D + range</span>
+      </div>
+      <div class="param-body">
+        <p>The atlas image holding multiple frames and how many it contains. <code>_LenticularDirection</code> selects Horizontal or Grid layout.</p>
+        <p class="param-default">Default: Frames 4 / Direction Horizontal</p>
+      </div>
+    </div>
+
+    <div class="param-card">
+      <div class="param-header">
+        <span class="param-name">View Axis / Angle Range</span>
+        <span class="param-prop">_LenticularViewAxis / _LenticularAngleRange</span>
+        <span class="param-badge badge-enum">enum + range</span>
+      </div>
+      <div class="param-body">
+        <p>Whether to switch on horizontal (X) or vertical (Y) head movement, and over how many degrees the full frame set is mapped.</p>
+        <p class="param-default">Default: ViewAxis X / AngleRange 90</p>
+      </div>
+    </div>
+
+    <div class="param-card">
+      <div class="param-header">
+        <span class="param-name">Stereo Mode</span>
+        <span class="param-prop">_LenticularStereoMode</span>
+        <span class="param-badge badge-enum">enum</span>
+      </div>
+      <div class="param-body">
+        <p>How the angle is computed in VR. StereoCenter (default) averages both eyes so they pick the same frame, preventing flicker.</p>
+        <p class="param-default">Default: StereoCenter</p>
+      </div>
+      <div class="param-tip">Keep StereoCenter for VR and give <code>_LenticularSoftness</code> enough room for extra stability.</div>
+    </div>
+
+    <h2 id="all-params">All parameters</h2>
+    <table>
+      <thead>
+        <tr><th>Property</th><th>Type / Default</th><th>Description</th></tr>
+      </thead>
+      <tbody>
+        <tr><td><code>_Lenticular</code></td><td>Toggle / 0</td><td>Enable (<code>_LENTICULAR</code>)</td></tr>
+        <tr><td><code>_LenticularAtlas</code></td><td>2D / white</td><td>Atlas holding multiple frames</td></tr>
+        <tr><td><code>_LenticularFrames</code></td><td>Range(1,16) / 4</td><td>Frame count</td></tr>
+        <tr><td><code>_LenticularDirection</code></td><td>Enum(Horizontal/Grid) / Horizontal</td><td>Atlas layout (Grid = ceil(&radic;n) columns)</td></tr>
+        <tr><td><code>_LenticularMode</code></td><td>Enum(0-5) / 0</td><td>SmoothBlend/HardStep/ScanBlend/FrontReveal/SideReveal/Flip</td></tr>
+        <tr><td><code>_LenticularViewAxis</code></td><td>Enum(X/Y) / X</td><td>Angle axis (X=horizontal, Y=vertical)</td></tr>
+        <tr><td><code>_LenticularAngleRange</code></td><td>Range(1,180) / 90</td><td>Angle span mapped across all frames (degrees)</td></tr>
+        <tr><td><code>_LenticularFrameOffset</code></td><td>Float / 0</td><td>Base frame offset</td></tr>
+        <tr><td><code>_LenticularStereoMode</code></td><td>Enum(PerEye/StereoCenter) / StereoCenter</td><td>VR angle calc (default both-eye center)</td></tr>
+        <tr><td><code>_LenticularEmission</code></td><td>Range(0,10) / 0</td><td>Glow boost for the revealed frame (HDR)</td></tr>
+        <tr><td><code>_LenticularNormalInfluence</code></td><td>Range(0,1) / 0</td><td>Normal-based frame selection skew</td></tr>
+        <tr><td><code>_LenticularBlend</code></td><td>Range(0,1) / 1</td><td>Mix amount into base color</td></tr>
+        <tr><td><code>_LenticularScanScale</code></td><td>Range(1,200) / 40</td><td>Stripe scale for ScanBlend</td></tr>
+        <tr><td><code>_LenticularSoftness</code></td><td>Range(0.001,1) / 0.25</td><td>Frame boundary interpolation width</td></tr>
+        <tr><td><code>_LenticularMask</code></td><td>2D (R) / white</td><td>Mask</td></tr>
+      </tbody>
+    </table>
+
+    <h2 id="tips">Usage Tips</h2>
+    <ul>
+      <li><strong>VR anti-flicker</strong>: use StereoCenter (default) and give Softness enough room so the two eyes never land on different frames.</li>
+      <li><strong>Building the atlas</strong>: Horizontal lays frames left to right; Grid uses <code>ceil(&radic;n)</code> columns in row-major order.</li>
+      <li><strong>Make it glow</strong>: in FrontReveal / SideReveal the revealed frame is boosted by <code>_LenticularEmission</code>.</li>
+      <li><strong>Mask</strong>: control the affected area with the R channel of <code>_LenticularMask</code>.</li>
+    </ul>
+
+    <nav class="page-nav"></nav>
+  </main>
+</div>
+<footer class="site-footer">&copy; 2025 Natane Toon Shader.</footer>
+<script src="../../../nav.js"></script>
+</body>
+</html>

@@ -1,5 +1,6 @@
 using UnityEngine;
 using UnityEditor;
+using System.Collections.Generic;
 using static NataneToon.Editor.NataneToonLocalization;
 
 namespace NataneToon.Editor
@@ -10,6 +11,8 @@ namespace NataneToon.Editor
     /// </summary>
     public static class NataneAutoSetupHub
     {
+        private static readonly Dictionary<int, AutoSetupResult> LastResults = new Dictionary<int, AutoSetupResult>();
+
         // ===== Stage 1 UI =====
 
         /// <summary>
@@ -23,6 +26,7 @@ namespace NataneToon.Editor
             if (mat == null) return;
 
             var record = AutoSetupRecord.Load(mat);
+            string selectionPrefsKey = AutoSetupRecord.GetPrefsKey(mat) + "_Selection";
 
             EditorGUILayout.Space(4);
             using (new EditorGUILayout.VerticalScope(EditorStyles.helpBox))
@@ -40,20 +44,32 @@ namespace NataneToon.Editor
 
                 // Role selector
                 EditorGUILayout.LabelField(L("何を作る？", "What is this material for?"), EditorStyles.miniLabel);
-                AutoSetupRole role = record?.role ?? AutoSetupRole.Face;
+                AutoSetupRole role = (AutoSetupRole)EditorPrefs.GetInt(
+                    selectionPrefsKey + "_Role", (int)(record?.role ?? AutoSetupRole.Face));
+                AutoSetupLook look = (AutoSetupLook)EditorPrefs.GetInt(
+                    selectionPrefsKey + "_Look", (int)(record?.look ?? AutoSetupLook.GameCharacter));
+                AutoSetupQuality quality = (AutoSetupQuality)EditorPrefs.GetInt(
+                    selectionPrefsKey + "_Quality", (int)(record?.quality ?? AutoSetupQuality.Standard));
+
+                EditorGUI.BeginChangeCheck();
                 role = (AutoSetupRole)EditorGUILayout.EnumPopup(
                     L("素材の種類", "Material Role"), role);
 
                 // Look selector
                 EditorGUILayout.LabelField(L("どんな見た目？", "What visual style?"), EditorStyles.miniLabel);
-                AutoSetupLook look = record?.look ?? AutoSetupLook.GameCharacter;
                 look = (AutoSetupLook)EditorGUILayout.EnumPopup(
                     L("見た目スタイル", "Visual Style"), look);
 
-                // Quality selector (collapsed by default)
-                AutoSetupQuality quality = record?.quality ?? AutoSetupQuality.Standard;
                 quality = (AutoSetupQuality)EditorGUILayout.EnumPopup(
                     L("品質ターゲット", "Quality Target"), quality);
+                if (EditorGUI.EndChangeCheck())
+                {
+                    EditorPrefs.SetInt(selectionPrefsKey + "_Role", (int)role);
+                    EditorPrefs.SetInt(selectionPrefsKey + "_Look", (int)look);
+                    EditorPrefs.SetInt(selectionPrefsKey + "_Quality", (int)quality);
+                }
+
+                DrawSetupPreview(mat, role, look, quality);
 
                 EditorGUILayout.Space(8);
 
@@ -64,7 +80,7 @@ namespace NataneToon.Editor
                     L("▶ セットアップ実行", "▶ Execute Setup"),
                     GUILayout.Height(30)))
                 {
-                    ExecuteSetup(mat, role, look, quality, applyStyleCallback);
+                    LastResults[mat.GetInstanceID()] = ExecuteSetup(mat, role, look, quality, applyStyleCallback);
                 }
                 GUI.backgroundColor = oldBg;
             }
@@ -74,6 +90,45 @@ namespace NataneToon.Editor
             {
                 DrawRecordInfo(record);
             }
+
+            if (LastResults.TryGetValue(mat.GetInstanceID(), out AutoSetupResult lastResult))
+                NataneAutoSetupReport.DrawResultSummary(lastResult);
+        }
+
+        private static void DrawSetupPreview(Material mat, AutoSetupRole role, AutoSetupLook look, AutoSetupQuality quality)
+        {
+            AutoSetupProfile profile = NataneAutoSetupProfiles.Get(role, look);
+            var changes = new List<string>();
+
+            if (profile.enableKeywords != null)
+            {
+                foreach (string keyword in profile.enableKeywords)
+                {
+                    if (!mat.IsKeywordEnabled(keyword))
+                        changes.Add("+ " + keyword.TrimStart('_').Replace('_', ' '));
+                }
+            }
+
+            if (profile.floatOverrides != null)
+            {
+                foreach (var item in profile.floatOverrides)
+                {
+                    if (!mat.HasProperty(item.name)) continue;
+                    float current = mat.GetFloat(item.name);
+                    if (!Mathf.Approximately(current, item.value))
+                        changes.Add($"{item.name}: {current:0.##} → {item.value:0.##}");
+                }
+            }
+
+            string heading = $"{NataneAutoSetupReport.GetRoleName(role)}  ×  {NataneAutoSetupReport.GetLookName(look)}  ·  {NataneAutoSetupReport.GetQualityName(quality)}";
+            string summary = changes.Count == 0
+                ? L("現在の設定は選択したプロファイルと一致しています。", "The current settings already match this profile.")
+                : string.Join("\n", changes.GetRange(0, Mathf.Min(changes.Count, 5)).ToArray())
+                    + (changes.Count > 5 ? L($"\n他 {changes.Count - 5} 件", $"\n{changes.Count - 5} more") : string.Empty);
+
+            NataneToonInspectorComponents.DrawInlineMessage(
+                heading + "\n" + summary,
+                changes.Count == 0 ? NataneInspectorStatus.Success : NataneInspectorStatus.Neutral);
         }
 
         /// <summary>

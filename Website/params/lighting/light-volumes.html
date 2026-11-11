@@ -17,6 +17,8 @@
 
     <p>VRC Light Volumesはボクセルベースの次世代ライティングシステムです。対応ワールドで自動的に高品質な部分照明が適用されます。ワールドとアバター両方が対応している必要があり、非対応環境では自動的にUnityのライトプローブにフォールバックします。</p>
 
+    <p><strong>Light Probe Proxy Volume (LPPV) が自動対応になりました (v1.6.0)。</strong> フォールバック先の Unity ライトプローブ評価が LPPV に対応し、マテリアル側の設定は一切不要です。レンダラーの Light Probes を「Use Proxy Volume」に設定するだけで、ピクセル単位のプローブボリューム照明が自動的に評価されます。大きなオブジェクトでも空間の明暗のグラデーションがなめらかに乗ります。VRC Light Volumes が有効なときはそちらが優先され、二重加算は起きません。</p>
+
     <div class="param-card">
       <div class="param-header">
         <span class="param-name">Light Volumeの強さ</span>

@@ -297,6 +297,106 @@ return fixed4(atten.xxx, 1);
 **原因**: 正常動作（ビュー空間ベースのため）
 **解決**: ワールド空間MatCapが必要な場合はコード修正
 
+## VRC ライティング連携 互換性・対応メモ
+
+最終確認日: 2026-07-17
+
+確認基準は VRChat Unity 2022.3.22f1、VRC Light Volumes 2.1.3、LTCGI 1.7.1、Built-in Render Pipeline / VRChat PCです。
+
+### VRC Light Volumes
+
+VRC Light Volumes 2.1.3へ対応済みです。
+
+- 同梱している `Shaders/NataneToon/ThirdParty/VRCLightVolumes/LightVolumes.cginc` は、2.1.3の同名ファイルとSHA-256が一致します。
+- パッケージ導入時は `Packages/red.sim.lightvolumes/Shaders/LightVolumes.cginc` を自動検出して使用します。
+- `LightVolumeSH`、`LightVolumeEvaluate`、`LightVolumeSpecular` の現行APIを使用します。
+- パッケージがない場合も同梱版を使用し、Light Volumesが無効な環境ではUnity Light Probesへフォールバックします。
+
+VRC Light Volumes 3.0.0-dev系は正式な対応対象に含めません。3.0.0-dev.10時点ではソース互換ですが、正式版公開時にパッケージパス、関数シグネチャ、SH係数、スペキュラーAPI、同梱ファイルとライセンス表記を再確認してください。
+
+関連実装:
+
+- `Shaders/NataneToon/Include/Lighting/NataneToonThirdPartyLighting.hlsl`
+- `Shaders/NataneToon/Include/Rendering/NataneToonFragment.hlsl`
+- `Editor/NataneToon/Integration/VRCLightVolumesAutoDetector.cs`
+
+### LTCGI
+
+LTCGI 1.7.1とのソース互換をUnityコンパイルレベルで検証済みです(2026-07-17)。VRChat実機確認のみ未実施です。
+
+検証済み(Unity 2022.3.28f1、公式VPMの at.pimaker.ltcgi 1.7.1 / zipSHA256一致確認済み):
+
+- LTCGI導入状態で `LTCGIAutoDetector.ForceRedetect` により `NATANE_LTCGI_AVAILABLE` が生成されること
+- Main / Cutout / Transparent / Lite / Fur の5シェーダーで `_LTCGI` ON/OFF 両方ともエラー0・警告0
+- LTCGI削除後の再検出でconfigが未定義状態へ正しく復元され、ベースラインもエラー0・警告0
+- VRCSDK非導入でもLTCGIのC#はdefineガードによりコンパイル可能(CS0414警告1件はLTCGI側既存)
+
+未検証(VRChat Build & Testが必要): 実機でのDiffuse/Specular/動画色変化の見た目、Light Volumes同時使用時の白飛び・二重加算・Sampler上限、Quest実機、VRCFallback発動時の見た目。
+
+- `Packages/at.pimaker.ltcgi/Shaders/LTCGI.cginc` を自動検出します。
+- LTCGI API v2のカスタム入力とDiffuse/Specular callbackを使用します。
+- Built-in用SubShaderに `"LTCGI"="ALWAYS"` タグがあります。
+- DiffuseとSpecularを分けて受け取り、Natane側の強度・ブレンド設定を適用します。
+- パッケージがない場合は寄与を0にします。
+- Avatar Modeは、LTCGI Controllerが `LTCGI_config.cginc` の `LTCGI_AVATAR_MODE` をVRChat Avatarプロジェクトに合わせて設定する前提です。
+
+検証手順:
+
+1. VCCからLTCGI 1.7.1を導入する。
+2. `Tools > Natane > VRChat > LTCGI 再検出` を実行する。
+3. `NataneToonLTCGIConfig.hlsl` に `NATANE_LTCGI_AVAILABLE` が生成されることを確認する。
+4. Main、Cutout、Transparent、Lite、Furの代表Shaderで `_LTCGI` ON/OFF両方のコンパイルを確認する。
+5. LTCGI Screenの `Affect Avatars` を有効にし、Diffuse、Specular、動画色変化をVRChat Build & Testで確認する。
+6. VRC Light Volumesとの同時使用時に、白飛び、二重加算、Sampler上限超過がないことを確認する。
+
+現在のcallbackはlilToon系の見た目に合わせた独自の距離減衰を使用しています。公式API v2サンプルの `output.intensity * output.color` を直接使用する方式とは見た目が異なるため、物理的な照り返し精度を優先する場合は比較検証してください。
+
+関連実装:
+
+- `Shaders/NataneToon/Include/Lighting/NataneToonThirdPartyLighting.hlsl`
+- `Shaders/NataneToon/Include/Config/NataneToonLTCGIConfig.hlsl`
+- `Editor/NataneToon/Integration/LTCGIAutoDetector.cs`
+
+### Unity Light Probes
+
+通常の `Blend Probes` は対応済みです。`ShadeSH9` によりRendererへ設定された補間済みSH係数を評価し、VRC Light Volumesを使用しない場合の間接光フォールバックにも利用します。
+
+#### 対応済み: Light Probe Proxy Volume (2026-07-17)
+
+LPPV対応を実装しました。共通関数 `NataneShadeSH(worldNormal, worldPos)` (`Shaders/NataneToon/Include/Lighting/NataneToonSH.hlsl`) が `UNITY_LIGHT_PROBE_PROXY_VOLUME` かつ `unity_ProbeVolumeParams.x == 1` のときプローブボリュームをサンプリングし、それ以外では従来の `ShadeSH9` とビット一致の結果を返します。Fragment(Background含む)・FurShell・Particleを同関数へ統一済み。FORWARD_BASEのみに `multi_compile _ UNITY_LIGHT_PROBE_PROXY_VOLUME` を宣言(ForwardAddへの環境光重複なし)、VRC Light Volumes有効時はLight Volumesが優先。Sampler予算 +1 は `NataneToonSamplerBudgetEstimator.LppvProbeVolumeSamplerCost` として計上。詳細と検証チェックリストは `Documentation~/LPPV_SUPPORT.md` を参照。
+
+当初の実装方針(記録):
+
+- Unity 2022.3 Built-inの `ShadeSHPerPixel(worldNormal, ambient, worldPos)` を使用する共通関数を追加する。
+- `UNITY_LIGHT_PROBE_PROXY_VOLUME` と `unity_ProbeVolumeParams.x` に応じてLPPVを評価し、通常環境では従来の `ShadeSH9` 結果を維持する。
+- ForwardBaseのみで間接光へ適用し、ForwardAddへ環境光を重複加算しない。
+- VRC Light VolumesとUnity Light Probesの優先順位を明示する。
+- Fur、Particle、Backgroundなど独自のSH評価箇所も同じ共通関数へ統一する。
+- LPPV用SamplerとShader Model要件が、VRChat PC向けのSampler予算を超えないことを確認する。
+
+検証項目:
+
+- `Blend Probes` の従来表示が変わらない。
+- `Use Proxy Volume` でメッシュ位置に沿って照明色が変化する。
+- LPPVなし、ライトプローブなし、AmbientのみのSceneでも破綻しない。
+- VRC Light Volumes ON/OFFで意図した優先順位になる。
+- GPU Instancing、Skinned Mesh、左右眼カメラ、鏡で不整合がない。
+- Unity 2022.3.22f1のWindows/D3D11でShaderコンパイルエラーがない。
+
+### 発光の照り返しに関する制約
+
+- ワールドでベイクされた発光の照り返しは、Light ProbesまたはVRC Light Volumesへベイクされていれば受光できます。
+- LTCGI対応ScreenやArea Lightからのリアルタイム照明は、LTCGIパッケージと対応ワールド設定が揃っている場合に受光できます。
+- アバター自身のEmissionから、他のアバターやワールドへ本物のGIをShader単体で投射することはできません。
+- 自己照り返しが必要な場合は、オブジェクト空間の疑似Emissionライトを別機能として実装し、本物のGIではないことをInspector上で明示してください。
+
+参照先:
+
+- VRChat Current Unity Version: https://creators.vrchat.com/sdk/upgrade/current-unity-version/
+- VRC Light Volumes: https://github.com/REDSIM/VRCLightVolumes
+- LTCGI Shader Authors: https://ltcgi.dev/Advanced/Shader_Authors
+- Unity Light Probe Proxy Volume: https://docs.unity3d.com/2022.3/Documentation/Manual/class-LightProbeProxyVolume.html
+
 ## ライセンスとクレジット
 
 このシェーダーは以下を参考に設計されています：

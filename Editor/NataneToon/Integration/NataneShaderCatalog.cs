@@ -32,11 +32,17 @@ namespace NataneToon.Editor
             new ShaderPassConfig("Natane/Toon Shader (Lite)", true, true),
             new ShaderPassConfig("Natane/Toon Shader (Cutout Lite)", true, true),
             new ShaderPassConfig("Natane/Toon Shader (Transparent Lite)", true, false),
+            new ShaderPassConfig("Natane/Toon Shader (Ghost)", true, false),
+            new ShaderPassConfig("Natane/Toon Shader (X-Ray)", true, true),
             new ShaderPassConfig("Natane/Toon Shader (Fur)", true, true),
             new ShaderPassConfig("Natane/Toon Shader (Fur Lite)", true, true),
             new ShaderPassConfig("Natane/Toon Shader (Background)", true, true, true),
+            new ShaderPassConfig("Natane/Toon Shader (Particle)", false, false),
             new ShaderPassConfig("Natane/Toon Shader Wirelight", false, false),
             new ShaderPassConfig("Natane/Eye", false, false),
+            // FakeShadow は単一 Pass。ForwardAdd も ShadowCaster も持たない
+            // （落ち影そのものが影を落とすと二重に暗くなる）。
+            new ShaderPassConfig("Natane/Toon Shader FakeShadow", false, false),
             // new ShaderPassConfig("Natane/Screen FX Overlay", false, false),
         };
 
@@ -49,11 +55,15 @@ namespace NataneToon.Editor
             "Natane/Toon Shader (Lite)",
             "Natane/Toon Shader (Cutout Lite)",
             "Natane/Toon Shader (Transparent Lite)",
+            "Natane/Toon Shader (Ghost)",
+            "Natane/Toon Shader (X-Ray)",
             "Natane/Toon Shader (Fur)",
             "Natane/Toon Shader (Fur Lite)",
             "Natane/Toon Shader (Background)",
+            "Natane/Toon Shader (Particle)",
             "Natane/Toon Shader Wirelight",
             "Natane/Eye",
+            "Natane/Toon Shader FakeShadow",
             // "Natane/Screen FX Overlay"
         };
 

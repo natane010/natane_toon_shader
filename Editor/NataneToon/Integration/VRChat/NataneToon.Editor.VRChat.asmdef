@@ -1,0 +1,23 @@
+{
+    "name": "NataneToon.Editor.VRChat",
+    "rootNamespace": "",
+    "references": [
+        "NataneToon.Editor",
+        "NataneToon.Runtime",
+        "VRC.SDKBase.Editor",
+        "VRCSDKBase"
+    ],
+    "includePlatforms": [
+        "Editor"
+    ],
+    "excludePlatforms": [],
+    "allowUnsafeCode": false,
+    "overrideReferences": false,
+    "precompiledReferences": [],
+    "autoReferenced": true,
+    "defineConstraints": [
+        "VRC_SDK_VRCSDK3"
+    ],
+    "versionDefines": [],
+    "noEngineReferences": false
+}

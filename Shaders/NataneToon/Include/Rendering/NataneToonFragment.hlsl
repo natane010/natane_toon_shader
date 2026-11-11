@@ -68,6 +68,32 @@ half4 frag(v2f i) : SV_Target
     // ハイトマップから擬似的な凹凸の奥行き表現を生成する。
     // 全後続テクスチャサンプリングの基準UVとなる。
     float2 uv = i.uv;
+
+    // ===== FX Modulator state (computed once, used at each target site) =====
+    #if defined(_FX_MODULATOR)
+    float3 nataneFXViewDir = normalize(_WorldSpaceCameraPos - i.worldPos);
+    half2 nataneFXMask = half2(1.0, 1.0);
+    {
+        half4 fxm = NATANE_SAMPLE_SHARED(_FXModMaskTex, _MainTex, i.uv);
+        nataneFXMask = half2(fxm.r, fxm.g);
+    }
+    float3 nataneFXObjPos = mul(unity_WorldToObject, float4(i.worldPos, 1.0)).xyz;
+    NataneFXModState nataneFXState = NataneFXModCompute(i.worldPos, i.worldNormal, nataneFXViewDir,
+                                                        i.uv, nataneFXObjPos,
+                                                        nataneFXMask.x, nataneFXMask.y);
+    #endif
+
+    // ===== Line Boil precompute (time-quantized hand-drawn UV jitter) =====
+    #if defined(_LINE_BOIL)
+    float nataneBoilStrength = 1.0;
+    #if defined(_FX_MODULATOR)
+        nataneBoilStrength *= NataneFXModMul(nataneFXState, NATANE_FXT_LINEBOIL);
+    #endif
+    half nataneBoilMask = NATANE_SAMPLE_SHARED_R(_LineBoilMaskTex, _MainTex, i.uv);
+    float2 nataneBoilUV = NataneLineBoilOffset(i.worldPos, NataneLineBoilPhase(), 1.0).xy
+                          * _LineBoilUVJitter * nataneBoilMask * nataneBoilStrength;
+    #endif
+
     #if defined(_EYE_PARALLAX) && !defined(_PARALLAX)
     {
         // 軽量アイパララックス: ビュー方向のXY成分でUVオフセット
@@ -94,6 +120,18 @@ half4 frag(v2f i) : SV_Target
     #ifdef _MAIN_TEX_ANIMATION
         if (_MainTexAnimation >= 0.5)
             mainUV = AnimateUV(uv, _MainTexScrollSpeed.xy, _MainTexRotateSpeed);
+    #endif
+
+    // ===== Pixel Art: UV pixelation (snap mainUV before main texture sampling) =====
+    // Applied to mainUV only so other UV-driven features stay at native res.
+    // Screen / Object-Stable snapping intentionally omitted (see NataneToonPixelArt.hlsl).
+    #if defined(_PIXEL_ART)
+    if (_PixelArt >= 0.5)
+    {
+        half natanedPxMask = NATANE_SAMPLE_SHARED_R(_PixelArtMask, _MainTex, uv);
+        if (natanedPxMask > 0.001)
+            mainUV = lerp(mainUV, NatanePixelSnapUV(mainUV, _PixelArtSize), natanedPxMask);
+    }
     #endif
 
     // ===== Glitch Stretch (UV modification before main texture sampling) =====
@@ -124,6 +162,25 @@ half4 frag(v2f i) : SV_Target
         half4 mainTex = tex2D(_MainTex, mainUV);
     #endif
     half4 col = mainTex * _Color;
+
+    // ===== Mirror / Camera Alternate Texture (鏡・カメラ写り分けテクスチャ) =====
+    // Swaps the base color when rendered by a VRChat mirror and/or VRChat
+    // camera, so the reflected/photographed appearance can differ from the
+    // directly-viewed one. Runs before makeup/lighting so the whole shading
+    // stack applies to the alternate look as well.
+    #ifdef _MIRROR_TEXTURE
+    {
+        half altBlend = 0.0;
+        if (_MirrorTexApplyMirror >= 0.5) altBlend = max(altBlend, NataneIsMirror());
+        if (_MirrorTexApplyCamera >= 0.5) altBlend = max(altBlend, NataneIsCamera());
+        altBlend *= _MirrorTexBlend;
+        if (altBlend > 0.001)
+        {
+            half4 altTex = NATANE_SAMPLE_REPEAT(_MirrorAltTex, mainUV) * _MirrorAltColor;
+            col = lerp(col, altTex, altBlend);
+        }
+    }
+    #endif
 
     // ===== Gradient Base Color =====
     #ifdef _GRADIENT_BASE_COLOR
@@ -195,6 +252,105 @@ half4 frag(v2f i) : SV_Target
     }
     #endif
 
+    // ===== Lenticular / view-angle dependent atlas (base-color modifier) =====
+    #if defined(_LENTICULAR)
+    if (_Lenticular >= 0.5)
+    {
+        half lentMask = NATANE_SAMPLE_SHARED_R(_LenticularMask, _MainTex, uv);
+        lentMask = ApplySoftMask(lentMask);
+        if (lentMask > 0.001)
+        {
+            float frames = max(_LenticularFrames, 1.0);
+
+            // Object-space view direction (stable across eyes when StereoCenter).
+            float3 lentCamPos = NataneLenticularCameraPos(_LenticularStereoMode);
+            float3 lentVdW = normalize(lentCamPos - i.worldPos);
+            float3 lentVdObj = normalize(mul((float3x3)unity_WorldToObject, lentVdW));
+            float lentAngle = NataneLenticularAngle(lentVdObj, _LenticularViewAxis);
+
+            // Angle -> normalized frame position [0,1] (front-centered).
+            float lentT = lentAngle / max(_LenticularAngleRange, 0.0001) + 0.5;
+
+            // Optional normal skew of the selection. Uses the interpolated
+            // geometric normal (i.worldNormal): this hook runs before the
+            // normal-mapped `worldNormal` is resolved. Kept simple by design.
+            if (_LenticularNormalInfluence > 0.001)
+            {
+                float3 lentNObj = normalize(mul((float3x3)unity_WorldToObject, i.worldNormal));
+                float lentNSkew = (_LenticularViewAxis < 0.5) ? lentNObj.x : lentNObj.y;
+                lentT += lentNSkew * _LenticularNormalInfluence;
+            }
+            lentT = saturate(lentT);
+
+            float lentF = lentT * (frames - 1.0) + _LenticularFrameOffset;
+            int lentMode = (int)(_LenticularMode + 0.5);
+
+            float lentBaseIdx = floor(lentF);
+            float lentBlend = frac(lentF);
+            // Transition softness sharpens/loosens the crossfade.
+            lentBlend = smoothstep(0.5 - max(_LenticularSoftness, 0.0001) * 0.5,
+                                   0.5 + max(_LenticularSoftness, 0.0001) * 0.5, lentBlend);
+
+            float lentIdxA = lentBaseIdx;
+            float lentIdxB = min(lentBaseIdx + 1.0, frames - 1.0);
+            float lentMix = lentBlend;   // A->B crossfade weight
+            half lentReveal = 1.0;       // reveal weight over the base color
+            half lentEmit = 0.0;         // emission boost weight (revealed frame)
+
+            if (lentMode == 1) // HardStep
+            {
+                lentIdxA = round(lentF);
+                lentIdxB = lentIdxA;
+                lentMix = 0.0;
+            }
+            else if (lentMode == 2) // ScanBlend (thin UV stripes mix adjacent frames)
+            {
+                float lentStripe = step(0.5, frac(uv.x * max(_LenticularScanScale, 1.0)));
+                lentMix = lentStripe;
+            }
+            else if (lentMode == 3) // FrontReveal (alt frame near front only)
+            {
+                lentIdxA = _LenticularFrameOffset;                 // base frame
+                lentIdxB = frames - 1.0;                           // reveal frame
+                lentReveal = 1.0 - smoothstep(0.0, max(_LenticularAngleRange, 0.0001) * 0.5, abs(lentAngle));
+                lentMix = lentReveal;
+                lentEmit = lentReveal;
+            }
+            else if (lentMode == 4) // SideReveal (alt frame at sides only)
+            {
+                lentIdxA = _LenticularFrameOffset;
+                lentIdxB = frames - 1.0;
+                lentReveal = smoothstep(0.0, max(_LenticularAngleRange, 0.0001) * 0.5, abs(lentAngle));
+                lentMix = lentReveal;
+                lentEmit = lentReveal;
+            }
+            else if (lentMode == 5) // Flip (A/B by view side)
+            {
+                float lentSide = smoothstep(-max(_LenticularSoftness, 0.0001),
+                                            max(_LenticularSoftness, 0.0001), lentAngle);
+                lentIdxA = _LenticularFrameOffset;
+                lentIdxB = min(_LenticularFrameOffset + 1.0, frames - 1.0);
+                lentMix = lentSide;
+            }
+
+            float2 lentUVA = NataneLenticularFrameUV(uv, lentIdxA, frames, _LenticularDirection);
+            float2 lentUVB = NataneLenticularFrameUV(uv, lentIdxB, frames, _LenticularDirection);
+            half4 lentTexA = NATANE_SAMPLE_SHARED(_LenticularAtlas, _MainTex, lentUVA);
+            half4 lentTexB = NATANE_SAMPLE_SHARED(_LenticularAtlas, _MainTex, lentUVB);
+            half3 lentCol = lerp(lentTexA.rgb, lentTexB.rgb, saturate(lentMix));
+
+            // Emission boost brightens the revealed frame (HDR overshoot).
+            lentCol *= (1.0 + _LenticularEmission * saturate(lentEmit));
+
+            half lentBlendMod = _LenticularBlend;
+            #if defined(_FX_MODULATOR)
+                lentBlendMod *= NataneFXModMul(nataneFXState, NATANE_FXT_LENTICULAR);
+            #endif
+            col.rgb = lerp(col.rgb, lentCol, saturate(lentBlendMod * lentMask));
+        }
+    }
+    #endif
+
     // ===== Surface Cover (Snow/Sand Accumulation) =====
     #ifdef _SURFACE_COVER
     if (_SurfaceCover >= 0.5)
@@ -211,10 +367,19 @@ half4 frag(v2f i) : SV_Target
     #ifdef _SCREEN_TONE
     if (_ScreenTone >= 0.5)
     {
-        half screenToneMask = NATANE_SAMPLE_SHARED_BLUR_R(_ScreenToneMask, _MainTex, uv, _ScreenToneBlur);
+        float2 screenToneUV = uv;
+        float2 screenTonePatternPos = i.pos.xy;
+        #if defined(_LINE_BOIL)
+        if (_LineBoilAffectHatching >= 0.5)
+        {
+            screenToneUV += nataneBoilUV;
+            screenTonePatternPos += nataneBoilUV * _ScreenParams.xy;
+        }
+        #endif
+        half screenToneMask = NATANE_SAMPLE_SHARED_BLUR_R(_ScreenToneMask, _MainTex, screenToneUV, _ScreenToneBlur);
         screenToneMask = ApplySoftMask(screenToneMask);
         half3 preScreenTone = col.rgb;
-        col.rgb = ApplyScreenTone(col.rgb, i.pos.xy, screenToneMask);
+        col.rgb = ApplyScreenTone(col.rgb, screenTonePatternPos, screenToneMask);
         col.rgb = ApplyEffectBlendPost(preScreenTone, col.rgb, _ScreenToneBlend, _ScreenToneBlendMode);
     }
     #endif
@@ -239,6 +404,10 @@ half4 frag(v2f i) : SV_Target
     #else
         half3 worldNormal = i.worldNormal; // Already normalized in vertex shader
     #endif
+
+    // Geometric specular AA kernel for the GGX lobes (see NataneToonPBR.hlsl).
+    // Derivatives are taken here, outside any branch; strength 0 (default) keeps it at 0.
+    nataneGSAAKernel = NataneComputeGSAAKernel(normalize(i.worldNormal)) * saturate(_SpecularAAGeometric);
 
     // ===== Detail Map (Secondary UV) =====
     #ifdef _DETAIL_MAP
@@ -325,6 +494,19 @@ half4 frag(v2f i) : SV_Target
     half3 effectiveLightColor;
     int primaryVertexLightIndex = -1;
 
+    // Light Volume SH is sampled once, here, so the fallback chain below can take its
+    // key light from it; the indirect-light step further down reuses the same sample.
+    #if defined(UNITY_PASS_FORWARDBASE) && defined(_USE_LIGHT_VOLUME) && !(defined(_BACKGROUND_MODE) && defined(LIGHTMAP_ON))
+        #define NATANE_LV_SAMPLED 1
+        float3 lvL0, lvL1r, lvL1g, lvL1b;
+        LightVolumeSH(i.worldPos, lvL0, lvL1r, lvL1g, lvL1b);
+        half3 lvKeyDir, lvKeyColor, lvFillColor;
+        NataneSHL1KeyLight(lvL0, lvL1r, lvL1g, lvL1b, lvKeyDir, lvKeyColor, lvFillColor);
+        half lvKeyAmount = saturate(_LightVolumeKeyLight);
+        // 1 while the Light Volume key light is the main light (no realtime light found)
+        half lvKeyIsMain = 0.0;
+    #endif
+
     #ifdef UNITY_PASS_FORWARDBASE
     {
         half dirLightLum = CALC_LUMINANCE(_LightColor0.rgb);
@@ -352,6 +534,18 @@ half4 frag(v2f i) : SV_Target
                 // 3. SH Light Probe から方向を取得
                 lightDir = GetSHDominantLightDirection();
                 effectiveLightColor = GetSHFallbackLightColor();
+                #ifdef NATANE_LV_SAMPLED
+                // 3'. Light Volume key light: per-pixel direction and colour from the
+                // volume itself (the object-level probe above ignores Light Volumes and
+                // point light volumes entirely). Off by default.
+                if (lvKeyAmount > 0.001)
+                {
+                    lightDir = normalize(lerp(lightDir, lvKeyDir, lvKeyAmount));
+                    effectiveLightColor = lerp(effectiveLightColor,
+                        max(half3(0.05, 0.05, 0.05), lvKeyColor * _LightVolumeIntensity), lvKeyAmount);
+                    lvKeyIsMain = 1.0;
+                }
+                #endif
             }
         }
     }
@@ -385,7 +579,14 @@ half4 frag(v2f i) : SV_Target
     // _LightColorMin (default=0): 暗いワールドでもキャラが見える最低保証
     // _LightColorMax (default=1): 強いライトでもテクスチャが白飛びしない上限
     // _MonochromeLighting (default=0): ライトカラーの色味を除去（グレースケール化）
-    effectiveLightColor = clamp(effectiveLightColor, _LightColorMin, _LightColorMax);
+    // The _LightColorMin floor is a ForwardBase-only guarantee ("stay visible in
+    // dark worlds"). Applying it in ForwardAdd would give every point/spot light
+    // a distance-independent floor and over-brighten many-light worlds.
+    #ifdef UNITY_PASS_FORWARDBASE
+        effectiveLightColor = clamp(effectiveLightColor, _LightColorMin, _LightColorMax);
+    #else
+        effectiveLightColor = min(effectiveLightColor, _LightColorMax);
+    #endif
     half lightGray = CALC_LUMINANCE(effectiveLightColor);
     effectiveLightColor = lerp(effectiveLightColor, half3(lightGray, lightGray, lightGray), _MonochromeLighting);
     UNITY_LIGHT_ATTENUATION(atten, i, i.worldPos);
@@ -401,7 +602,7 @@ half4 frag(v2f i) : SV_Target
         // Near fade: camera too close → transparent
         if (_NearFadeEnd > _NearFadeStart + 0.001)
         {
-            float cameraDist = length(_WorldSpaceCameraPos - i.worldPos);
+            float cameraDist = NataneViewerDistance(i.worldPos);   // eye-centred, mirror-aware
             float nearFadeBlurRange = _DistFadeBlur * (_NearFadeEnd - _NearFadeStart) * DIST_FADE_BLUR_SCALE;
             half nearFade = saturate(
                 (cameraDist - (_NearFadeStart - nearFadeBlurRange)) /
@@ -421,7 +622,9 @@ half4 frag(v2f i) : SV_Target
     //   ポイント/スポットライト: fwidth ベースの適応型 smoothstep。
     #if defined(UNITY_PASS_FORWARDBASE) && defined(SHADOWS_SCREEN) && !defined(UNITY_NO_SCREENSPACE_SHADOWS)
         #ifdef _PCSS
-        if (_UsePCSS >= 0.5)
+        // Mirrors: the blocker search linearises _CameraDepthTexture, which is either the
+        // main view's texture or oblique-encoded there. Fall back to the regular shadow term.
+        if (_UsePCSS >= 0.5 && !NataneIsMirror())
         {
             // === PCSS: Percentage Closer Soft Shadows (Screen-Space Approximation) ===
             half pcssOriginalAtten = atten; // 元の atten を保存（Blend 用）
@@ -515,11 +718,15 @@ half4 frag(v2f i) : SV_Target
     #else
         if (_ShadowSmoothing > 0.001)
         {
-            // --- Point/Spot Light: Adaptive smoothstep ---
-            half attenDeriv = fwidth(atten);
-            half adaptiveCenter = clamp(atten, 0.1, 0.9);
-            half smoothWidth = max(attenDeriv, _ShadowSmoothing * SMOOTH_WIDTH_SCALE);
-            atten = smoothstep(adaptiveCenter - smoothWidth, adaptiveCenter + smoothWidth, atten);
+            // --- Point/Spot Light: shadow edge only ---
+            // "atten" here is distance falloff x cookie x shadow. Remapping the product
+            // turned the falloff itself into bands (the old adaptive centre) or a hard disc
+            // (any fixed centre), so only the shadow term is remapped and the falloff and
+            // cookie are carried through unchanged.
+            half shadowOnly = UNITY_SHADOW_ATTENUATION(i, i.worldPos);
+            half smoothWidth = min(max(fwidth(shadowOnly), _ShadowSmoothing * SMOOTH_WIDTH_SCALE), 0.5);
+            half shadowSmoothed = smoothstep(0.5 - smoothWidth, 0.5 + smoothWidth, shadowOnly);
+            atten *= shadowSmoothed / max(shadowOnly, 1e-4);
         }
     #endif
 
@@ -542,9 +749,47 @@ half4 frag(v2f i) : SV_Target
     #endif
     half ndotl = dot(shadingNormal, lightDir);
 
+    // ===== Bump terminator softening =====
+    // Only the lit side is scaled, so the shade never gets darker than before.
+    #ifdef _NORMALMAP
+    if (_BumpTerminatorStrength > 0.001)
+    {
+        half bumpShadow = NataneBumpTerminatorShadow(normalize(i.worldNormal), worldNormal, lightDir);
+        ndotl = ndotl > 0.0 ? ndotl * lerp(1.0, bumpShadow, saturate(_BumpTerminatorStrength)) : ndotl;
+    }
+    #endif
+
+    // ===== Matte diffuse (energy-preserving Oren-Nayar) =====
+    // Reshapes N.L before the toon ramp, so the terminator itself moves the way a rough
+    // surface's does (it works with steps, gradient and ramp alike), and keeps the
+    // albedo-dependent part as a tint for the lit colour. Placed before the SDF / shape
+    // rig so art-directed face shadows still have the last word.
+    half3 matteDiffuseTint = half3(1.0, 1.0, 1.0);
+    if (_MatteDiffuse > 0.001 && ndotl > 0.0)
+    {
+        half matteNdotV = max(dot(shadingNormal, viewDir), 1e-3);
+        half3 matteRatio = NataneEONDiffuseRatio(ndotl, matteNdotV, dot(lightDir, viewDir),
+                                                 saturate(_MatteDiffuseRoughness), saturate(col.rgb));
+        half matteRatioLum = max(CALC_LUMINANCE(matteRatio), 1e-3);
+        half matteAmount = saturate(_MatteDiffuse);
+        ndotl *= lerp(1.0, matteRatioLum, matteAmount);
+        matteDiffuseTint = lerp(half3(1.0, 1.0, 1.0), matteRatio / matteRatioLum, matteAmount);
+    }
+
     // ===== SDF Shadow Map =====
     // Apply SDF shadow to ndotl before lighting calculations
     ndotl = ApplySDFShadow(uv, ndotl, lightDir, i.worldPos);
+
+    // ===== Shadow Shape Rig =====
+    // Art-directed local shaping of the shading boundary.
+    //
+    // Placed here deliberately:
+    //   - after the SDF so the rigs refine the face shadow the map already decided,
+    //   - before vertex-color shadow / wrapped diffuse so it does not double up with
+    //     those threshold adjustments,
+    //   - before tone quantization (_USE_MULTI_SHADOW / ramp) so the step boundaries
+    //     themselves move rather than the shading inside a band.
+    ndotl = ApplyShadowShapeRig(uv, ndotl, lightDir);
 
     // ===== Vertex Color Shadow Threshold =====
     #ifdef _VERTEX_COLOR_SHADOW
@@ -558,9 +803,11 @@ half4 frag(v2f i) : SV_Target
 
     // ===== Wrapped Diffuse =====
     // (NdotL + wrap) / (1 + wrap) — 0=Lambert, 0.5=Half-Lambert, 1=Uniform
-    if (_WrapAmount > 0.001)
+    // 実効値は _ShadowNaturalness で下限が押し上げられる（単一入口）。
+    half effectiveWrap = NataneShadowNaturalWrap();
+    if (effectiveWrap > 0.001)
     {
-        ndotl = (ndotl + _WrapAmount) / (1.0 + _WrapAmount);
+        ndotl = (ndotl + effectiveWrap) / (1.0 + effectiveWrap);
     }
 
     // ===== Backlight Calculation =====
@@ -609,6 +856,18 @@ half4 frag(v2f i) : SV_Target
     half3 lighting;
     half shadingValue;
     half3 shadowColor;
+
+    // 量子化前の連続的な陰影。網点のように「面の丸みを濃度で見せる」表現は、
+    // トゥーンで段に落とした後の値を使うと濃度がその段数しか取れない
+    // （_ShadowSteps = 2 なら網点も 2 段階しか出ず、トーンを貼り分けたというより
+    // 白と黒が切り替わるだけになる）。PBR 相当の連続値を別に持っておき、
+    // そちらを濃度の基準に選べるようにする。PBR モードでなくても使える。
+    //
+    // 落ち影（atten）は<b>掛けない</b>。掛けてしまうと、落ち影の有無と
+    // N·L の陰影が 1 つの値に混ざり、「落ち影が無い場所にも落ち影ぶんのトーンが乗る」
+    // のを分離できなくなる。落ち影は使う側で別枠に足す。
+    half continuousShadingLit = 1.0;
+
     half aoForIndirect = 1.0;
 
     // ===== AO (pre-calculate before shading branch) =====
@@ -618,6 +877,19 @@ half4 frag(v2f i) : SV_Target
         ao = ApplySoftMask(ao);
         aoEffect = lerp(1.0, ao, _AOIntensity);
         aoForIndirect = lerp(1.0, ao, _AOIntensity * AO_INDIRECT_STRENGTH);
+
+        // Micro-shadowing (Chan, "Material Advances in Call of Duty: WWII", SIGGRAPH 2018;
+        // form used by Filament). The AO value is read as the opening of a cone above the
+        // surface, and the main light is cut off once it drops below that cone, so creases,
+        // weave and collar folds get small directional shadows without a shadow map.
+        // Applied to the light term BEFORE the toon ramp so it moves the step instead of
+        // adding a smooth gradient on top of it.
+        if (_AOMicroShadow > 0.001)
+        {
+            half microAperture = rsqrt(1.0 - min(aoEffect, 0.9999));
+            half microShadow = saturate(max(lightTerm, 0.0) * microAperture);
+            lightTerm = lerp(lightTerm, min(lightTerm, lightTerm * microShadow * microShadow), saturate(_AOMicroShadow));
+        }
     #endif
 
     // ===== Procedural AO (Height-based) =====
@@ -660,6 +932,9 @@ half4 frag(v2f i) : SV_Target
         #ifdef _USE_AO
             rampInput *= aoEffect;
         #endif
+        // 落ち影を掛ける前の連続値。Ramp モードでは rampInput 自体が連続なので
+        // そのまま濃度の基準に使える。
+        continuousShadingLit = saturate(rampInput + clamp(_ShadowOffset, -1.0, 1.0));
         // Shadow attenuation (separated from NdotL for clean toon boundaries)
         rampInput *= atten;
         // Use ramp texture for custom shadow gradients
@@ -674,10 +949,11 @@ half4 frag(v2f i) : SV_Target
         // ===== Shadow Step Smoothing =====
         // 多段階トゥーンシェーディングの階調をなじませる
         // 量子化されたステップを連続的なライティングに向けてブレンド
-        if (_ShadowSmoothing > 0.001)
+        half effectiveSmoothing = NataneShadowNaturalSmoothing();
+        if (effectiveSmoothing > 0.001)
         {
             half continuousShading = saturate(lightTerm + clamp(_ShadowOffset, -1.0, 1.0));
-            toonValue = lerp(toonValue, continuousShading, _ShadowSmoothing);
+            toonValue = lerp(toonValue, continuousShading, effectiveSmoothing);
         }
 
         half gradientValue = GradientShading(lightTerm, _ShadingGradientWidth);
@@ -688,8 +964,12 @@ half4 frag(v2f i) : SV_Target
         half stylizedShadingValue = lerp(toonValue, gradientValue, stylizedMode);
         shadingValue = lerp(stylizedShadingValue, pbrLikeValue, basePbrWeight);
 
+        // 量子化を通していない側。PBR モードかどうかに関係なく常に連続。
+        continuousShadingLit = pbrLikeValue;
+
         // Apply Shading Grade Map before final lighting
         shadingValue = ApplyShadingGradeMap(uv, shadingValue);
+        continuousShadingLit = ApplyShadingGradeMap(uv, continuousShadingLit);
 
         // ===== Shadow Edge Noise (hand-drawn shadow boundaries) =====
         #ifdef _SHADOW_EDGE_NOISE
@@ -700,6 +980,10 @@ half4 frag(v2f i) : SV_Target
             // Value noise from world position
             float2 noiseUV = i.worldPos.xz * _ShadowNoiseScale * 0.01;
             noiseUV += _Time.y * _ShadowNoiseSpeed * 0.1;
+            #if defined(_LINE_BOIL)
+            if (_LineBoilAffectHatching >= 0.5)
+                noiseUV += nataneBoilUV;
+            #endif
             float noise = frac(sin(dot(noiseUV, float2(12.9898, 78.233))) * 43758.5453);
             noise = noise * 2.0 - 1.0; // remap to [-1, 1]
             shadingValue += noise * _ShadowNoiseIntensity * edgeMask;
@@ -713,9 +997,13 @@ half4 frag(v2f i) : SV_Target
             shadingValue *= aoEffect;
             // Apply AO blend (how much AO affects the shading)
             shadingValue = lerp(preShadingAO, shadingValue, _AOBlend);
+
+            half preContinuousAO = continuousShadingLit;
+            continuousShadingLit = lerp(preContinuousAO, continuousShadingLit * aoEffect, _AOBlend);
         #endif
 
         // ===== Shadow Attenuation (separated from NdotL for clean toon boundaries) =====
+        // continuousShadingLit には atten を掛けない（落ち影は使う側で別枠に足す）。
         shadingValue *= atten;
 
         // Vibrant shadow color mixing for anime look
@@ -787,12 +1075,13 @@ half4 frag(v2f i) : SV_Target
         #elif defined(_USE_LIGHT_VOLUME)
             half3 preLightVolume = lighting;
             // Sample Light Volume SH coefficients
-            float3 L0, L1r, L1g, L1b;
-            LightVolumeSH(i.worldPos, L0, L1r, L1g, L1b);
+            // (sampled once in the lighting setup above)
+            float3 L0 = lvL0, L1r = lvL1r, L1g = lvL1g, L1b = lvL1b;
 
             // Evaluate direct and indirect lighting from Light Volume
-            float3 directLightLV = LightVolumeEvaluate(worldNormal, L0, L1r, L1g, L1b);
-            float3 indirectLightLV = LightVolumeEvaluate(-worldNormal, L0, L1r, L1g, L1b);
+            // _LightVolumeSHMode 0 (default) is the plain linear evaluation, as before.
+            float3 directLightLV = NataneLightVolumeEvaluateMode(worldNormal, L0, L1r, L1g, L1b, _LightVolumeSHMode);
+            float3 indirectLightLV = NataneLightVolumeEvaluateMode(-worldNormal, L0, L1r, L1g, L1b, _LightVolumeSHMode);
 
             // Gentle clamp to prevent over-brightening
             directLightLV = min(directLightLV, float3(1.1, 1.1, 1.1));
@@ -801,6 +1090,13 @@ half4 frag(v2f i) : SV_Target
             // Apply intensity controls
             directLightLV *= _LightVolumeIntensity;
             indirectLightLV *= _LightVolumeIntensity;
+
+            // Light Volume key light: the ambient floor becomes the light that really
+            // reaches the side facing away from the volume's dominant direction, instead
+            // of the opposite-normal irradiance (which lights the shade with the key
+            // light's own energy and washes the toon boundary out).
+            half3 lvFillLight = min(lvFillColor, float3(1.1, 1.1, 1.1)) * _LightVolumeIntensity;
+            indirectLightLV = lerp(indirectLightLV, lvFillLight, lvKeyAmount);
 
             // Apply Shadow Receive Mask to indirect Light Volume
             float lvInfluence = (1.0 - shadowReceiveMask);
@@ -811,14 +1107,17 @@ half4 frag(v2f i) : SV_Target
             // LV使用時はUnityのAmbient Colorを使用しない（LVが環境光を提供するため）
             ambient = float3(0, 0, 0);
         #else
-            // Fallback: Unity Light Probes
+            // Fallback: Unity Light Probes (LPPV-aware via NataneShadeSH).
+            // When a Light Probe Proxy Volume drives this renderer the SH terms
+            // are sampled per-pixel from the probe volume; otherwise this is
+            // identical to the classic ShadeSH9() path.
             // L0 (uniform ambient) for indirect
-            float3 shAverage = ShadeSH9(float4(0, 0, 0, 1));
+            float3 shAverage = NataneShadeSH(half3(0, 0, 0), i.worldPos);
             indirectResult = max(0, shAverage);
 
             // Directional SH for ambient contribution
-            float3 shDirect = ShadeSH9(float4(worldNormal, 1.0));
-            float3 shIndirect = ShadeSH9(float4(-worldNormal, 1.0));
+            float3 shDirect = NataneShadeSH(worldNormal, i.worldPos);
+            float3 shIndirect = NataneShadeSH(-worldNormal, i.worldPos);
             ambient = lerp(shIndirect, shDirect, SH_INDIRECT_BLEND);
             ambient *= _IndirectLightIntensity * _GIIntensity;
         #endif
@@ -827,6 +1126,22 @@ half4 frag(v2f i) : SV_Target
         indirectResult = max(indirectResult, _IndirectLightMinColor.rgb);
         indirectResult *= _IndirectLightIntensity * _GIIntensity;
         // AO on indirect light (50% strength to preserve ambient visibility)
+        #ifdef _USE_AO
+        if (_AOMultiBounce > 0.001)
+        {
+            // Multi-bounce AO (Jimenez et al., "Practical Real-Time Strategies for Accurate
+            // Indirect Occlusion", SIGGRAPH 2016). Light bouncing inside a crease picks up
+            // the surface colour, so occluded bright / saturated areas (skin folds, white
+            // cloth) stay warm instead of going grey-black.
+            half3 mbAlbedo = saturate(col.rgb);
+            half3 mbA = 2.0404 * mbAlbedo - 0.3324;
+            half3 mbB = -4.7951 * mbAlbedo + 0.6417;
+            half3 mbC = 2.7552 * mbAlbedo + 0.6903;
+            half3 mbVisibility = max(aoForIndirect, ((aoForIndirect * mbA + mbB) * aoForIndirect + mbC) * aoForIndirect);
+            indirectResult *= lerp(half3(aoForIndirect, aoForIndirect, aoForIndirect), mbVisibility, saturate(_AOMultiBounce));
+        }
+        else
+        #endif
         indirectResult *= aoForIndirect;
 
         // ========== STEP 2: Shadow Environment Color (environment-aware shadow tinting) ==========
@@ -842,6 +1157,24 @@ half4 frag(v2f i) : SV_Target
             half3 directResult = lerp(shadowColor, half3(1, 1, 1), shadingValue);
         #endif
 
+        // ===== Shadow border tint (terminator colour) =====
+        // A saturated band along the lit / shadow boundary, the cue that makes skin and
+        // cloth read as lit volumes rather than two flat tones. "borderEdge" follows
+        // whatever transition the shading mode produced (toon step, gradient, ramp, cast
+        // shadow edge); "borderHalo" widens it around the N.L terminator by _ShadowBorderWidth.
+        if (_ShadowBorderStrength > 0.001)
+        {
+            half borderEdge = 4.0 * shadingValue * (1.0 - shadingValue);
+            half borderHalo = saturate(1.0 - abs(continuousShadingLit * atten - 0.5) / max(_ShadowBorderWidth * 0.5, 0.001));
+            borderHalo *= step(0.001, _ShadowBorderWidth);
+            half borderMask = saturate(max(borderEdge, borderHalo)) * saturate(_ShadowBorderStrength);
+            borderMask *= (1.0 - shadowReceiveMask);
+            directResult *= lerp(half3(1, 1, 1), _ShadowBorderColor.rgb, borderMask);
+        }
+
+        // Matte diffuse: albedo-dependent multiple-scattering tint (1 when the feature is off)
+        directResult *= matteDiffuseTint;
+
         // Light color application (with LightColorInfluence preservation)
         half lightColorLum = CALC_LUMINANCE(effectiveLightColor);
         half3 colorMultiplied = directResult * saturate(effectiveLightColor);
@@ -849,11 +1182,13 @@ half4 frag(v2f i) : SV_Target
         half3 lightColorInfluenced = lerp(luminanceOnly, colorMultiplied, _LightColorInfluence);
         directResult = lightColorInfluenced * max(0.0, _LightIntensity);
 
-        // Light influence clamping
+        // Light influence clamping: rescale by luminance ratio to preserve hue.
+        // (normalize() here would darken neutral light by ~1/sqrt(3).)
         half directLum = CALC_LUMINANCE(directResult);
-        directLum = clamp(directLum, _LightMinInfluence, _LightMaxInfluence);
-        half3 directDir = normalize(max(directResult, 0.01));
-        directResult = directDir * directLum;
+        half directLumClamped = clamp(directLum, _LightMinInfluence, _LightMaxInfluence);
+        directResult = (directLum > 1e-4)
+            ? directResult * (directLumClamped / directLum)
+            : half3(1, 1, 1) * directLumClamped; // black input: neutral floor at _LightMinInfluence
 
         // ========== STEP 4: Additional Light ==========
         half3 additionalResult = half3(0, 0, 0);
@@ -1020,6 +1355,22 @@ half4 frag(v2f i) : SV_Target
                 // Treat Light Volume as environment fill first, then add only a modest direct contribution.
                 half3 lvIndirectNatural = CompressLightingForSafeRange(indirectLightLV, 0.75, 0.95);
                 half3 lvDirectNatural = CompressLightingForSafeRange(directLightLV, 0.8, 0.9) * 0.35;
+                if (lvKeyAmount > 0.001)
+                {
+                    // Key light mode: the soft 35% irradiance fill is replaced by a toon
+                    // term along the volume's dominant direction. When the volume already
+                    // is the main light it went through the full shading path above, so
+                    // nothing is added twice. With a realtime light it becomes a second,
+                    // softer toon light carrying only the directional part (E(d) - E(-d)).
+                    half lvKeyBorder = max(0.06, NataneShadowNaturalStepBorder());
+                    half lvKeyShade = smoothstep(-lvKeyBorder, lvKeyBorder, dot(worldNormal, lvKeyDir));
+                    half3 lvKeyDirectional = max(0.0, lvKeyColor - lvFillColor) * _LightVolumeIntensity;
+                    // Half strength: it sits on top of a realtime light that already
+                    // carries the scene, so it should model, not double the exposure.
+                    half3 lvKeyToon = CompressLightingForSafeRange(lvKeyDirectional * lvKeyShade, 0.8, 0.9)
+                                      * (0.5 * (1.0 - lvKeyIsMain) * (1.0 - shadowReceiveMask));
+                    lvDirectNatural = lerp(lvDirectNatural, lvKeyToon, lvKeyAmount);
+                }
                 half3 totalIndirect = max(indirectResult, lvIndirectNatural);
                 lighting = CombineDiffuseLightingSafe(totalIndirect, directResult + lvDirectNatural, additionalResult, half3(0, 0, 0));
             }
@@ -1047,7 +1398,7 @@ half4 frag(v2f i) : SV_Target
         // 影色（shadowColor）は ForwardBase で既に処理済みのため、ここでは使用しない。
         // 影色をそのまま使うと、影側でも非ゼロの寄与が加算され、
         // 複数の色付きポイントライトで全身が混色する問題（紫ウォッシュ）が発生する。
-        lighting = half3(shadingValue, shadingValue, shadingValue);
+        lighting = half3(shadingValue, shadingValue, shadingValue) * matteDiffuseTint;
         half lightColorLum_add = CALC_LUMINANCE(_LightColor0.rgb);
         half3 colorMul_add = lighting * _LightColor0.rgb;
         half3 lumOnly_add = lighting * lightColorLum_add;
@@ -1142,19 +1493,65 @@ half4 frag(v2f i) : SV_Target
     #if defined(_HALFTONE_SHADOW) && defined(UNITY_PASS_FORWARDBASE)
     if (_HalftoneShadow >= 0.5)
     {
-        // shadowFactor: 0=lit, 1=shadow
-        float shadowArea = smoothstep(_HalftoneShadowThreshold + _HalftoneShadowSoftness,
-                                       _HalftoneShadowThreshold - _HalftoneShadowSoftness,
-                                       shadingValue);
-        // Circle halftone pattern from screen position
-        float2 htPos = i.pos.xy / _HalftoneShadowScale;
-        float2 htCenter = floor(htPos) + 0.5;
-        float htDist = length(htPos - htCenter);
-        // Dot size proportional to shadow intensity
-        float htDot = step(htDist, shadowArea * 0.5);
-        // Apply halftone
+        // 濃度の基準。既定は量子化前の連続値。
+        //
+        // 量子化後の shadingValue を使うと、濃度が _ShadowSteps の段数しか取れない。
+        // 既定の 2 段だと網点も 2 段階しか出ず、「トーンを貼り分けた」ではなく
+        // 「白と黒が切り替わる」だけになる。漫画のトーンは面の丸みに沿って
+        // 号数を選ぶものなので、基準は滑らかな陰影であるべき。
+        // PBR モードを使っていなくても連続値は常に計算してある。
+        // 濃度の基準。落ち影を含まない側を使う。
+        half htSource = (_HalftoneShadowDensitySource > 0.5) ? continuousShadingLit : shadingValue;
+
+        // shadowArea: 0=lit, 1=shadow
+        //
+        // 陰影（N·L）由来のトーンと、落ち影由来のトーンを別々に求めて max で合成する。
+        // 掛け算で 1 本にまとめると、落ち影が無い（atten = 1）場所でも
+        // 陰影の分だけトーンが出て、「影が落ちていないのに網点が乗る」状態になる。
+        // 落ち影は atten < 1 の領域にしか存在しないので、そこだけに効かせる。
+        float shadowAreaLit = smoothstep(_HalftoneShadowThreshold + _HalftoneShadowSoftness,
+                                          _HalftoneShadowThreshold - _HalftoneShadowSoftness,
+                                          htSource);
+
+        float shadowArea = shadowAreaLit;
+
+        // 量子化後を基準にしている場合は shadingValue に既に atten が畳み込まれているので、
+        // 二重に効かせない。連続基準のときだけ落ち影を別枠で足す。
+        if (_HalftoneShadowDensitySource > 0.5)
+        {
+            float castArea = saturate(1.0 - atten) * _HalftoneShadowCastShadow;
+            shadowArea = max(shadowArea, castArea);
+        }
+
+        // 影の濃さを「トーンの号数」に量子化する。連続的に太らせるより漫画らしい。
+        float htTone = NataneHalftoneQuantizeTone(shadowArea, _HalftoneShadowLevels);
+
+        // 網点グリッドの座標。スクリーン空間だとカメラを動かしたとき模様が滑るため、
+        // 面に貼り付けたい場合のためにワールド/UV/オブジェクトも選べる。
+        // ワールドは Triplanar-lite なので垂直面でも潰れない。
+        float3 htObjPos = mul(unity_WorldToObject, float4(i.worldPos, 1.0)).xyz;
+        float2 htPos = NataneHalftoneCoord(
+            _HalftoneShadowSpace, _HalftoneShadowScale, _HalftoneShadowSurfaceDensity,
+            _HalftoneShadowScreenLock, _HalftoneShadowScreenAnchor,
+            uv, htObjPos, i.worldPos, worldNormal, i.pos.xy);
+
+        htPos = NataneHalftoneRotate(htPos, _HalftoneShadowAngle);
+
+        float htInk = NataneHalftonePattern(
+            htPos, htTone, _HalftoneShadowPattern,
+            _HalftoneShadowDotMin, _HalftoneShadowDotMax, _HalftoneShadowAA);
+
+        // tone が 0 の領域には一切載せない（量子化の最下段でも点が残らないように）。
+        //
+        // ここは step だった。量子化の最下段は tone = 0.5/levels なので、
+        // 影に入った瞬間その大きさの網点が一斉に出現し、明部との境が硬い線として見えていた。
+        // 網点自体が消える幅（1/levels の半分）で立ち上げると、
+        // 「トーンの縁」として自然に見える。levels=1（連続）のときも同じ式で成立する。
+        half htFadeIn = 0.5 / max(_HalftoneShadowLevels, 1.0);
+        htInk *= smoothstep(0.0, htFadeIn, shadowArea);
+
         col.rgb = lerp(col.rgb, _HalftoneShadowColor.rgb * col.rgb,
-                       htDot * _HalftoneShadowIntensity * _HalftoneShadowBlend);
+                       htInk * _HalftoneShadowIntensity * _HalftoneShadowBlend);
     }
     #endif
 
@@ -1193,11 +1590,18 @@ half4 frag(v2f i) : SV_Target
     #if defined(_HATCHING) && defined(UNITY_PASS_FORWARDBASE)
     if (_UseHatching >= 0.5)
     {
-        half hMask = NATANE_SAMPLE_SHARED_R(_HatchingMask, _MainTex, uv);
-        // Use luminance of current color as proxy for shading value
-        half hatchShading = dot(col.rgb, half3(0.299, 0.587, 0.114));
-        col.rgb = ApplyHatching(col.rgb, uv, hatchShading, hMask,
-            _HatchTex0, _HatchTex1, _HatchingTiling, _HatchingColor, _HatchingBlend * nprWeight);
+        float2 hatchUV = uv;
+        #if defined(_LINE_BOIL)
+        if (_LineBoilAffectHatching >= 0.5)
+            hatchUV += nataneBoilUV;
+        #endif
+        half hMask = NATANE_SAMPLE_SHARED_R(_HatchingMask, _MainTex, hatchUV);
+        // 階調はライティング（shadingValue: 0=影 / 1=明部）で決める。
+        // 以前はここまでの色の輝度を使っていたため、暗いアルベド（黒い服・髪など）が
+        // 光の当たった場所でも「影」と判定され、常に最も濃い線が乗っていた。
+        col.rgb = ApplyHatching(col.rgb, hatchUV, shadingValue, hMask,
+            _HatchTex0, _HatchTex1, _HatchingTiling, _HatchingColor, _HatchingBlend * nprWeight,
+            (int)(_HatchingComposite + 0.5));
     }
     #endif
 
@@ -1223,15 +1627,20 @@ half4 frag(v2f i) : SV_Target
         // Boundary Dithering: apply dither pattern at specular highlight edges
         #if defined(_SPECULAR_DITHER)
         {
-            float2 specDitherScreenUV = i.screenPos.xy / max(i.screenPos.w, 0.0001);
-            float2 specDitherScreenPos = specDitherScreenUV * _ScreenParams.xy;
+            // Pixel coordinates straight from SV_POSITION: identical in mono, and not
+            // stretched 2x in double-wide stereo like "screenUV * _ScreenParams.xy" was.
+            float2 specDitherScreenPos = i.pos.xy;
             float specDitherThreshold = NataneGetDitherThreshold(StabilizeDitherCoord(specDitherScreenPos), _SpecularDitherScale);
             float ditheredSpec = step(specDitherThreshold, spec);
             spec = lerp(spec, ditheredSpec, _SpecularDitherStrength);
         }
         #endif
 
-        half3 specContrib = spec * _SpecularColor.rgb * _SpecularIntensity * effectiveLightColor * atten;
+        half specIntensityMod = _SpecularIntensity;
+        #if defined(_FX_MODULATOR)
+            specIntensityMod *= NataneFXModMul(nataneFXState, NATANE_FXT_SPECULAR);
+        #endif
+        half3 specContrib = spec * _SpecularColor.rgb * specIntensityMod * effectiveLightColor * atten;
 
         // Apply mask texture with soft blending
         float2 specMaskUV = AnimateUVIfNeeded(uv, _SpecularMaskScrollSpeed.xy, _SpecularMaskRotateSpeed);
@@ -1243,6 +1652,10 @@ half4 frag(v2f i) : SV_Target
         #ifndef UNITY_PASS_FORWARDBASE
             specContrib *= _AdditionalLightIntensity;
         #endif
+
+        // Fade the highlight inside the shade (0 = unchanged). Cast shadows are already
+        // handled by atten above; this follows the toon shading itself.
+        specContrib *= lerp(1.0, shadingValue, saturate(_SpecularShadowMask));
 
         // Apply glossiness and matte material quality
         specContrib *= _Glossiness * specularOcclusion;
@@ -1259,6 +1672,86 @@ half4 frag(v2f i) : SV_Target
     } // if (_Specular >= 0.5)
     #endif
 
+    // ===== Shaped Toon Highlight (procedural SDF specular) =====
+    #ifdef _SHAPED_HIGHLIGHT
+    if (_ShapedHighlight >= 0.5)
+    {
+        // Peak-centered 2D coordinate: deviation of the half-vector from the
+        // surface normal, projected into the view plane (mirror-safe).
+        half3 shpH = normalize(lightDir + viewDir);
+        float3 shpVN = mul((float3x3)UNITY_MATRIX_V, worldNormal);
+        float3 shpVH = mul((float3x3)UNITY_MATRIX_V, shpH);
+        float3 shpVL = mul((float3x3)UNITY_MATRIX_V, lightDir);
+        shpVN.x *= NataneMirrorSign();
+        shpVH.x *= NataneMirrorSign();
+        shpVL.x *= NataneMirrorSign();
+        float2 shpCoord = (shpVH.xy - shpVN.xy);
+
+        // Orientation: base rotation + light-follow + camera-follow terms.
+        float shpAng = radians(_ShapedHLRotation);
+        shpAng += _ShapedHLLightFollow * atan2(shpVL.y, shpVL.x);
+        shpAng += _ShapedHLCameraFollow * atan2(UNITY_MATRIX_V[1].x, UNITY_MATRIX_V[0].x);
+        float shpS = sin(shpAng);
+        float shpC = cos(shpAng);
+        shpCoord = float2(shpCoord.x * shpC - shpCoord.y * shpS,
+                          shpCoord.x * shpS + shpCoord.y * shpC);
+
+        // Scale by size and per-axis stretch.
+        shpCoord /= max(_ShapedHLSize, 0.001);
+        shpCoord /= max(_ShapedHLStretch.xy, float2(0.001, 0.001));
+
+        // Sparkle pulse (breathing intensity).
+        half shpPulse = 1.0;
+        if (_ShapedHLSparkleSpeed > 0.001)
+            shpPulse = 0.5 + 0.5 * sin(_Time.y * _ShapedHLSparkleSpeed);
+
+        // Primary coverage: procedural SDF or custom SDF texture (shape 8).
+        half shpCov;
+        if (_ShapedHLShape > 7.5)
+        {
+            float2 shpTexUV = shpCoord * 0.5 + 0.5;
+            shpCov = NATANE_SAMPLE_SHARED_R(_ShapedHLTex, _MainTex, saturate(shpTexUV));
+        }
+        else
+        {
+            half shpSDF = NataneShapeSDF(shpCoord, _ShapedHLShape);
+            shpCov = NataneShapeCoverage(shpSDF, _ShapedHLSoftness);
+        }
+
+        // Optional secondary procedural shape (additive coverage).
+        if (_ShapedHLIntensity2 > 0.001)
+        {
+            float2 shpCoord2 = shpCoord * (_ShapedHLSize / max(_ShapedHLSize2, 0.001));
+            half shpSDF2 = NataneShapeSDF(shpCoord2, _ShapedHLShape2);
+            half shpCov2 = NataneShapeCoverage(shpSDF2, _ShapedHLSoftness)
+                           * (_ShapedHLIntensity2 / max(_ShapedHLIntensity, 0.0001));
+            shpCov = max(shpCov, shpCov2);
+        }
+
+        half shpMask = NATANE_SAMPLE_SHARED_R(_ShapedHLMask, _MainTex, uv);
+        shpMask = ApplySoftMask(shpMask);
+
+        half shpIntensityMod = _ShapedHLIntensity;
+        #if defined(_FX_MODULATOR)
+            shpIntensityMod *= NataneFXModMul(nataneFXState, NATANE_FXT_SHAPED_HL);
+        #endif
+        half3 shaped = shpCov * shpPulse * _ShapedHLColor.rgb * shpIntensityMod
+                       * effectiveLightColor * atten * shpMask;
+
+        #ifndef UNITY_PASS_FORWARDBASE
+            shaped *= _AdditionalLightIntensity;
+        #endif
+        shaped *= _Glossiness * specularOcclusion;
+        shaped = ApplyMatteQuality(shaped, col.rgb, _MatteEffect);
+
+        half3 preShaped = col.rgb;
+        col.rgb = SafeAdditiveBlend(col.rgb, shaped, saturate(length(shaped) * 0.8));
+        #ifdef _DISTANCE_FADE
+            col.rgb = lerp(preShaped, col.rgb, distanceFade);
+        #endif
+    } // if (_ShapedHighlight >= 0.5)
+    #endif
+
     // ===== Hair Specular (Kajiya-Kay) =====
     #ifdef _HAIR_SPECULAR
     if (_HairSpecular >= 0.5)
@@ -1271,8 +1764,9 @@ half4 frag(v2f i) : SV_Target
         // Boundary Dithering: apply dither pattern at hair specular highlight edges
         #if defined(_SPECULAR_DITHER)
         {
-            float2 hairDitherScreenUV = i.screenPos.xy / max(i.screenPos.w, 0.0001);
-            float2 hairDitherScreenPos = hairDitherScreenUV * _ScreenParams.xy;
+            // Pixel coordinates straight from SV_POSITION: identical in mono, and not
+            // stretched 2x in double-wide stereo like "screenUV * _ScreenParams.xy" was.
+            float2 hairDitherScreenPos = i.pos.xy;
             float hairDitherThreshold = NataneGetDitherThreshold(StabilizeDitherCoord(hairDitherScreenPos), _SpecularDitherScale);
             float hairSpecIntensity = max(max(hairSpec.r, hairSpec.g), hairSpec.b);
             float hairDitherMask = lerp(1.0, step(hairDitherThreshold, hairSpecIntensity), _SpecularDitherStrength);
@@ -1348,7 +1842,10 @@ half4 frag(v2f i) : SV_Target
             half3 sss = SubsurfaceScatteringLUT(ndotl, worldNormal, i.worldPos, thickness);
         #else
             float sssPowerBlurred = max(0.1, _SSSPower * (1.0 - _SSSBlur * 0.8));
-            half3 sss = SubsurfaceScattering(worldNormal, lightDir, viewDir, thickness, atten, sssPowerBlurred);
+            // With a directional light this is _LightColor0 exactly as before; without one
+            // it follows the fallback light the direction was taken from.
+            half3 sssLightColor = (CALC_LUMINANCE(_LightColor0.rgb) > 0.01) ? _LightColor0.rgb : effectiveLightColor;
+            half3 sss = SubsurfaceScattering(worldNormal, lightDir, viewDir, thickness, atten, sssPowerBlurred, sssLightColor);
         #endif
 
         // Apply mask texture with soft blending
@@ -1410,6 +1907,11 @@ half4 frag(v2f i) : SV_Target
             // Shadow-based rim suppression (independent of direction)
             rim *= lerp(1.0, shadingValue, _RimShadowMask);
 
+            // FX Modulator: RimIntensity target
+            #if defined(_FX_MODULATOR)
+                rim *= NataneFXModMul(nataneFXState, NATANE_FXT_RIM);
+            #endif
+
             // Use safe additive blending to prevent white-out
             half rimStrength = saturate(length(rim) * 0.5);
             half3 preRim = col.rgb;
@@ -1463,6 +1965,11 @@ half4 frag(v2f i) : SV_Target
         }
         // Shadow-based rim suppression
         rim2 *= lerp(1.0, shadingValue, _RimShadowMask);
+
+        // FX Modulator: RimIntensity target
+        #if defined(_FX_MODULATOR)
+            rim2 *= NataneFXModMul(nataneFXState, NATANE_FXT_RIM);
+        #endif
 
         // Use fast additive blending (secondary effect)
         half rim2Strength = saturate(length(rim2) * 0.5);
@@ -1569,7 +2076,11 @@ half4 frag(v2f i) : SV_Target
     #if defined(_MATCAP) && defined(UNITY_PASS_FORWARDBASE)
     if (_MatCap >= 0.5)
     {
-        half3 matcap = SampleTex2DBlur3Repeat(_MatCapTex, sharedMatCapUV, _MatCapBlur) * _MatCapIntensity;
+        half matCapIntMod = _MatCapIntensity;
+        #if defined(_FX_MODULATOR)
+            matCapIntMod *= NataneFXModMul(nataneFXState, NATANE_FXT_MATCAP);
+        #endif
+        half3 matcap = SampleTex2DBlur3Repeat(_MatCapTex, sharedMatCapUV, _MatCapBlur) * matCapIntMod;
 
         // Apply mask texture with soft blending
         half matcapMask = NATANE_SAMPLE_SHARED_R(_MatCapMask, _MatCapTex, uv);
@@ -1582,10 +2093,10 @@ half4 frag(v2f i) : SV_Target
 
         // Blend modes: 0=Add (safe), 1=Multiply, 2=Replace - Optimized: no branching
         half3 preMatCap = col.rgb;
-        half matcapStrength = saturate(_MatCapIntensity * matcapMask);
+        half matcapStrength = saturate(matCapIntMod * matcapMask);
         half3 addResult = SafeAdditiveBlend(col.rgb, matcap, matcapStrength);
-        half3 multiplyResult = BlendWithSoftMask(col.rgb, col.rgb * matcap, saturate(_MatCapIntensity * matcapMask));
-        half3 replaceResult = BlendWithSoftMask(col.rgb, matcap, saturate(_MatCapIntensity * matcapMask));
+        half3 multiplyResult = BlendWithSoftMask(col.rgb, col.rgb * matcap, saturate(matCapIntMod * matcapMask));
+        half3 replaceResult = BlendWithSoftMask(col.rgb, matcap, saturate(matCapIntMod * matcapMask));
 
         // Select blend mode using lerp
         half isMultiply = step(HALF_VALUE, _MatCapBlendMode) * step(_MatCapBlendMode, 1.5);
@@ -1756,9 +2267,7 @@ half4 frag(v2f i) : SV_Target
     {
         // Reflect view direction around surface normal — mirror-safe
         float3 reflectDir = reflect(-viewDir, worldNormal);
-        float3 viewReflectFake = mul((float3x3)UNITY_MATRIX_V, reflectDir);
-        viewReflectFake.x *= NataneMirrorSign();
-        reflectDir = mul(viewReflectFake, (float3x3)UNITY_MATRIX_V);
+        // World-space reflection vector; valid in mirrors without compensation.
         // Sky-ground gradient based on reflection Y component
         float skyFactor = saturate(reflectDir.y * _FakeReflSmoothness * 5.0 + 0.5);
         half3 fakeRefl = lerp(_FakeReflGroundColor.rgb, _FakeReflSkyColor.rgb, skyFactor);
@@ -1815,8 +2324,19 @@ half4 frag(v2f i) : SV_Target
     } // if (_Refraction >= 0.5)
     #endif
 
+    // ===== Highlight compression (ForwardBase only, before emission) =====
+    // Rolls off over-bright lit colour without clipping a channel or shifting the hue.
+    // Placed before emission / glitter so their HDR output still drives world bloom.
+    #ifdef UNITY_PASS_FORWARDBASE
+    if (_HighlightCompress > 0.001)
+    {
+        col.rgb = lerp(col.rgb, NataneNeutralHighlightCompress(max(col.rgb, 0.0)), saturate(_HighlightCompress));
+    }
+    #endif
+
     // ===== Emission (ForwardBase only) =====
     #if defined(_EMISSION) && defined(UNITY_PASS_FORWARDBASE)
+    half3 nataneHdrEmission = half3(0, 0, 0); // HDR overshoot re-added after the final LDR clamp (keeps bloom alive)
     if (_Emission >= 0.5)
     {
         float2 emissionUV = uv;
@@ -1828,6 +2348,11 @@ half4 frag(v2f i) : SV_Target
         }
 
         half3 emission = SampleTex2DBlur3Repeat(_EmissionMap, emissionUV, _EmissionBlur) * _EmissionColor.rgb;
+
+        // FX Modulator: EmissionIntensity target
+        #if defined(_FX_MODULATOR)
+            emission *= NataneFXModMul(nataneFXState, NATANE_FXT_EMISSION);
+        #endif
 
         // Apply pulse animation
         if (_EmissionPulseSpeed > 0.001)
@@ -1862,7 +2387,209 @@ half4 frag(v2f i) : SV_Target
             emissionBlendFaded *= lerp(1.0, distanceFade, _EmissionDistFade);
         #endif
         col.rgb = ApplyEffectBlendPost(preEmission, col.rgb, emissionBlendFaded, _EmissionBlendMode);
+        // Preserve the HDR portion (>1.0) of [HDR] _EmissionColor so it can
+        // drive bloom; SafeAdditiveBlend and the final clamp are LDR-bound.
+        nataneHdrEmission = max(emission - half3(1, 1, 1), half3(0, 0, 0)) * saturate(emissionBlendFaded);
     } // if (_Emission >= 0.5)
+    #endif
+
+    // ===== Topographic / Fault-Slice overlay (ForwardBase only) =====
+    #if defined(_TOPOGRAPHIC) && defined(UNITY_PASS_FORWARDBASE)
+    if (_Topographic >= 0.5)
+    {
+        // Build the slicing coordinate from the selected space + axis.
+        float3 topoObj  = mul(unity_WorldToObject, float4(i.worldPos, 1.0)).xyz;
+        float3 topoView = mul(UNITY_MATRIX_V, float4(i.worldPos, 1.0)).xyz;
+        float3 topoSrc  = (_TopoSpace < 0.5) ? topoObj : ((_TopoSpace < 1.5) ? i.worldPos : topoView);
+
+        float3 topoDir;
+        if (_TopoAxis < 0.5)      topoDir = float3(1.0, 0.0, 0.0);
+        else if (_TopoAxis < 1.5) topoDir = float3(0.0, 1.0, 0.0);
+        else if (_TopoAxis < 2.5) topoDir = float3(0.0, 0.0, 1.0);
+        else                      topoDir = normalize(_TopoCustomDir.xyz + float3(0.0, 0.0001, 0.0));
+
+        float topoCoord  = dot(topoSrc, topoDir);
+        float topoOffset = _TopoOffset;
+        #if defined(_FX_MODULATOR)
+            topoOffset += NataneFXModAdd(nataneFXState, NATANE_FXT_TOPO_OFFSET);
+        #endif
+        float topoPhase = (topoCoord + topoOffset + _Time.y * _TopoSpeed) / max(_TopoSpacing, 0.0001);
+
+        // Optional noise distortion of the band coordinate.
+        if (_TopoNoiseStrength > 0.001)
+        {
+            float topoN = NataneTopo_Noise(topoSrc.xy * _TopoNoiseScale + topoSrc.zz * _TopoNoiseScale);
+            topoPhase += (topoN - 0.5) * _TopoNoiseStrength;
+        }
+
+        float2 topoBand = NataneTopoBand(topoPhase, _TopoMode, _TopoLineWidth, _Time.y * _TopoSpeed);
+
+        half3 topoColor = lerp(_TopoColor.rgb, _TopoColor2.rgb, topoBand.y);
+        half  topoAlpha = topoBand.x * _TopoBlend;
+
+        half topoMask = NATANE_SAMPLE_SHARED_R(_TopoMask, _MainTex, uv);
+        topoMask = ApplySoftMask(topoMask);
+        topoAlpha *= topoMask;
+
+        half3 topoContrib = topoColor * _TopoEmission;
+        half3 preTopo = col.rgb;
+
+        // 合成方法。Caustics / 影の玉ボケと同じ列挙・同じ意味に揃えてある。
+        // 以前は常に加算合成で陰影と無関係だったため、「影の中にだけ等高線を出す」
+        // といった使い方ができなかった。
+        int topoComp = (int)(_TopoComposite + 0.5);
+        half topoWeight = saturate(topoAlpha);
+
+        if (topoComp == 1)      // BaseColor multiply-brighten
+        {
+            col.rgb *= (half3(1, 1, 1) + topoContrib * topoWeight);
+        }
+        else if (topoComp == 2) // LitOnly
+        {
+            half w = topoWeight * shadingValue;
+            col.rgb = SafeAdditiveBlend(col.rgb, topoContrib * shadingValue, saturate(w));
+        }
+        else if (topoComp == 3) // ShadowOnly
+        {
+            half shadowAmount = 1.0 - shadingValue;
+            half w = topoWeight * shadowAmount;
+            col.rgb = SafeAdditiveBlend(col.rgb, topoContrib * shadowAmount, saturate(w));
+        }
+        else                    // Emission-add
+        {
+            col.rgb = SafeAdditiveBlend(col.rgb, topoContrib, topoWeight);
+        }
+
+        #ifdef _DISTANCE_FADE
+            col.rgb = lerp(preTopo, col.rgb, distanceFade);
+        #endif
+        // Preserve HDR overshoot so emission-strength contour lines drive bloom.
+        #if defined(_EMISSION)
+            if (topoComp == 0)
+                nataneHdrEmission += max(topoContrib - half3(1, 1, 1), half3(0, 0, 0)) * topoWeight;
+        #endif
+    } // if (_Topographic >= 0.5)
+    #endif
+
+    // ===== Surface Caustics (ForwardBase only) =====
+    #if defined(_CAUSTICS) && defined(UNITY_PASS_FORWARDBASE)
+    if (_Caustics >= 0.5)
+    {
+        float3 causObj = mul(unity_WorldToObject, float4(i.worldPos, 1.0)).xyz;
+        float2 causCoord = NataneCausticsCoord(_CausticsSpace, uv, causObj, i.worldPos, worldNormal);
+        causCoord = causCoord * _CausticsScale + _CausticsDirection.xy * (_Time.y * _CausticsSpeed);
+
+        float causTime = _Time.y * _CausticsSpeed;
+        float causPat;
+        if (_CausticsPatternMode > 0.5) // Texture: two scrolling samples multiplied
+        {
+            float2 causUV2 = causCoord * 0.73 - _CausticsDirection.xy * (_Time.y * _CausticsSpeed * 0.6);
+            half causA = NATANE_SAMPLE_SHARED_R(_CausticsTex, _MainTex, causCoord);
+            half causB = NATANE_SAMPLE_SHARED_R(_CausticsTex, _MainTex, causUV2);
+            causPat = causA * causB;
+        }
+        else
+        {
+            #ifdef _QUEST_LITE
+                causPat = NataneCausticsPatternLite(causCoord, causTime, _CausticsDistortion);
+            #else
+                causPat = NataneCausticsPattern(causCoord, causTime, _CausticsDistortion);
+            #endif
+        }
+        causPat = pow(saturate(causPat), max(_CausticsContrast, 0.0001));
+
+        half causMask = NATANE_SAMPLE_SHARED_R(_CausticsMask, _MainTex, uv);
+        causMask = ApplySoftMask(causMask);
+
+        half causIntensityMod = _CausticsIntensity;
+        #if defined(_FX_MODULATOR)
+            causIntensityMod *= NataneFXModMul(nataneFXState, NATANE_FXT_CAUSTICS);
+        #endif
+        half3 causContrib = _CausticsColor.rgb * (causPat * causIntensityMod * causMask);
+        int causComp = (int)(_CausticsComposite + 0.5);
+        half3 preCaus = col.rgb;
+        if (causComp == 1)      // BaseColor multiply-brighten
+            col.rgb *= (half3(1, 1, 1) + causContrib);
+        else if (causComp == 2) // LitOnly (scale by shading value)
+            col.rgb = SafeAdditiveBlend(col.rgb, causContrib * shadingValue, saturate(length(causContrib) * shadingValue));
+        else if (causComp == 3) // ShadowOnly (inverse shading)
+            col.rgb = SafeAdditiveBlend(col.rgb, causContrib * (1.0 - shadingValue), saturate(length(causContrib) * (1.0 - shadingValue)));
+        else                    // Emission-add
+            col.rgb = SafeAdditiveBlend(col.rgb, causContrib, saturate(length(causContrib) * 0.7));
+
+        #ifdef _DISTANCE_FADE
+            col.rgb = lerp(preCaus, col.rgb, distanceFade);
+        #endif
+        // Preserve HDR overshoot so emission-composite caustics can drive bloom.
+        #if defined(_EMISSION)
+            if (causComp == 0)
+                nataneHdrEmission += max(causContrib - half3(1, 1, 1), half3(0, 0, 0));
+        #endif
+    } // if (_Caustics >= 0.5)
+    #endif
+
+    // ===== Shadow Bokeh / 影の玉ボケ（ForwardBase only） =====
+    #if defined(_SHADOW_BOKEH) && defined(UNITY_PASS_FORWARDBASE)
+    if (_ShadowBokeh >= 0.5)
+    {
+        // 光源方向に垂直な平面へ投影する。ワールド座標を使うので、
+        // カメラを動かしても光斑は面に貼り付いたままになる。
+        float2 bokehCoord = NataneLightPlaneCoord(i.worldPos, lightDir);
+        bokehCoord = bokehCoord * _ShadowBokehScale
+                   + _ShadowBokehDirection.xy * (_Time.y * _ShadowBokehSpeed);
+
+        float bokehPat;
+        #ifdef _QUEST_LITE
+            bokehPat = NataneShadowBokehPatternLite(
+                bokehCoord, _ShadowBokehSize, _ShadowBokehSoftness, _ShadowBokehDensity);
+        #else
+            bokehPat = NataneShadowBokehPattern(
+                bokehCoord, _ShadowBokehSize, _ShadowBokehSoftness,
+                _ShadowBokehBlades, _ShadowBokehRimGain, _ShadowBokehDensity);
+        #endif
+
+        half bokehMask = NATANE_SAMPLE_SHARED_R(_ShadowBokehMask, _MainTex, uv);
+        bokehMask = ApplySoftMask(bokehMask);
+
+        // どれだけ影に入ったら出すか。半影に薄く出て輪郭が濁るのを防ぐ。
+        float shadowAmount = 1.0 - shadingValue;
+        float shadowGate = smoothstep(
+            _ShadowBokehShadowMin, min(_ShadowBokehShadowMin + 0.25, 1.0), shadowAmount);
+
+        half3 bokehContrib = _ShadowBokehColor.rgb
+                           * (bokehPat * _ShadowBokehIntensity * bokehMask * _ShadowBokehBlend);
+
+        int bokehComp = (int)(_ShadowBokehComposite + 0.5);
+        half3 preBokeh = col.rgb;
+
+        if (bokehComp == 1)
+        {
+            // LitOnly: 光の中に葉影を落とす。暗くする側。
+            half leaf = saturate(bokehPat * _ShadowBokehIntensity * bokehMask * _ShadowBokehBlend);
+            col.rgb = lerp(col.rgb, col.rgb * _ShadowBokehColor.rgb, leaf * shadingValue);
+        }
+        else if (bokehComp == 2)
+        {
+            // All: 影の内外に関係なく加算。
+            col.rgb = SafeAdditiveBlend(col.rgb, bokehContrib, saturate(length(bokehContrib)));
+        }
+        else
+        {
+            // ShadowOnly（既定）: 影の中にだけ光斑を落とす＝木漏れ日。
+            half w = shadowGate;
+            col.rgb = SafeAdditiveBlend(col.rgb, bokehContrib * w, saturate(length(bokehContrib) * w));
+        }
+
+        #ifdef _DISTANCE_FADE
+            col.rgb = lerp(preBokeh, col.rgb, distanceFade);
+        #endif
+
+        // HDR のはみ出しを残して Bloom を焚けるようにする（Caustics と同じ扱い）。
+        #if defined(_EMISSION)
+            if (bokehComp != 1)
+                nataneHdrEmission += max(bokehContrib - half3(1, 1, 1), half3(0, 0, 0));
+        #endif
+    } // if (_ShadowBokeh >= 0.5)
     #endif
 
     // ===== Virtual Expression - Hue Shift =====
@@ -1872,6 +2599,10 @@ half4 frag(v2f i) : SV_Target
     {
         half3 preHue = col.rgb;
         float hueShiftBlurred = _HueShift * (1.0 - _HueShiftBlur * 0.7);
+        // FX Modulator: HueShift target
+        #if defined(_FX_MODULATOR)
+            hueShiftBlurred += NataneFXModAdd(nataneFXState, NATANE_FXT_HUESHIFT);
+        #endif
         col.rgb = ApplyHueShift(col.rgb, hueShiftBlurred);
         col.rgb = lerp(preHue, col.rgb, _HueShiftBlend);
     }
@@ -1913,8 +2644,10 @@ half4 frag(v2f i) : SV_Target
         }
 
         // AudioLink Dissolve - audio-reactive dissolve (requires Dissolve feature)
+        // The toggle is read here so the inspector checkbox actually gates the
+        // effect. Before this it was declared but referenced nowhere (NPR2026 F4).
         #if defined(_DISSOLVE)
-        if (_AudioLinkDissolveIntensity > 0.001)
+        if (_AudioLinkDissolve >= 0.5 && _AudioLinkDissolveIntensity > 0.001)
         {
             half alDissolve = SampleAudioLink(_AudioLinkDissolveBand);
             float2 alDissolveUV = AnimateUVIfNeeded(uv, _DissolveTexScrollSpeed.xy, _DissolveTexRotateSpeed);
@@ -2013,7 +2746,9 @@ half4 frag(v2f i) : SV_Target
 
             // Distance fade
             #ifdef _DISTANCE_FADE
-                col.rgb = lerp(col.rgb, preSmearColor, distanceFade * _SmearDistFade);
+                // distanceFade is 1 near and 0 far: keep the smear near, drop it with distance.
+                // (It was inverted and removed the effect up close.)
+                col.rgb = lerp(preSmearColor, col.rgb, lerp(1.0, distanceFade, _SmearDistFade));
             #endif
         }
     }
@@ -2186,13 +2921,26 @@ half4 frag(v2f i) : SV_Target
     #ifdef _DISSOLVE
     if (_Dissolve >= 0.5)
     {
-        // Early exit if dissolve amount is 0 (no effect)
-        if (_DissolveAmount > 0.0)
-        {
-            half dissolveMaskValue = 1.0;
+        // FX Modulator can drive the dissolve amount, so an Animator layer is not
+        // required for a self-running dissolve. Evaluated before the early-out so
+        // that a material sitting at _DissolveAmount = 0 can still be modulated.
+        float dissolveAmountEffective = _DissolveAmount;
+        #if defined(_FX_MODULATOR)
+            dissolveAmountEffective = saturate(dissolveAmountEffective
+                + NataneFXModAdd(nataneFXState, NATANE_FXT_DISSOLVE));
+        #endif
 
-            // Apply mask texture
-            dissolveMaskValue = NATANE_SAMPLE_SHARED_R(_DissolveMask, _MainTex, uv);
+        // Early exit if dissolve amount is 0 (no effect)
+        if (dissolveAmountEffective > 0.0)
+        {
+            // Mask sampling is gated by the toggle so materials that do not use a
+            // mask do not pay the fetch. Default is 0 and an unset mask is "white",
+            // so existing materials render identically either way.
+            half dissolveMaskValue = 1.0;
+            if (_UseDissolveMask >= 0.5)
+            {
+                dissolveMaskValue = NATANE_SAMPLE_SHARED_R(_DissolveMask, _MainTex, uv);
+            }
 
             float dissolveEdgeBlurred = _DissolveEdgeWidth + _DissolveBlur * 0.15;
             float2 dissolveUV = AnimateUVIfNeeded(uv, _DissolveTexScrollSpeed.xy, _DissolveTexRotateSpeed);
@@ -2214,7 +2962,7 @@ half4 frag(v2f i) : SV_Target
             {
                 dissolveNoise = NATANE_SAMPLE_REPEAT(_DissolveTex, dissolveUV).r;
             }
-            float2 dissolveResult = CalculateDissolveFromNoise(dissolveNoise, _DissolveAmount, dissolveEdgeBlurred);
+            float2 dissolveResult = CalculateDissolveFromNoise(dissolveNoise, dissolveAmountEffective, dissolveEdgeBlurred);
             half dissolveAlpha = dissolveResult.x;
             half edgeGlow = dissolveResult.y;
 
@@ -2242,13 +2990,21 @@ half4 frag(v2f i) : SV_Target
     {
         float2 illustGrabUV = i.screenPos.xy / max(i.screenPos.w, 0.0001);
         float2 illustScreenUV = i.pos.xy / _ScreenParams.xy;
+        // Depth / depth-normals lookups need the ComputeScreenPos convention
+        // (stereo- and flip-aware); i.pos.xy / _ScreenParams is only right in mono.
+        float2 illustDepthUV = illustGrabUV;
 
         #ifdef _WATERCOLOR
         if (_UseWatercolor >= 0.5)
         {
-            half wcMask = NATANE_SAMPLE_REPEAT(_WCMask, TRANSFORM_TEX(uv, _WCMask)).r;
+            float2 wcUV = uv;
+            #if defined(_LINE_BOIL)
+            if (_LineBoilAffectWatercolor >= 0.5)
+                wcUV += nataneBoilUV;
+            #endif
+            half wcMask = NATANE_SAMPLE_REPEAT(_WCMask, TRANSFORM_TEX(wcUV, _WCMask)).r;
             half wcShading = dot(col.rgb, half3(0.299, 0.587, 0.114));
-            col.rgb = ApplyWatercolor(col.rgb, uv, illustScreenUV, wcShading, wcMask,
+            col.rgb = ApplyWatercolor(col.rgb, wcUV, illustScreenUV, wcShading, wcMask,
                 _WCGranulationTex, _WCGranulationTex_ST, _WCPaperTex, _WCPaperTex_ST,
                 _WCEdgeDarkening, _WCWetEdge, _WCGranulation, _WCPaperIntensity, _WCPaperTiling, _WCBlend * nprWeight);
         }
@@ -2270,9 +3026,10 @@ half4 frag(v2f i) : SV_Target
         #endif
 
         #ifdef _SCREEN_EDGE
-        if (_UseScreenEdge >= 0.5)
+        // Skipped in mirrors: the depth / depth-normals textures belong to the main view there.
+        if (_UseScreenEdge >= 0.5 && !NataneIsMirror())
         {
-            half edgeValue = ApplyScreenEdge(illustScreenUV, _EdgeDepthSensitivity, _EdgeNormalSensitivity, _EdgeWidth);
+            half edgeValue = ApplyScreenEdge(illustDepthUV, _EdgeDepthSensitivity, _EdgeNormalSensitivity, _EdgeWidth);
             col.rgb = lerp(col.rgb, _EdgeColor.rgb, edgeValue * _EdgeBlend * nprWeight);
         }
         #endif
@@ -2301,6 +3058,13 @@ half4 frag(v2f i) : SV_Target
         half alphaMask = NATANE_SAMPLE_SHARED_R(_AlphaMask, _MainTex, uv);
         col.a *= alphaMask;
     }
+    #endif
+
+    // ===== FX Modulator: AlphaFade target =====
+    // Multiplies col.a. Only visible on a transparent-capable variant
+    // (Transparent / Fade / X-Ray); opaque output ignores alpha.
+    #if defined(_FX_MODULATOR)
+        col.a *= NataneFXModMul(nataneFXState, NATANE_FXT_ALPHA_FADE);
     #endif
 
     // ===== Height Fade (Local Height-Based Transparency) =====
@@ -2340,7 +3104,9 @@ half4 frag(v2f i) : SV_Target
     // ===== Intersection Fade (Object Intersection Transparency) =====
     #ifndef _QUEST_LITE
     #ifdef _INTERSECTION_FADE
-    if (_IntersectionFade >= 0.5)
+    // Skipped in mirrors (no valid depth texture: clip mode could remove the whole
+    // object) and for orthographic cameras (screenPos.w is not the view depth there).
+    if (_IntersectionFade >= 0.5 && !NataneIsMirror() && !NataneIsOrthoCamera())
     {
         float2 intersectScreenUV = i.screenPos.xy / max(i.screenPos.w, 0.0001);
         float sceneDepth = LinearEyeDepth(UNITY_SAMPLE_SCREENSPACE_TEXTURE(_CameraDepthTexture, intersectScreenUV).r);
@@ -2419,7 +3185,7 @@ half4 frag(v2f i) : SV_Target
     #if defined(_DEPTH_COLOR_FADE)
     if (_DepthColorFade >= 0.5)
     {
-        float camDist = length(_WorldSpaceCameraPos - i.worldPos);
+        float camDist = NataneViewerDistance(i.worldPos);   // eye-centred, mirror-aware
         float depthFactor = saturate((camDist - _DepthFadeStart) / max(_DepthFadeEnd - _DepthFadeStart, 0.001));
         // Exponential falloff for more natural aerial perspective
         depthFactor = 1.0 - exp(-depthFactor * 3.0);
@@ -2436,21 +3202,70 @@ half4 frag(v2f i) : SV_Target
     // This is applied at the very end before fog for the most natural result
     #ifdef UNITY_PASS_FORWARDBASE
         col.rgb = ApplyFinalColorBlending(col.rgb);
+        #if defined(_EMISSION)
+            // Re-add the HDR emission overshoot after the LDR clamp so bloom works.
+            col.rgb += nataneHdrEmission;
+        #endif
+    #endif
+
+    // ===== Pixel Art: light/color posterize + palette + dither (post-lighting) =====
+    #if defined(_PIXEL_ART)
+    if (_PixelArt >= 0.5)
+    {
+        half natanePxMask = NATANE_SAMPLE_SHARED_R(_PixelArtMask, _MainTex, uv);
+        if (natanePxMask > 0.001)
+        {
+            half3 pxSrc = col.rgb;
+            half3 pxWork = col.rgb;
+            // Bayer dither breaks the posterization banding before the floor.
+            if (_PixelDither > 0.001)
+            {
+                half pxDith = (NataneBayerThreshold4x4(i.pos.xy, 1.0) - 0.5)
+                              / max(_PixelLightSteps, 1.0) * _PixelDither;
+                pxWork = saturate(pxWork + pxDith);
+            }
+            half3 pxQuant = NatanePixelPosterize(pxWork, _PixelLightSteps);
+            // Optional palette LUT remap by luminance (ForwardBase only — additive
+            // passes must not replace the accumulated base look with palette colors).
+            #ifdef UNITY_PASS_FORWARDBASE
+            if (_PixelPalette > 0.5)
+            {
+                half pxLum = dot(pxQuant, half3(0.299, 0.587, 0.114));
+                pxQuant = NATANE_SAMPLE_SHARED(_PixelPaletteTex, _MainTex, float2(saturate(pxLum), 0.5)).rgb;
+            }
+            #endif
+            col.rgb = lerp(pxSrc, pxQuant, natanePxMask);
+        }
+    }
+    #endif
+
+    // ===== Ghost appearance (GHOST variant only) =====
+    // Fresnel-shaped alpha: the silhouette edge stays visible while the
+    // center fades out, plus an additive spectral rim tint.
+    #ifdef GHOST_VARIANT
+    {
+        half ghostNdotV = saturate(dot(normalize(worldNormal), normalize(viewDir)));
+        half ghostFresnel = pow(1.0 - ghostNdotV, max(_GhostFresnelPower, 0.001));
+        col.a *= lerp(1.0, ghostFresnel, _GhostFresnelAlpha);
+        col.rgb += _GhostRimColor.rgb * ghostFresnel * _GhostRimStrength * col.a;
+    }
     #endif
 
     // ===== Hashed / Dithering Alpha =====
     #if defined(_HASHED_ALPHA)
         if (_HashedAlpha >= 0.5)
         {
-            float2 hashedScreenUV = i.screenPos.xy / max(i.screenPos.w, 0.0001);
-            float2 hashedScreenPos = hashedScreenUV * _ScreenParams.xy;
+            // Pixel coordinates straight from SV_POSITION: identical in mono, and not
+            // stretched 2x in double-wide stereo like "screenUV * _ScreenParams.xy" was.
+            float2 hashedScreenPos = i.pos.xy;
             clip(ApplyHashedAlpha(col.a, StabilizeDitherCoord(hashedScreenPos), i.worldPos.xz, _HashedAlphaScale));
         }
     #elif defined(_DITHERING_ALPHA)
         if (_DitheringAlpha >= 0.5)
         {
-            float2 ditherScreenUV = i.screenPos.xy / max(i.screenPos.w, 0.0001);
-            float2 ditherScreenPos = ditherScreenUV * _ScreenParams.xy;
+            // Pixel coordinates straight from SV_POSITION: identical in mono, and not
+            // stretched 2x in double-wide stereo like "screenUV * _ScreenParams.xy" was.
+            float2 ditherScreenPos = i.pos.xy;
             clip(ApplyDitheringAlpha(col.a, StabilizeDitherCoord(ditherScreenPos), max(_DitheringAlphaScale, 1.0)));
         }
     #endif

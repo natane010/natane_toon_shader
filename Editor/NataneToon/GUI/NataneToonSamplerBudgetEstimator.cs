@@ -17,6 +17,16 @@ namespace NataneToon.Editor
         public const int WarningThreshold = 13;
         public const int NearLimitThreshold = 15;
 
+        // Light Probe Proxy Volume (LPPV) binds one additional global sampler
+        // (unity_ProbeVolumeSH, a filtered 3D texture) but ONLY in the
+        // `UNITY_LIGHT_PROBE_PROXY_VOLUME` ForwardBase variant, and only while a
+        // renderer is actually driven by an LPPV component. It is a global,
+        // tier-driven keyword rather than a per-material feature toggle, so it
+        // is not part of the FeatureCosts table below and is not added to the
+        // per-material estimate. The BaseSamplerCount headroom (3 of 16) covers
+        // this worst-case +1. See Documentation~/LPPV_SUPPORT.md.
+        public const int LppvProbeVolumeSamplerCost = 1;
+
         private const int LightVolumeLtcgiReserve = 3;
         private const int CriticalLightingReserve = 1;
         private const int ScreenSpaceLightingReserve = 2;
@@ -122,6 +132,9 @@ namespace NataneToon.Editor
             new FeatureCost("_SSS", "SSS", "SSS", 0),
             new FeatureCost("_SSS_LUT", "SSS LUT", "SSS LUT", 0),
             new FeatureCost("_DISSOLVE", "Dissolve", "Dissolve", 0),
+            // Shadow Shape Rig: マスク 1 枚。NOSAMPLER で _MainTex のサンプラーを
+            // 共有するため、増えるのはテクスチャスロットだけでサンプラーは増えない。
+            new FeatureCost("_SHADOW_SHAPE_RIG", "影シェイプリグ", "Shadow Shape Rig", 0),
             new FeatureCost("_ALPHA_MASK", "Alpha Mask", "Alpha Mask", 0),
             new FeatureCost("_REFLECTION", "Reflection", "Reflection", 1),
             new FeatureCost("_IRIDESCENCE", "Iridescence", "Iridescence", 0),
@@ -199,9 +212,71 @@ namespace NataneToon.Editor
         private static readonly FeatureCost PcssShadowMapCost =
             new FeatureCost("__PCSS_SHADOWMAP", "Shadow Map", "Shadow Map", PcssShadowMapSamplerCost);
 
+        // ===== Shared estimate cache =====
+        // Estimate() はインスペクターの複数のドロワーから毎リペイント呼ばれる。
+        // キーワード状態のビットマスク(fingerprint)が変わらない限り、
+        // List/配列の確保・ソートを含む再計算を省いて前回結果を使い回す。
+
+        private struct CachedEstimate
+        {
+            public ulong Fingerprint;
+            public int ShaderInstanceId;
+            public SamplerBudgetEstimate Estimate;
+        }
+
+        private static readonly Dictionary<int, CachedEstimate> _estimateCache = new Dictionary<int, CachedEstimate>();
+        private const int EstimateCacheCapacity = 64;
+
+        /// <summary>
+        /// FeatureCosts のキーワード有効状態を1ビットずつ詰めたフィンガープリント。
+        /// アロケーションなしで「前回から機能構成が変わったか」を判定できる。
+        /// FeatureCosts が64件を超えたらビット割当を見直すこと（現在61件）。
+        /// </summary>
+        private static ulong ComputeFingerprint(Material material)
+        {
+            ulong mask = 0UL;
+            for (int i = 0; i < FeatureCosts.Length; i++)
+            {
+                if (material.IsKeywordEnabled(FeatureCosts[i].Keyword))
+                {
+                    mask |= 1UL << (i & 63);
+                }
+            }
+            return mask;
+        }
+
         public static SamplerBudgetEstimate Estimate(Material material)
         {
-            return Estimate(material, null, false);
+            if (material == null)
+            {
+                return Estimate(material, null, false);
+            }
+
+            int materialId = material.GetInstanceID();
+            int shaderId = material.shader != null ? material.shader.GetInstanceID() : 0;
+            ulong fingerprint = ComputeFingerprint(material);
+
+            CachedEstimate cached;
+            if (_estimateCache.TryGetValue(materialId, out cached) &&
+                cached.Fingerprint == fingerprint &&
+                cached.ShaderInstanceId == shaderId)
+            {
+                return cached.Estimate;
+            }
+
+            SamplerBudgetEstimate estimate = Estimate(material, null, false);
+
+            if (_estimateCache.Count >= EstimateCacheCapacity)
+            {
+                _estimateCache.Clear();
+            }
+            _estimateCache[materialId] = new CachedEstimate
+            {
+                Fingerprint = fingerprint,
+                ShaderInstanceId = shaderId,
+                Estimate = estimate
+            };
+            return estimate;
         }
 
         public static SamplerBudgetEstimate Estimate(Material material, string overrideKeyword, bool overrideEnabled)

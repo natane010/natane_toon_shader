@@ -4,119 +4,119 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Natane Toon Shader - Feature-Rich Toon Shader for VRChat</title>
-    <meta name="description" content="Natane Toon Shader is a feature-rich toon shader for Unity Built-in RP. Packed with AudioLink, multi MatCap, hologram, SSS, 59 presets, and more, optimized for VRChat.">
-    <link rel="stylesheet" href="../styles.css">
-    <script src="../nav.js"></script>
+    <meta name="description" content="Natane Toon Shader is a feature-rich toon shader for Unity Built-in RP and URP, with expressive rendering features and artist-friendly production tools.">
+    <link rel="icon" href="../assets/natane-studio-icon.jpg">
+    <link rel="stylesheet" href="../styles.css?v=studio-4">
+    <script src="../nav.js?v=studio-4"></script>
+    <script src="../home.js?v=studio-4"></script>
 </head>
-<body>
+<body class="home-page">
 
 <header class="site-header"></header>
 
 <div class="page-wrapper no-sidebar">
     <main class="main-content">
 
-        <!-- Hero -->
-        <section class="hero">
-            <h1>Natane Toon Shader</h1>
-            <div class="version-badge">v1.3.0 | Built-in RP | Unity 2019.4+</div>
-            <p class="description">
-                A feature-rich toon shader optimized for VRChat.<br>
-                Packed with AudioLink, multi MatCap, hologram, glitch, decal,<br>
-                SSS, dissolve effects, and much more.<br>
-                With 27+ editor tools and 59 presets, achieve an efficient workflow.
-            </p>
+        <section class="home-hero">
+            <div class="hero-copy">
+                <p class="eyebrow">NATANE STUDIO / TOON SHADER</p>
+                <h1><span class="hero-title-primary">Shape every surface.</span> <span class="hero-title-secondary">Define your look.</span></h1>
+                <p class="hero-lead">
+                    A toon shader for VRChat, built to bring out every character's identity.<br>
+                    From delicate lighting to bold effects, create without breaking your artistic flow.
+                </p>
+                <div class="hero-actions">
+                    <a class="button-primary" href="#docs">Get started</a>
+                    <a class="button-secondary" href="vcc://vpm/addRepo?url=https://natanetoon.com/index.json">Add to VCC</a>
+                    <a class="button-secondary" href="#features">Features</a>
+                </div>
+                <div class="compatibility-list" aria-label="Supported environments">
+                    <span data-release-version>v1.6.5</span>
+                    <span>Built-in RP</span>
+                    <span>URP / Unity 6</span>
+                    <span>Unity 2019.4+</span>
+                </div>
+            </div>
+
+            <div class="hero-visual" aria-label="Reserved space for a model image">
+                <div class="visual-grid" aria-hidden="true"></div>
+                <div class="visual-line visual-line-a" aria-hidden="true"></div>
+                <div class="visual-line visual-line-b" aria-hidden="true"></div>
+                <div class="visual-placeholder">
+                    <span class="placeholder-index">VISUAL 01</span>
+                    <strong>MODEL VISUAL</strong>
+                    <span>IMAGE COMING SOON</span>
+                </div>
+                <img class="studio-seal" src="../assets/natane-studio-icon.jpg" alt="Natane Studio">
+                <p class="visual-note">Reserved for model imagery</p>
+            </div>
         </section>
 
-        <!-- VCC Button -->
-        <section class="vcc-section">
-            <a class="vcc-button" href="vcc://vpm/addRepo?url=https://natanetoon.com/index.json">Add to VCC</a>
-            <div class="manual-url">
-                <p>To add manually, enter the following URL in VCC under Settings &gt; Packages &gt; Add Repository:</p>
+        <section class="home-facts" aria-label="Natane Toon Shader overview">
+            <div class="fact-item"><strong>59</strong><span>LOOK PRESETS</span></div>
+            <div class="fact-item"><strong>27+</strong><span>EDITOR TOOLS</span></div>
+            <div class="fact-item"><strong>JA / EN</strong><span>DOCUMENTATION</span></div>
+            <details class="install-details">
+                <summary>Manual installation</summary>
+                <p>Add this URL under VCC Settings &gt; Packages &gt; Add Repository</p>
                 <code>https://natanetoon.com/index.json</code>
-            </div>
+            </details>
         </section>
 
-        <!-- Documentation Cards -->
-        <h2 id="docs">Documentation</h2>
-        <div class="cards-grid">
-            <a class="card-link" href="params/basic/main-texture.html">
-                <div class="card-icon">🎨</div>
-                <h3>Basic</h3>
-                <p>Main texture, makeup, shading</p>
-            </a>
-            <a class="card-link" href="params/lighting/lighting-general.html">
-                <div class="card-icon">💡</div>
-                <h3>Lighting</h3>
-                <p>Light control, backlight, VRC Light Volumes</p>
-            </a>
-            <a class="card-link" href="params/effects/specular.html">
-                <div class="card-icon">✨</div>
-                <h3>Effects</h3>
-                <p>MatCap, outline, hologram, glitch</p>
-            </a>
-            <a class="card-link" href="params/environment/reflection.html">
-                <div class="card-icon">🌐</div>
-                <h3>Environment</h3>
-                <p>Reflection, iridescence, refraction</p>
-            </a>
-            <a class="card-link" href="params/advanced/normal-map.html">
-                <div class="card-icon">⚙️</div>
-                <h3>Advanced</h3>
-                <p>AudioLink, VAT, Distance Fade</p>
-            </a>
-            <a class="card-link" href="tools/index.html">
-                <div class="card-icon">🛠️</div>
-                <h3>Editor Tools</h3>
-                <p>27+ production support tools</p>
-            </a>
-        </div>
+        <section class="home-section" id="whats-new">
+            <div class="section-heading">
+                <p class="section-index">01 / LATEST UPDATE</p>
+                <div>
+                    <h2>New in <span data-release-version>v1.6.5</span></h2>
+                    <p>An update that expands the build-optimizer workspace and expression tools.</p>
+                </div>
+            </div>
 
-        <!-- Feature Highlights -->
-        <h2 id="features">Key Features</h2>
-        <div class="highlights">
-            <div class="highlight-item">
-                <span>🖌️</span>
-                Cel Shading
+            <div class="feature-showcase" data-home-featured></div>
+            <div class="update-list" data-home-updates aria-label="More new features"></div>
+
+            <div class="home-subheading">
+                <p class="section-index">EXPRESSION FEATURE UPDATE</p>
+                <h3>Eight new looks &mdash; hand-drawn, angle-based, scan, and more</h3>
             </div>
-            <div class="highlight-item">
-                <span>🎵</span>
-                AudioLink
+            <div class="feature-showcase" data-home-expression aria-label="Expression feature update"></div>
+        </section>
+
+        <section class="home-section" id="docs">
+            <div class="section-heading">
+                <p class="section-index">02 / DOCUMENTATION</p>
+                <div>
+                    <h2>Find what you need.</h2>
+                    <p>Parameter references and tool guides, organized by purpose.</p>
+                </div>
             </div>
-            <div class="highlight-item">
-                <span>🔮</span>
-                Multi MatCap
+
+            <div class="documentation-grid" data-home-docs></div>
+        </section>
+
+        <section class="home-section" id="features">
+            <div class="section-heading">
+                <p class="section-index">03 / CAPABILITIES</p>
+                <div><h2>One shader.<br>Countless looks.</h2></div>
             </div>
-            <div class="highlight-item">
-                <span>📡</span>
-                Hologram / Glitch
+            <div class="capability-list" data-home-capabilities></div>
+        </section>
+
+        <section class="home-cta">
+            <img src="../assets/natane-studio-icon.jpg" alt="" aria-hidden="true">
+            <div>
+                <p class="eyebrow">START CREATING</p>
+                <h2>Build your next look here.</h2>
             </div>
-            <div class="highlight-item">
-                <span>🫧</span>
-                SSS
-            </div>
-            <div class="highlight-item">
-                <span>🏷️</span>
-                Decal / Dissolve
-            </div>
-            <div class="highlight-item">
-                <span>💡</span>
-                VRC Light Volumes / LTCGI
-            </div>
-            <div class="highlight-item">
-                <span>📦</span>
-                59 Presets
-            </div>
-            <div class="highlight-item">
-                <span>🇯🇵</span>
-                Japanese UI
-            </div>
-        </div>
+            <a class="button-primary" href="vcc://vpm/addRepo?url=https://natanetoon.com/index.json">Add to VCC</a>
+        </section>
 
     </main>
 </div>
 
 <footer class="site-footer">
-    &copy; 2025 Natane Toon Shader. All rights reserved.
+    <span>&copy; 2026 Natane Studio</span>
+    <span>Natane Toon Shader</span>
 </footer>
 
 </body>

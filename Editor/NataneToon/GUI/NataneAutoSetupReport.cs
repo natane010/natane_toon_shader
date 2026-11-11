@@ -105,11 +105,11 @@ namespace NataneToon.Editor
         public static string CalculatePerformanceRating(Material mat)
         {
             if (mat == null) return "?";
-            int featureCount = CountEnabledFeatures(mat);
-            if (featureCount <= 3) return "A";
-            if (featureCount <= 6) return "B";
-            if (featureCount <= 9) return "C";
-            return "D";
+            NataneToonSamplerBudgetEstimator.SamplerBudgetEstimate estimate = NataneToonSamplerBudgetEstimator.Estimate(mat);
+            if (estimate.IsOverLimit || estimate.IsNearLimit) return "D";
+            if (estimate.IsWarning) return "C";
+            if (estimate.ExtraPassCount > 0) return "B";
+            return "A";
         }
 
         /// <summary>
@@ -117,39 +117,7 @@ namespace NataneToon.Editor
         /// </summary>
         public static int CountSamplers(Material mat)
         {
-            if (mat == null) return 0;
-            int count = 0;
-            string[] samplerProps = new[]
-            {
-                "_MainTex", "_BumpMap", "_SDFMap", "_ShadowReceiveMask",
-                "_SpecularMask", "_RimMask", "_MatCapTex", "_MatCapMask",
-                "_EmissionMap", "_EmissionMask", "_ThickMap", "_SSSMask",
-                "_GlitterMask", "_ReflectionCube", "_SheenMask",
-                "_MakeupTex2nd", "_MakeupTex3rd", "_MakeupTex4th",
-            };
-            foreach (string prop in samplerProps)
-            {
-                if (mat.HasProperty(prop) && mat.GetTexture(prop) != null)
-                    count++;
-            }
-            return count;
-        }
-
-        private static int CountEnabledFeatures(Material mat)
-        {
-            int count = 0;
-            string[] featureProps = new[]
-            {
-                "_Specular", "_HairSpecular", "_RimLight", "_SSS", "_MatCap",
-                "_Glitter", "_Reflection", "_Iridescence", "_EnvRim",
-                "_Outline", "_Emission", "_UseNormalMap", "_Parallax",
-            };
-            foreach (string prop in featureProps)
-            {
-                if (mat.HasProperty(prop) && mat.GetFloat(prop) > 0.5f)
-                    count++;
-            }
-            return count;
+            return mat == null ? 0 : NataneToonSamplerBudgetEstimator.Estimate(mat).EstimatedSamplers;
         }
 
         // ===== Display helpers =====

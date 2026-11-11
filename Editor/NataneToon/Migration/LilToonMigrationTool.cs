@@ -1016,6 +1016,17 @@ namespace NataneToon.Editor
             CaptureFloat(material, "_DstBlend", properties);
             CaptureFloat(material, "_AlphaToMask", properties);
 
+            // === Stencil ===
+            // 命名が lilToon と一致するため素通しで引き継げる。捨てると、
+            // See Through Hair 系のセットアップ済みアバターが移行で壊れる。
+            CaptureFloat(material, "_StencilRef", properties);
+            CaptureFloat(material, "_StencilComp", properties);
+            CaptureFloat(material, "_StencilOp", properties);
+            CaptureFloat(material, "_StencilFail", properties);
+            CaptureFloat(material, "_StencilZFail", properties);
+            CaptureFloat(material, "_StencilReadMask", properties);
+            CaptureFloat(material, "_StencilWriteMask", properties);
+
             return properties;
         }
 
@@ -1876,7 +1887,7 @@ namespace NataneToon.Editor
 
             if (isFakeShadowShader)
             {
-                report.infos.Add("FakeShadow shader detected. Minimal migration applied (color only).");
+                ApplyFakeShadowMigration(sourceProps, targetMaterial, report);
                 return;
             }
 
@@ -1891,6 +1902,86 @@ namespace NataneToon.Editor
             {
                 ApplyDarkColorCompensation(sourceProps, targetMaterial, report);
             }
+        }
+
+        /// <summary>
+        /// lilToon FakeShadow → <c>Natane/Toon Shader FakeShadow</c>。
+        ///
+        /// 以前はここが「色だけ写して終わり」で、移行してきたユーザーは前髪の落ち影を失っていた。
+        /// 相当バリアントを実装したので、実際にプロパティを対応付ける。
+        ///
+        /// ステンシルは両者で命名が同じなので素通しできる。See Through Hair 系のセットアップを
+        /// 済ませたアバターが、移行後もそのまま動くようにするために重要。
+        /// </summary>
+        private void ApplyFakeShadowMigration(
+            Dictionary<string, object> sourceProps,
+            Material targetMaterial,
+            ConversionReport report)
+        {
+            if (targetMaterial == null) return;
+
+            bool isFakeShadowTarget = targetMaterial.shader != null &&
+                                      targetMaterial.shader.name == "Natane/Toon Shader FakeShadow";
+
+            if (!isFakeShadowTarget)
+            {
+                report.infos.Add(
+                    "FakeShadow shader detected, but the FakeShadow variant was not available. " +
+                    "Only the color was migrated — the drop shadow will not render correctly.");
+                return;
+            }
+
+            var migrated = new List<string>();
+
+            // 色とアルファ。lilToon 側は _Color のアルファに濃さを持たせている。
+            if (sourceProps.TryGetValue("_Color", out object colorObj) && colorObj is Color sourceColor)
+            {
+                targetMaterial.SetColor("_ShadowColor", new Color(sourceColor.r, sourceColor.g, sourceColor.b, 1f));
+                targetMaterial.SetFloat("_ShadowAlpha", Mathf.Clamp01(sourceColor.a));
+                migrated.Add("_Color → _ShadowColor / _ShadowAlpha");
+            }
+
+            // 影の形テクスチャ。
+            if (sourceProps.TryGetValue("_MainTex", out object texObj) && texObj is Texture mainTex)
+            {
+                targetMaterial.SetTexture("_ShadowTex", mainTex);
+                migrated.Add("_MainTex → _ShadowTex");
+            }
+
+            // Stencil は同名なのでそのまま引き継ぐ。
+            string[] stencilProps =
+            {
+                "_StencilRef", "_StencilComp", "_StencilOp",
+                "_StencilFail", "_StencilZFail", "_StencilReadMask", "_StencilWriteMask"
+            };
+
+            var stencilMigrated = new List<string>();
+            foreach (string prop in stencilProps)
+            {
+                if (!sourceProps.TryGetValue(prop, out object value)) continue;
+                if (!targetMaterial.HasProperty(prop)) continue;
+                if (!(value is float f)) continue;
+
+                targetMaterial.SetFloat(prop, f);
+                stencilMigrated.Add(prop);
+            }
+
+            if (stencilMigrated.Count > 0)
+            {
+                migrated.Add($"Stencil ({stencilMigrated.Count} properties, names match so values pass through)");
+            }
+
+            // カリング。lilToon の _Cull と同じ enum。
+            if (sourceProps.TryGetValue("_Cull", out object cullObj) && cullObj is float cull &&
+                targetMaterial.HasProperty("_Cull"))
+            {
+                targetMaterial.SetFloat("_Cull", cull);
+                migrated.Add("_Cull");
+            }
+
+            report.infos.Add(migrated.Count > 0
+                ? "FakeShadow migrated to Natane/Toon Shader FakeShadow: " + string.Join(", ", migrated)
+                : "FakeShadow migrated to Natane/Toon Shader FakeShadow (no source properties to carry over).");
         }
 
         private void ApplyGemCompensation(
@@ -2122,6 +2213,19 @@ namespace NataneToon.Editor
         private Shader DetectNataneShaderVariant(Material sourceMaterial)
         {
             string shaderName = sourceMaterial.shader.name.ToLower();
+
+            // --- Step 0: FakeShadow ---
+            // 前髪の落ち影専用シェーダー。本体バリアントへ変換すると
+            // 「146 機能を持つ不透明マテリアルになった板ポリ」になってしまい、
+            // 落ち影として成立しない。専用バリアントへ振り分ける。
+            if (shaderName.Contains("fakeshadow"))
+            {
+                Shader fakeShadow = Shader.Find("Natane/Toon Shader FakeShadow");
+                if (fakeShadow != null) return fakeShadow;
+                // 未導入なら従来どおり半透明バリアントへ落とす（絵は崩れるが黒板にはならない）。
+                Shader fallback = Shader.Find("Natane/Toon Shader (Transparent)");
+                if (fallback != null) return fallback;
+            }
 
             // --- Step 1: シェーダー名から判定 ---
             // lilToon の命名パターン: "cutout", "transparent", "fade", "gem" 等

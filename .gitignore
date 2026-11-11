@@ -90,8 +90,23 @@ QUALITY_AUDIT_COMPREHENSIVE_REPORT.md.meta
 en/
 en.meta
 Website/
+!Website/
+Website/*
+!Website/home.js
+!Website/home.js.meta
+!Website/assets.meta
+!Website/assets/
+Website/assets/*
+!Website/assets/natane-studio-icon.jpg
+!Website/assets/natane-studio-icon.jpg.meta
 Website/en.meta
 params/
 params.meta
 handoff.meta
 tools.meta
+
+# リファクタ検証用に自動生成されるマテリアル/シーンオブジェクト。
+# Tools > Natane > 開発 Dev > リファクタ検証オブジェクトを現在のシーンに追加
+# から決定的に再生成できる派生物なので、リポジトリと配布パッケージには含めない。
+Tests/Verification/
+Tests/Verification.meta

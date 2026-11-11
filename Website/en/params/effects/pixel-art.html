@@ -1,0 +1,116 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Pixel Art - Natane Toon Shader</title>
+  <link rel="stylesheet" href="../../../styles.css">
+</head>
+<body>
+<header class="site-header"></header>
+<div class="page-wrapper">
+  <aside class="sidebar"></aside>
+  <main class="main-content">
+    <nav class="breadcrumb"></nav>
+    <h1>Pixel Art</h1>
+    <p class="page-subtitle">Make a 3D model look like pixel art. Snap textures to a pixel grid and quantize lighting and color for a retro-game or PS1-era look. (v1.6.0)</p>
+
+    <div class="feature-preview" aria-hidden="true">
+      <span class="preview-tag">PREVIEW</span>
+      <em class="preview-name">Pixel Art</em>
+    </div>
+
+    <h2 id="overview">Overview</h2>
+    <p>This implements UV pixelation, lighting/color quantization, a palette LUT, and dithering. Where <a href="color-quantize.html">Color Quantize</a> reduces only the number of colors, this also <strong>lowers the spatial resolution</strong>. It toggles with <code>_PIXEL_ART</code> and is zero cost when off.</p>
+    <p><strong>Mirror-safe by design</strong>: Screen Pixelation and Object-Stable Pixelation are intentionally omitted. Screen-space snapping is unsafe in VR (pixel seams appear between the two eyes) and object-stable reprojection is costly. This feature provides a mirror-safe subset in texture space and color space.</p>
+
+    <h2 id="looks">What you can make</h2>
+    <ul>
+      <li>Pixel-art versions of 3D characters; PS1 / retro-3D looks</li>
+      <li>2D-game sprite style; voxel-game style</li>
+      <li>Low-resolution horror; a "digitize just one area" effect</li>
+      <li>Pixel-collapse on damage; switching between real and virtual space</li>
+    </ul>
+
+    <h2 id="key-params">Key parameters</h2>
+
+    <div class="param-card">
+      <div class="param-header">
+        <span class="param-name">Virtual Resolution</span>
+        <span class="param-prop">_PixelArtSize</span>
+        <span class="param-badge badge-range">range (4&ndash;512)</span>
+      </div>
+      <div class="param-body">
+        <p>The virtual resolution the UVs snap to. Lower gives coarser (bigger) pixels and a stronger retro feel.</p>
+        <p class="param-default">Default: 64</p>
+      </div>
+      <div class="param-tip">Around 32&ndash;64 for an 8-bit console feel; near 128 for finer pixels.</div>
+    </div>
+
+    <div class="param-card">
+      <div class="param-header">
+        <span class="param-name">Quantization Steps</span>
+        <span class="param-prop">_PixelLightSteps</span>
+        <span class="param-badge badge-range">range (2&ndash;32)</span>
+      </div>
+      <div class="param-body">
+        <p>How many steps lighting/color is rounded to. Fewer steps read as flat-filled pixel art.</p>
+        <p class="param-default">Default: 6</p>
+      </div>
+    </div>
+
+    <div class="param-card">
+      <div class="param-header">
+        <span class="param-name">Palette LUT</span>
+        <span class="param-prop">_PixelPalette / _PixelPaletteTex</span>
+        <span class="param-badge badge-toggle">toggle + 2D</span>
+      </div>
+      <div class="param-body">
+        <p>When on, it samples a horizontal palette LUT (<code>_PixelPaletteTex</code>) by luminance to restrict the colors used &mdash; a Game Boy-style limited palette, for example.</p>
+        <p class="param-default">Default: off</p>
+      </div>
+      <div class="param-tip">Palette replacement happens in ForwardBase only (additional passes must not recolor the base).</div>
+    </div>
+
+    <div class="param-card">
+      <div class="param-header">
+        <span class="param-name">Dither</span>
+        <span class="param-prop">_PixelDither</span>
+        <span class="param-badge badge-range">range (0&ndash;1)</span>
+      </div>
+      <div class="param-body">
+        <p>Bayer dither amount. Added before quantization to ease banding even with few color steps.</p>
+        <p class="param-default">Default: 0</p>
+      </div>
+    </div>
+
+    <h2 id="all-params">All parameters</h2>
+    <table>
+      <thead>
+        <tr><th>Property</th><th>Type / Default</th><th>Description</th></tr>
+      </thead>
+      <tbody>
+        <tr><td><code>_PixelArt</code></td><td>Toggle / 0</td><td>Enable (<code>_PIXEL_ART</code>)</td></tr>
+        <tr><td><code>_PixelArtSize</code></td><td>Range(4,512) / 64</td><td>Virtual resolution (UV snap)</td></tr>
+        <tr><td><code>_PixelLightSteps</code></td><td>Range(2,32) / 6</td><td>Lighting / color quantization steps</td></tr>
+        <tr><td><code>_PixelPalette</code></td><td>Toggle / 0</td><td>Use a palette LUT</td></tr>
+        <tr><td><code>_PixelPaletteTex</code></td><td>2D / white</td><td>Horizontal palette LUT (sampled by luminance)</td></tr>
+        <tr><td><code>_PixelDither</code></td><td>Range(0,1) / 0</td><td>Bayer dither amount</td></tr>
+        <tr><td><code>_PixelArtMask</code></td><td>2D (R) / white</td><td>Mask</td></tr>
+      </tbody>
+    </table>
+
+    <h2 id="tips">Usage Tips</h2>
+    <ul>
+      <li><strong>Where it applies</strong>: UV pixelation snaps only <code>mainUV</code> right after UV animation resolves; other UV-driven features keep native resolution. Color/light quantization posterizes after lighting.</li>
+      <li><strong>Cohesive retro look</strong>: combine <a href="../advanced/perspective-flat.html">Perspective Flat</a>, <a href="color-quantize.html">Color Quantize</a>, dither, and a pixel outline to push a 3D model toward a low-res 2D sprite.</li>
+      <li><strong>Mask</strong>: use the R channel of <code>_PixelArtMask</code> to digitize just one area.</li>
+    </ul>
+
+    <nav class="page-nav"></nav>
+  </main>
+</div>
+<footer class="site-footer">&copy; 2025 Natane Toon Shader.</footer>
+<script src="../../../nav.js"></script>
+</body>
+</html>

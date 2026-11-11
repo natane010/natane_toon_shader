@@ -1,0 +1,102 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>FXモジュレーター - Natane Toon Shader</title>
+  <link rel="stylesheet" href="../../styles.css">
+</head>
+<body>
+<header class="site-header"></header>
+<div class="page-wrapper">
+  <aside class="sidebar"></aside>
+  <main class="main-content">
+    <nav class="breadcrumb"></nav>
+    <h1>FXモジュレーター</h1>
+    <p class="page-subtitle">時間・音・距離・視線角度で、他の機能を自動的に動かす制御装置です。心拍のように Emission が脈動したり、カメラが近づくと覚醒したり、Bass に合わせて等高線が流れる、といった演出を作れます。(v1.6.0)</p>
+
+    <div class="feature-preview" aria-hidden="true">
+      <span class="preview-tag">PREVIEW</span>
+      <em class="preview-name">FX Modulator</em>
+    </div>
+
+    <h2 id="overview">概要</h2>
+    <p>この機能自体は色や模様を描きません。<strong>Source (入力信号)</strong> から取得した値を <strong>Target (適用先)</strong> のパラメータへ乗算 / 加算し、他の機能を「動かす」制御システムです。2 つのスロット (0 / 1) を持ち、複数の変化を組み合わせられます。</p>
+    <p>スロット値はフラグメント冒頭で一度だけ計算され、各ターゲット地点で適用されます。キーワード <code>_FX_MODULATOR</code> で切り替わり、OFF 時はゼロコストです。AudioLink 系ソースは <code>_AUDIOLINK</code> 併用時のみ有効になります。</p>
+
+    <h2 id="looks">作れる表現</h2>
+    <ul>
+      <li>音に合わせて模様が切り替わる、Bass に合わせて等高線が上へ流れる</li>
+      <li>心拍のように Emission が脈動する</li>
+      <li>カメラが近づくと覚醒する (CameraDistance)</li>
+      <li>横から見たときだけグリッチする (ViewAngle)</li>
+    </ul>
+
+    <h2 id="sources">信号ソース (Source)</h2>
+    <table>
+      <thead>
+        <tr><th>値</th><th>ソース</th><th>内容</th></tr>
+      </thead>
+      <tbody>
+        <tr><td>0〜4</td><td>Sine / Saw / Triangle / Pulse / RandomStep</td><td>時間ベースの波形</td></tr>
+        <tr><td>5〜8</td><td>AudioLink Bass / LowMid / HighMid / Treble</td><td>音の帯域 (<code>_AUDIOLINK</code> 必須、非対応時は中立 0)</td></tr>
+        <tr><td>9</td><td>Chronotensity</td><td>AudioLink の累積時間</td></tr>
+        <tr><td>10</td><td>CameraDistance</td><td>カメラからの距離 (<code>_FXModDistMin/Max</code> で正規化)</td></tr>
+        <tr><td>11</td><td>ViewAngle</td><td>視線角度</td></tr>
+        <tr><td>12</td><td>Manual</td><td>手動値 (<code>_FXModManual</code>)</td></tr>
+      </tbody>
+    </table>
+
+    <h2 id="targets">適用先 (Target)</h2>
+    <table>
+      <thead>
+        <tr><th>値</th><th>ターゲット</th><th>適用</th></tr>
+      </thead>
+      <tbody>
+        <tr><td>0</td><td>None</td><td>なし</td></tr>
+        <tr><td>1</td><td>EmissionIntensity</td><td>乗算</td></tr>
+        <tr><td>2</td><td>HueShift</td><td>加算</td></tr>
+        <tr><td>3</td><td>RimIntensity</td><td>乗算</td></tr>
+        <tr><td>4</td><td>OutlineWidth</td><td>乗算 (OUTLINE パスでも動作)</td></tr>
+        <tr><td>5</td><td>LineBoilStrength</td><td>乗算</td></tr>
+        <tr><td>6</td><td>TopographicOffset</td><td>加算</td></tr>
+      </tbody>
+    </table>
+
+    <h2 id="all-params">スロットごとのパラメータ</h2>
+    <p><code>{n}</code> はスロット番号 (0 または 1) です。2 スロットとも同じ構成のプロパティを持ちます。</p>
+    <table>
+      <thead>
+        <tr><th>プロパティ</th><th>型 / 既定</th><th>説明</th></tr>
+      </thead>
+      <tbody>
+        <tr><td><code>_FXModulator</code></td><td>Toggle / 0</td><td>有効化 (<code>_FX_MODULATOR</code>)</td></tr>
+        <tr><td><code>_FXModSource{n}</code></td><td>Enum(0-12) / 0</td><td>信号ソース</td></tr>
+        <tr><td><code>_FXModTarget{n}</code></td><td>Enum(0-6) / 0</td><td>適用先</td></tr>
+        <tr><td><code>_FXModAmount{n}</code></td><td>Float / 0</td><td>変調量 (0 で中立)</td></tr>
+        <tr><td><code>_FXModOffset{n}</code></td><td>Float / 0</td><td>位相オフセット</td></tr>
+        <tr><td><code>_FXModSpeed{n}</code></td><td>Float / 1</td><td>速度</td></tr>
+        <tr><td><code>_FXModMin{n}</code> / <code>_FXModMax{n}</code></td><td>Float / 0, 1</td><td>出力レンジ最小 / 最大</td></tr>
+        <tr><td><code>_FXModInvert{n}</code></td><td>Toggle / 0</td><td>反転</td></tr>
+        <tr><td><code>_FXModCurve{n}</code></td><td>Range(0.1,5) / 1</td><td>カーブ (pow)</td></tr>
+        <tr><td><code>_FXModManual{n}</code></td><td>Range(0,1) / 0.5</td><td>Manual ソース値</td></tr>
+        <tr><td><code>_FXModDistMin{n}</code> / <code>_FXModDistMax{n}</code></td><td>Float / 0, 10</td><td>CameraDistance 正規化範囲</td></tr>
+        <tr><td><code>_FXModMaskTex</code></td><td>2D / white</td><td>共有マスク (R=スロット0, G=スロット1)</td></tr>
+      </tbody>
+    </table>
+
+    <h2 id="tips">使い方のヒント</h2>
+    <ul>
+      <li><strong>まずは 1 スロット</strong>: Source を選び、Target を決め、Amount を 0 から少しずつ上げると変化が見えます。Amount が 0 のときは何も起きません (中立)。</li>
+      <li><strong>音に反応させる</strong>: Source に AudioLink 系を選ぶには<a href="audiolink.html">AudioLink</a> (<code>_AUDIOLINK</code>) が必要です。非対応環境では中立値になり破綻しません。</li>
+      <li><strong>出力を整える</strong>: <code>Min/Max</code> で出力範囲、<code>Curve</code> で反応カーブ、<code>Invert</code> で反転を調整します。</li>
+      <li><strong>マスク</strong>: <code>_FXModMaskTex</code> の R チャンネルがスロット0、G チャンネルがスロット1 に対応します。</li>
+    </ul>
+
+    <nav class="page-nav"></nav>
+  </main>
+</div>
+<footer class="site-footer">&copy; 2025 Natane Toon Shader.</footer>
+<script src="../../nav.js"></script>
+</body>
+</html>

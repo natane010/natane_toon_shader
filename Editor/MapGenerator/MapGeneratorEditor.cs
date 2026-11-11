@@ -106,6 +106,7 @@ public static class MapGeneratorEngine
     private static ComputeShader _normalCS;
     private static ComputeShader _dilationCS;
     private static ComputeShader _channelPackCS;
+    private static ComputeShader _faceSdfCS;
     private const int MaxBakeResolution = 8192;
 
     // ===== Public Generation API =====
@@ -547,6 +548,312 @@ public static class MapGeneratorEngine
             if (ownsMesh && workingMesh != null) UnityEngine.Object.DestroyImmediate(workingMesh);
             EditorUtility.ClearProgressBar();
         }
+    }
+
+    // ===== Face SDF Shadow Map =====
+
+    /// <summary>
+    /// Bake the angle field that <c>_FACE_SDF_ROTATION</c> actually consumes.
+    ///
+    /// For every texel the horizontal light angle theta is swept from 0 deg (light in
+    /// front of the face) to 180 deg (light behind), and the first angle at which the
+    /// texel flips into shadow is recorded. That transition angle is encoded as
+    /// <c>s = (1 - cos theta_t) / 2</c>, which is monotonic over [0,1] and matches the
+    /// threshold the runtime shader compares against.
+    ///
+    /// Only the right half is swept; the shader mirrors UV.x for the other side.
+    /// </summary>
+    public static Texture2D GenerateFaceSdfMap(Mesh mesh, Renderer renderer, MapGenSettings s)
+    {
+        return GenerateFaceSdfMapInternal(mesh, renderer, s, false);
+    }
+
+    private static Texture2D GenerateFaceSdfMapInternal(Mesh mesh, Renderer renderer, MapGenSettings settings, bool meshIsPrepared)
+    {
+        if (renderer == null)
+        {
+            Debug.LogWarning("[MapGenerator] Face SDF bake needs a Renderer to resolve the world transform.");
+            return null;
+        }
+
+        Mesh workingMesh = mesh;
+        bool ownsMesh = false;
+        if (!meshIsPrepared)
+            workingMesh = PrepareBakeMesh(mesh, renderer, settings, out ownsMesh);
+
+        if (workingMesh == null)
+            return null;
+
+        try
+        {
+            int resolution = Mathf.Clamp(Mathf.NextPowerOfTwo(settings.faceSdfResolution), 128, 2048);
+            int angleSteps = Mathf.Clamp(settings.faceSdfAngleSteps, 8, 180);
+
+            Transform xform = renderer.transform;
+            Vector3 faceForward = xform.TransformDirection(SafeDirection(settings.faceSdfForward, Vector3.forward)).normalized;
+            Vector3 faceRight = xform.TransformDirection(SafeDirection(settings.faceSdfRight, Vector3.right)).normalized;
+
+            // Re-orthogonalize: an author-entered pair is rarely exactly perpendicular,
+            // and a skewed basis would tilt the whole sweep.
+            faceRight = (faceRight - Vector3.Dot(faceRight, faceForward) * faceForward).normalized;
+            if (faceRight.sqrMagnitude < 0.0001f)
+                faceRight = Vector3.Cross(Vector3.up, faceForward).normalized;
+
+            if (SystemInfo.supportsComputeShaders)
+            {
+                LoadShaders();
+                if (_faceSdfCS != null)
+                {
+                    Texture2D gpu = BakeFaceSdfGPU(workingMesh, xform, faceForward, faceRight,
+                        resolution, angleSteps, settings);
+                    if (gpu != null)
+                        return gpu;
+                }
+            }
+
+            Debug.LogWarning(
+                "[MapGenerator] Face SDF: compute shaders unavailable — falling back to a per-vertex " +
+                "approximation. Occlusion (nose / eyelash cast shadows) is NOT included, so the result " +
+                "is a smooth angle field rather than a real shadow boundary.");
+            return BakeFaceSdfCPU(workingMesh, xform, faceForward, faceRight, resolution, angleSteps, settings);
+        }
+        finally
+        {
+            if (ownsMesh && workingMesh != null) UnityEngine.Object.DestroyImmediate(workingMesh);
+            EditorUtility.ClearProgressBar();
+        }
+    }
+
+    private static Vector3 SafeDirection(Vector3 value, Vector3 fallback)
+    {
+        return value.sqrMagnitude < 0.000001f ? fallback : value.normalized;
+    }
+
+    private static Texture2D BakeFaceSdfGPU(Mesh mesh, Transform xform,
+        Vector3 faceForward, Vector3 faceRight, int resolution, int angleSteps, MapGenSettings settings)
+    {
+        Vector3[] localVertices = mesh.vertices;
+        Vector3[] localNormals = mesh.normals;
+        Vector2[] uvs = mesh.uv;
+        int[] triangles = mesh.triangles;
+
+        if (localVertices.Length == 0 || triangles.Length == 0 || uvs.Length != localVertices.Length)
+        {
+            Debug.LogWarning("[MapGenerator] Face SDF: mesh has no usable UV0 / triangles.");
+            return null;
+        }
+
+        if (localNormals == null || localNormals.Length != localVertices.Length)
+        {
+            mesh.RecalculateNormals();
+            localNormals = mesh.normals;
+        }
+
+        // Everything is evaluated in world space so the basis the user picks lines up
+        // with what _FaceForwardDirection / _FaceRightDirection do at runtime.
+        var worldVertices = new Vector3[localVertices.Length];
+        var worldNormals = new Vector3[localVertices.Length];
+        Bounds bounds = new Bounds(xform.TransformPoint(localVertices[0]), Vector3.zero);
+        for (int i = 0; i < localVertices.Length; i++)
+        {
+            worldVertices[i] = xform.TransformPoint(localVertices[i]);
+            worldNormals[i] = xform.TransformDirection(localNormals[i]).normalized;
+            bounds.Encapsulate(worldVertices[i]);
+        }
+
+        int triCount = triangles.Length / 3;
+        int depthSize = Mathf.Clamp(resolution, 256, 1024);
+
+        ComputeBuffer vertBuffer = null, nrmBuffer = null, uvBuffer = null, triBuffer = null, depthBuffer = null;
+        RenderTexture posRT = null, nrmRT = null, stateRT = null, resultRT = null;
+
+        try
+        {
+            vertBuffer = new ComputeBuffer(worldVertices.Length, sizeof(float) * 3);
+            nrmBuffer = new ComputeBuffer(worldNormals.Length, sizeof(float) * 3);
+            uvBuffer = new ComputeBuffer(uvs.Length, sizeof(float) * 2);
+            triBuffer = new ComputeBuffer(triangles.Length, sizeof(int));
+            depthBuffer = new ComputeBuffer(depthSize * depthSize, sizeof(uint));
+
+            vertBuffer.SetData(worldVertices);
+            nrmBuffer.SetData(worldNormals);
+            uvBuffer.SetData(uvs);
+            triBuffer.SetData(triangles);
+
+            posRT = CreateRT(resolution, resolution);
+            nrmRT = CreateRT(resolution, resolution);
+            stateRT = CreateRT(resolution, resolution);
+            resultRT = CreateRT(resolution, resolution);
+
+            int kClearG = _faceSdfCS.FindKernel("CSClearGBuffer");
+            int kBakeG = _faceSdfCS.FindKernel("CSBakeGBuffer");
+            int kClearD = _faceSdfCS.FindKernel("CSClearDepth");
+            int kRasterD = _faceSdfCS.FindKernel("CSRasterDepth");
+            int kClearS = _faceSdfCS.FindKernel("CSClearState");
+            int kAccum = _faceSdfCS.FindKernel("CSAccumulate");
+            int kFinal = _faceSdfCS.FindKernel("CSFinalize");
+
+            _faceSdfCS.SetInts("_TexSize", resolution, resolution);
+            _faceSdfCS.SetInts("_DepthSize", depthSize, depthSize);
+            _faceSdfCS.SetInt("_TriangleCount", triCount);
+            _faceSdfCS.SetInt("_AngleCount", angleSteps);
+            _faceSdfCS.SetFloat("_DepthBias", Mathf.Max(0.0001f, settings.faceSdfDepthBias));
+
+            int texGroups = Mathf.CeilToInt(resolution / 8f);
+            int triGroups = Mathf.CeilToInt(triCount / 64f);
+            int depthGroups = Mathf.CeilToInt(depthSize * depthSize / 64f);
+
+            // 1. UV-space G-buffer (world position + normal per texel).
+            _faceSdfCS.SetTexture(kClearG, "_PosMap", posRT);
+            _faceSdfCS.SetTexture(kClearG, "_NrmMap", nrmRT);
+            _faceSdfCS.Dispatch(kClearG, texGroups, texGroups, 1);
+
+            _faceSdfCS.SetBuffer(kBakeG, "_Vertices", vertBuffer);
+            _faceSdfCS.SetBuffer(kBakeG, "_Normals", nrmBuffer);
+            _faceSdfCS.SetBuffer(kBakeG, "_UVs", uvBuffer);
+            _faceSdfCS.SetBuffer(kBakeG, "_Triangles", triBuffer);
+            _faceSdfCS.SetTexture(kBakeG, "_PosMap", posRT);
+            _faceSdfCS.SetTexture(kBakeG, "_NrmMap", nrmRT);
+            _faceSdfCS.Dispatch(kBakeG, triGroups, 1, 1);
+
+            // 2. Reset the per-texel sweep state.
+            _faceSdfCS.SetTexture(kClearS, "_State", stateRT);
+            _faceSdfCS.Dispatch(kClearS, texGroups, texGroups, 1);
+
+            // 3. Sweep the horizontal light angle across the right half of the face.
+            Vector3 faceUp = Vector3.Cross(faceForward, faceRight).normalized;
+            Vector3 boundsExtent = new Vector3(
+                Mathf.Max(bounds.extents.magnitude, 0.001f),
+                Mathf.Max(bounds.extents.magnitude, 0.001f),
+                Mathf.Max(bounds.extents.magnitude, 0.001f));
+
+            for (int i = 0; i < angleSteps; i++)
+            {
+                if (EditorUtility.DisplayCancelableProgressBar(
+                        "Face SDF Shadow Map",
+                        $"Sweeping light angle... ({i + 1}/{angleSteps})",
+                        (float)i / angleSteps))
+                {
+                    return null;
+                }
+
+                float theta = Mathf.PI * i / Mathf.Max(angleSteps - 1, 1);
+                Vector3 lightDir = (faceForward * Mathf.Cos(theta) + faceRight * Mathf.Sin(theta)).normalized;
+
+                // A stable perpendicular basis for the light-space depth buffer.
+                Vector3 lightRight = Vector3.Cross(faceUp, lightDir).normalized;
+                if (lightRight.sqrMagnitude < 0.0001f)
+                    lightRight = faceRight;
+                Vector3 lightUp = Vector3.Cross(lightDir, lightRight).normalized;
+
+                _faceSdfCS.SetVector("_LightDir", lightDir);
+                _faceSdfCS.SetVector("_LightRight", lightRight);
+                _faceSdfCS.SetVector("_LightUp", lightUp);
+                _faceSdfCS.SetVector("_BoundsCenter", bounds.center);
+                _faceSdfCS.SetVector("_BoundsExtent", boundsExtent);
+                _faceSdfCS.SetInt("_AngleIndex", i);
+
+                _faceSdfCS.SetBuffer(kClearD, "_LightDepth", depthBuffer);
+                _faceSdfCS.Dispatch(kClearD, depthGroups, 1, 1);
+
+                _faceSdfCS.SetBuffer(kRasterD, "_Vertices", vertBuffer);
+                _faceSdfCS.SetBuffer(kRasterD, "_Triangles", triBuffer);
+                _faceSdfCS.SetBuffer(kRasterD, "_LightDepth", depthBuffer);
+                _faceSdfCS.Dispatch(kRasterD, triGroups, 1, 1);
+
+                _faceSdfCS.SetTexture(kAccum, "_PosMap", posRT);
+                _faceSdfCS.SetTexture(kAccum, "_NrmMap", nrmRT);
+                _faceSdfCS.SetTexture(kAccum, "_State", stateRT);
+                _faceSdfCS.SetBuffer(kAccum, "_LightDepth", depthBuffer);
+                _faceSdfCS.Dispatch(kAccum, texGroups, texGroups, 1);
+            }
+
+            // 4. Transition index -> s.
+            _faceSdfCS.SetTexture(kFinal, "_PosMap", posRT);
+            _faceSdfCS.SetTexture(kFinal, "_State", stateRT);
+            _faceSdfCS.SetTexture(kFinal, "_Result", resultRT);
+            _faceSdfCS.Dispatch(kFinal, texGroups, texGroups, 1);
+
+            Texture2D result = RTToTexture2D(resultRT, resolution, resolution);
+
+            // 5. Fill UV seams, then a light smooth. Kept deliberately small so it does
+            //    not compound with _SDFSoftness at runtime.
+            if (settings.faceSdfDilation > 0 && _dilationCS != null)
+                result = ApplyDilationGPU(result, resolution, resolution, settings.faceSdfDilation);
+            if (settings.faceSdfBlur > 0 && _blurCS != null)
+                result = ApplyBlurGPU(result, resolution, resolution, settings.faceSdfBlur);
+
+            return result;
+        }
+        finally
+        {
+            EditorUtility.ClearProgressBar();
+            vertBuffer?.Release();
+            nrmBuffer?.Release();
+            uvBuffer?.Release();
+            triBuffer?.Release();
+            depthBuffer?.Release();
+            if (posRT != null) RenderTexture.ReleaseTemporary(posRT);
+            if (nrmRT != null) RenderTexture.ReleaseTemporary(nrmRT);
+            if (stateRT != null) RenderTexture.ReleaseTemporary(stateRT);
+            if (resultRT != null) RenderTexture.ReleaseTemporary(resultRT);
+        }
+    }
+
+    /// <summary>
+    /// Per-vertex fallback for machines without compute shaders. It only evaluates
+    /// N dot L, so cast shadows (nose, eyelashes) are missing — the caller warns about
+    /// this. The angle encoding is identical, so the map is still usable, just softer.
+    /// </summary>
+    private static Texture2D BakeFaceSdfCPU(Mesh mesh, Transform xform,
+        Vector3 faceForward, Vector3 faceRight, int resolution, int angleSteps, MapGenSettings settings)
+    {
+        Vector3[] localVertices = mesh.vertices;
+        Vector3[] localNormals = mesh.normals;
+        if (localNormals == null || localNormals.Length != localVertices.Length)
+        {
+            mesh.RecalculateNormals();
+            localNormals = mesh.normals;
+        }
+
+        var values = new float[localVertices.Length];
+
+        for (int v = 0; v < localVertices.Length; v++)
+        {
+            Vector3 worldNormal = xform.TransformDirection(localNormals[v]).normalized;
+
+            int transition = -1;
+            bool everLit = false;
+            for (int i = 0; i < angleSteps; i++)
+            {
+                float theta = Mathf.PI * i / Mathf.Max(angleSteps - 1, 1);
+                Vector3 lightDir = (faceForward * Mathf.Cos(theta) + faceRight * Mathf.Sin(theta)).normalized;
+                bool lit = Vector3.Dot(worldNormal, lightDir) > 0f;
+
+                if (lit)
+                {
+                    everLit = true;
+                }
+                else if (everLit)
+                {
+                    transition = i;
+                    break;
+                }
+            }
+
+            if (transition < 0)
+            {
+                values[v] = everLit ? 1f : 0f;
+            }
+            else
+            {
+                float thetaT = Mathf.PI * transition / Mathf.Max(angleSteps - 1, 1);
+                values[v] = (1f - Mathf.Cos(thetaT)) * 0.5f;
+            }
+        }
+
+        return BakeAndPostProcess(mesh, values, resolution, resolution,
+            settings.faceSdfDilation, settings.faceSdfBlur);
     }
 
     public static Texture2D GenerateNormalMap(Texture2D albedo, MapGenSettings s,
@@ -1744,6 +2051,7 @@ public static class MapGeneratorEngine
         if (_normalCS == null) _normalCS = FindComputeShader("MapGen_NormalFromHeight");
         if (_dilationCS == null) _dilationCS = FindComputeShader("MapGen_Dilation");
         if (_channelPackCS == null) _channelPackCS = FindComputeShader("MapGen_ChannelPack");
+        if (_faceSdfCS == null) _faceSdfCS = FindComputeShader("MapGen_FaceSdfBake");
     }
 
     internal static ComputeShader FindComputeShader(string name)
@@ -1798,6 +2106,7 @@ public class MapGeneratorEditor : Editor
     private bool _foldCurvature = true;
     private bool _foldRoughness = true;
     private bool _foldShadow = true;
+    private bool _foldFaceSdf = false;
     private bool _foldControl = true;
 
     // Preview textures (scaled down)
@@ -1946,6 +2255,61 @@ public class MapGeneratorEditor : Editor
             }, gen.targetMesh != null);
         });
 
+        // ===== Face SDF Shadow Map =====
+        // Deliberately not part of "Generate All Maps": it is only meaningful on a face
+        // mesh, and running it on a body would just burn minutes producing noise.
+        DrawMapSection(ref _foldFaceSdf, MapGenL.L("顔SDF影マップ", "Face SDF Shadow Map"), ref gen.settings.generateFaceSdf, () =>
+        {
+            EditorGUILayout.HelpBox(
+                MapGenL.L(
+                    "_FACE_SDF_ROTATION が要求する「ライト角のフィールド」をベイクします。\n" +
+                    "顔メッシュ専用です。「★ 全マップ生成」には含まれません。",
+                    "Bakes the light-angle field that _FACE_SDF_ROTATION consumes.\n" +
+                    "Face meshes only. Not included in \"Generate All Maps\"."),
+                MessageType.Info);
+
+            gen.settings.faceSdfResolution = EditorGUILayout.IntPopup(
+                MapGenL.L("解像度", "Resolution"),
+                gen.settings.faceSdfResolution,
+                new[] { "512", "1024", "2048" },
+                new[] { 512, 1024, 2048 });
+
+            gen.settings.faceSdfAngleSteps = EditorGUILayout.IntPopup(
+                MapGenL.L("角度ステップ数", "Angle Steps"),
+                gen.settings.faceSdfAngleSteps,
+                new[] { "32", "64", "128", "180" },
+                new[] { 32, 64, 128, 180 });
+
+            gen.settings.faceSdfForward = EditorGUILayout.Vector3Field(
+                MapGenL.L("顔の正面方向（ローカル）", "Face Forward (local)"), gen.settings.faceSdfForward);
+            gen.settings.faceSdfRight = EditorGUILayout.Vector3Field(
+                MapGenL.L("顔の右方向（ローカル）", "Face Right (local)"), gen.settings.faceSdfRight);
+
+            EditorGUILayout.HelpBox(
+                MapGenL.L(
+                    "この2軸はベイク後にマテリアルの _FaceForwardDirection / _FaceRightDirection へ" +
+                    "そのまま書き込まれます。ベイクとシェーダーの座標系が必ず一致するようにするためです。",
+                    "These two axes are written into the material's _FaceForwardDirection / " +
+                    "_FaceRightDirection after baking, so the bake and the shader always agree."),
+                MessageType.None);
+
+            gen.settings.faceSdfDepthBias = EditorGUILayout.Slider(
+                MapGenL.L("深度バイアス", "Depth Bias"), gen.settings.faceSdfDepthBias, 0.0001f, 0.02f);
+            gen.settings.faceSdfDilation = EditorGUILayout.IntSlider(
+                MapGenL.L("ダイレーション", "Dilation"), gen.settings.faceSdfDilation, 0, 16);
+            gen.settings.faceSdfBlur = EditorGUILayout.IntSlider(
+                MapGenL.L("ぼかし半径", "Blur Radius"), gen.settings.faceSdfBlur, 0, 4);
+
+            DrawPreviewAndButton(gen.lastFaceSdfMap, "FaceSDF", () =>
+            {
+                Undo.RecordObject(gen, "Generate Face SDF Map");
+                gen.lastFaceSdfMap = MapGeneratorEngine.GenerateFaceSdfMap(
+                    gen.targetMesh, gen.targetRenderer, gen.settings);
+                SaveSingleMap(gen, gen.lastFaceSdfMap, "FaceSDF", false);
+                AssignFaceSdfToMaterial(gen);
+            }, gen.targetMesh != null && gen.targetRenderer != null);
+        });
+
         // ===== Control Map =====
         DrawMapSection(ref _foldControl, MapGenL.L("コントロールマップ", "Control Map"), ref gen.settings.generateControl, () =>
         {
@@ -2058,6 +2422,88 @@ public class MapGeneratorEditor : Editor
         EditorGUI.EndDisabledGroup();
 
         EditorGUILayout.EndHorizontal();
+    }
+
+    /// <summary>
+    /// Assign the baked face SDF map and switch the material into rotation-tracking mode.
+    ///
+    /// The bake axes are written into the material as well. If they were left to drift
+    /// apart, the shader would sample the map with a different notion of "front" than the
+    /// bake used, and the shadow would sweep in the wrong direction.
+    /// </summary>
+    private void AssignFaceSdfToMaterial(MapGenerator gen)
+    {
+        if (!gen.settings.autoAssignToMaterial) return;
+        if (gen.targetRenderer == null) return;
+
+        Material mat = gen.targetRenderer.sharedMaterial;
+        if (mat == null || !mat.HasProperty("_SDFMap")) return;
+
+        string folder = gen.settings.outputFolder;
+        if (!AssetDatabase.IsValidFolder(folder)) return;
+
+        string baseName = gen.gameObject.name;
+        foreach (char c in Path.GetInvalidFileNameChars()) baseName = baseName.Replace(c, '_');
+
+        Texture2D saved = FindNewestTexture(folder, baseName + "_FaceSDF");
+        if (saved == null) return;
+
+        Undo.RecordObject(mat, "MapGenerator: Assign Face SDF Map");
+
+        mat.SetTexture("_SDFMap", saved);
+        if (mat.HasProperty("_UseSDFMap")) mat.SetFloat("_UseSDFMap", 1f);
+        mat.EnableKeyword("_SDF_MAP");
+
+        if (mat.HasProperty("_FaceSDFRotation")) mat.SetFloat("_FaceSDFRotation", 1f);
+        mat.EnableKeyword("_FACE_SDF_ROTATION");
+
+        // Keep the shader's face basis identical to the one the bake swept with.
+        if (mat.HasProperty("_FaceForwardDirection"))
+        {
+            Vector3 f = gen.settings.faceSdfForward.normalized;
+            mat.SetVector("_FaceForwardDirection", new Vector4(f.x, f.y, f.z, 0f));
+        }
+        if (mat.HasProperty("_FaceRightDirection"))
+        {
+            Vector3 r = gen.settings.faceSdfRight.normalized;
+            mat.SetVector("_FaceRightDirection", new Vector4(r.x, r.y, r.z, 0f));
+        }
+
+        // Recommended starting values from the spec. The map already carries the shape,
+        // so the runtime softness only needs to hide texel stepping.
+        if (mat.HasProperty("_SDFIntensity")) mat.SetFloat("_SDFIntensity", 1f);
+        if (mat.HasProperty("_SDFSoftness")) mat.SetFloat("_SDFSoftness", 0.05f);
+        if (mat.HasProperty("_SDFOffset")) mat.SetFloat("_SDFOffset", 0f);
+
+        EditorUtility.SetDirty(mat);
+        Debug.Log("[MapGenerator] Face SDF map assigned and _FACE_SDF_ROTATION enabled on " + mat.name);
+    }
+
+    private static Texture2D FindNewestTexture(string folder, string namePrefix)
+    {
+        string[] guids = AssetDatabase.FindAssets("t:Texture2D", new[] { folder });
+        Texture2D best = null;
+        System.DateTime bestTime = System.DateTime.MinValue;
+
+        foreach (string guid in guids)
+        {
+            string path = AssetDatabase.GUIDToAssetPath(guid);
+            string file = Path.GetFileNameWithoutExtension(path);
+            if (file == null || !file.StartsWith(namePrefix, System.StringComparison.Ordinal)) continue;
+
+            System.DateTime written;
+            try { written = File.GetLastWriteTimeUtc(path); }
+            catch { continue; }
+
+            if (written < bestTime) continue;
+            Texture2D tex = AssetDatabase.LoadAssetAtPath<Texture2D>(path);
+            if (tex == null) continue;
+
+            best = tex;
+            bestTime = written;
+        }
+
+        return best;
     }
 
     private void SaveSingleMap(MapGenerator gen, Texture2D tex, string suffix, bool isNormal)
@@ -2834,7 +3280,11 @@ public static class MapGeneratorMaterialExtension
     private static Renderer FindRendererForMaterial(Material mat)
     {
         if (mat == null) return null;
+#if UNITY_2022_2_OR_NEWER
+        var renderers = UnityEngine.Object.FindObjectsByType<Renderer>(FindObjectsSortMode.None);
+#else
         var renderers = UnityEngine.Object.FindObjectsOfType<Renderer>();
+#endif
         foreach (var r in renderers)
         {
             if (r.sharedMaterials == null) continue;

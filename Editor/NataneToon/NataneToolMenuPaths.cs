@@ -28,6 +28,11 @@ namespace NataneToon.Editor
         public const string ShadowAdjustmentWizard = "Tools/Natane/エフェクト Effects/シャドウ調整ウィザード Shadow Adjustment Wizard";
         public const string MatCapLayerComposer = "Tools/Natane/エフェクト Effects/MatCapレイヤーコンポーザー MatCap Layer Composer";
         public const string DissolvePatternGenerator = "Tools/Natane/エフェクト Effects/ディゾルブパターン生成 Dissolve Pattern Generator";
+        public const string HatchingToneGenerator = "Tools/Natane/エフェクト Effects/ハッチング・水彩素材生成 Hatching & Watercolor Generator";
+        public const string FakeShadowSetup = "Tools/Natane/エフェクト Effects/フェイクシャドウ設定 Fake Shadow Setup";
+        public const string StencilPresetTool = "Tools/Natane/エフェクト Effects/ステンシルプリセット Stencil Preset";
+        public const string DissolveStudio = "Tools/Natane/エフェクト Effects/ディゾルブスタジオ Dissolve Studio";
+        public const string ShadowRigFitter = "Tools/Natane/エフェクト Effects/影シェイプリグのフィット Shadow Rig Fitter";
         public const string RimLightDirectionVisualizer = "Tools/Natane/エフェクト Effects/リムライト方向ビジュアライザー Rim Light Direction Visualizer";
         public const string ScreenFXSetup = "Tools/Natane/エフェクト Effects/スクリーンエフェクト設定 Screen FX Setup";
 
@@ -47,6 +52,10 @@ namespace NataneToon.Editor
         public const string VRCLightVolumesHelper = "Tools/Natane/VRChat/VRCライトボリュームヘルパー VRC Light Volumes Helper";
 
         public const string SmoothNormalBaker = "Tools/Natane/メッシュ Mesh/スムース法線ベイク Smooth Normal Baker";
+        public const string EyeSetupTool = "Tools/Natane/メッシュ Mesh/目のセットアップ Eye Setup Tool";
+
+        public const string MaskPainter = "Tools/Natane/テクスチャ Texture/マスクペインター Mask Painter";
+        public const string TextureStudio = "Tools/Natane/テクスチャ Texture/テクスチャスタジオ Texture Studio";
 
 
         public const string ParticleEffectEditor = "Tools/Natane/パーティクルエフェクトエディタ Particle Effect Editor";
@@ -110,6 +119,11 @@ namespace NataneToon.Editor
 
             // --- Mesh ---
             { "SmoothNormalBaker", SmoothNormalBaker },
+            { "EyeSetupTool", EyeSetupTool },
+
+            // --- Texture ---
+            { "MaskPainter", MaskPainter },
+            { "TextureStudio", TextureStudio },
 
             // --- Generator / Other ---
             { "ParticleEffectEditor", ParticleEffectEditor },
@@ -251,6 +265,7 @@ namespace NataneToon.Editor
                 LilToonMigration, BatchMaterialConverter, PrefabVariantConverter,
                 ShaderVariantCollector, ShaderPrewarming, ShaderVariantStripper, VRCLightVolumesHelper,
                 SmoothNormalBaker,
+                MaskPainter, TextureStudio,
                 ParticleEffectEditor,
                 // Consolidated Windows
                 MaterialAnalysis, EffectStudio, OptimizationHub, ShaderBuildManager,

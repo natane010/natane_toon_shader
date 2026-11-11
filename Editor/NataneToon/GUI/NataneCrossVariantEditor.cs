@@ -279,14 +279,12 @@ namespace NataneToon.Editor
             // Background
             if (Event.current.type == EventType.Repaint)
             {
-                Color bgColor = EditorGUIUtility.isProSkin
-                    ? new Color(0.22f, 0.22f, 0.22f, 1f)
-                    : new Color(0.82f, 0.82f, 0.82f, 1f);
+                Color bgColor = NataneToonColorPalette.PanelHeaderBackground;
                 EditorGUI.DrawRect(headerRect, bgColor);
 
                 // Left accent bar
                 Color accentColor = enabled
-                    ? new Color(0.3f, 0.8f, 0.3f, 1f)
+                    ? NataneToonShaderGUIStyles.ToggleEnabledColor
                     : new Color(0.5f, 0.5f, 0.5f, 0.5f);
                 EditorGUI.DrawRect(new Rect(headerRect.x, headerRect.y, 3, headerRect.height), accentColor);
             }

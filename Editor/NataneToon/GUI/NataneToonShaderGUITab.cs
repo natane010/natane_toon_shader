@@ -166,8 +166,8 @@ namespace NataneToon.Editor
 
             string statusIcon = newEnabled ? "✓" : (canEnable ? "✗" : "!");
             Color statusColor = newEnabled
-                ? new Color(0.3f, 0.8f, 0.3f)
-                : (canEnable ? new Color(0.6f, 0.6f, 0.6f) : new Color(0.9f, 0.6f, 0.2f));
+                ? NataneToonShaderGUIStyles.ToggleEnabledColor
+                : (canEnable ? NataneToonShaderGUIStyles.ToggleDisabledColor : NataneToonShaderGUIStyles.ToggleBlockedColor);
 
             var oldColor = GUI.color;
             GUI.color = statusColor;
@@ -179,7 +179,7 @@ namespace NataneToon.Editor
             if (!enabled && !canEnable)
             {
                 Color oldHintColor = GUI.color;
-                GUI.color = new Color(0.92f, 0.66f, 0.22f);
+                GUI.color = NataneToonShaderGUIStyles.SamplerBlockHintColor;
                 EditorGUILayout.LabelField(
                     L(
                         $"Sampler 制限のため有効化できません (+{toggleEvaluation.AddedSamplers}, 推定 {toggleEvaluation.AfterEnable.EstimatedSamplers}/{toggleEvaluation.AfterEnable.Limit})",

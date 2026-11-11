@@ -9,7 +9,11 @@ half4 fragScreenEdgeOverlay(v2f i) : SV_Target
         discard;
         return 0;
     #else
-        float2 screenUV = i.pos.xy / max(_ScreenParams.xy, float2(1.0, 1.0));
+        // Mirrors have no valid depth / depth-normals texture of their own.
+        if (NataneIsMirror())
+            discard;
+        // ComputeScreenPos convention: stereo- and flip-aware (see NataneToonFragment.hlsl).
+        float2 screenUV = i.screenPos.xy / max(i.screenPos.w, 0.0001);
         half edgeValue = ApplyScreenEdge(screenUV, _EdgeDepthSensitivity, _EdgeNormalSensitivity, _EdgeWidth);
         half alpha = saturate(edgeValue * _EdgeBlend);
 

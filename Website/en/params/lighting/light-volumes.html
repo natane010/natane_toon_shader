@@ -17,6 +17,8 @@
 
     <p>VRC Light Volumes is a next-generation voxel-based lighting system. High-quality partial illumination is automatically applied in supported worlds. Both the world and avatar must support it; in unsupported environments, it automatically falls back to Unity's light probes.</p>
 
+    <p><strong>Light Probe Proxy Volume (LPPV) is now automatic (v1.6.0).</strong> The Unity light-probe fallback now supports LPPV with no material settings at all &mdash; just set the renderer's Light Probes to &ldquo;Use Proxy Volume&rdquo; and per-pixel probe-volume lighting is evaluated automatically, so even large objects pick up smooth lighting gradients across their surface. When VRC Light Volumes is active it takes priority, so there is no double-counting.</p>
+
     <div class="param-card">
       <div class="param-header">
         <span class="param-name">Light Volume Intensity</span>

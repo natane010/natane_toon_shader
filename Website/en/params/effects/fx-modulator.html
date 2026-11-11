@@ -1,0 +1,102 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>FX Modulator - Natane Toon Shader</title>
+  <link rel="stylesheet" href="../../../styles.css">
+</head>
+<body>
+<header class="site-header"></header>
+<div class="page-wrapper">
+  <aside class="sidebar"></aside>
+  <main class="main-content">
+    <nav class="breadcrumb"></nav>
+    <h1>FX Modulator</h1>
+    <p class="page-subtitle">A controller that drives other features automatically from time, audio, distance, or view angle. Make Emission pulse like a heartbeat, "awaken" as the camera approaches, or flow contour lines to the bass. (v1.6.0)</p>
+
+    <div class="feature-preview" aria-hidden="true">
+      <span class="preview-tag">PREVIEW</span>
+      <em class="preview-name">FX Modulator</em>
+    </div>
+
+    <h2 id="overview">Overview</h2>
+    <p>This feature draws no color or pattern itself. It is a control system that takes a value from a <strong>Source</strong> and multiplies or adds it to a <strong>Target</strong> parameter, so it "moves" other features. It has two slots (0 / 1) that you can combine.</p>
+    <p>Slot values are computed once at the top of the fragment shader and applied at each target site. It toggles with <code>_FX_MODULATOR</code> and is zero cost when off. AudioLink sources are active only when <code>_AUDIOLINK</code> is in use.</p>
+
+    <h2 id="looks">What you can make</h2>
+    <ul>
+      <li>Patterns that switch to music; contour lines that rise with the bass</li>
+      <li>Emission that pulses like a heartbeat</li>
+      <li>"Awakening" as the camera approaches (CameraDistance)</li>
+      <li>Glitch that only triggers when viewed from the side (ViewAngle)</li>
+    </ul>
+
+    <h2 id="sources">Signal Sources</h2>
+    <table>
+      <thead>
+        <tr><th>Value</th><th>Source</th><th>Description</th></tr>
+      </thead>
+      <tbody>
+        <tr><td>0&ndash;4</td><td>Sine / Saw / Triangle / Pulse / RandomStep</td><td>Time-based waveforms</td></tr>
+        <tr><td>5&ndash;8</td><td>AudioLink Bass / LowMid / HighMid / Treble</td><td>Audio bands (requires <code>_AUDIOLINK</code>; neutral 0 otherwise)</td></tr>
+        <tr><td>9</td><td>Chronotensity</td><td>AudioLink accumulated time</td></tr>
+        <tr><td>10</td><td>CameraDistance</td><td>Distance from camera (normalized by <code>_FXModDistMin/Max</code>)</td></tr>
+        <tr><td>11</td><td>ViewAngle</td><td>View angle</td></tr>
+        <tr><td>12</td><td>Manual</td><td>Manual value (<code>_FXModManual</code>)</td></tr>
+      </tbody>
+    </table>
+
+    <h2 id="targets">Targets</h2>
+    <table>
+      <thead>
+        <tr><th>Value</th><th>Target</th><th>Applied as</th></tr>
+      </thead>
+      <tbody>
+        <tr><td>0</td><td>None</td><td>&mdash;</td></tr>
+        <tr><td>1</td><td>EmissionIntensity</td><td>Multiply</td></tr>
+        <tr><td>2</td><td>HueShift</td><td>Add</td></tr>
+        <tr><td>3</td><td>RimIntensity</td><td>Multiply</td></tr>
+        <tr><td>4</td><td>OutlineWidth</td><td>Multiply (works in the OUTLINE pass too)</td></tr>
+        <tr><td>5</td><td>LineBoilStrength</td><td>Multiply</td></tr>
+        <tr><td>6</td><td>TopographicOffset</td><td>Add</td></tr>
+      </tbody>
+    </table>
+
+    <h2 id="all-params">Per-slot parameters</h2>
+    <p><code>{n}</code> is the slot index (0 or 1). Both slots share the same set of properties.</p>
+    <table>
+      <thead>
+        <tr><th>Property</th><th>Type / Default</th><th>Description</th></tr>
+      </thead>
+      <tbody>
+        <tr><td><code>_FXModulator</code></td><td>Toggle / 0</td><td>Enable (<code>_FX_MODULATOR</code>)</td></tr>
+        <tr><td><code>_FXModSource{n}</code></td><td>Enum(0-12) / 0</td><td>Signal source</td></tr>
+        <tr><td><code>_FXModTarget{n}</code></td><td>Enum(0-6) / 0</td><td>Target</td></tr>
+        <tr><td><code>_FXModAmount{n}</code></td><td>Float / 0</td><td>Modulation amount (0 = neutral)</td></tr>
+        <tr><td><code>_FXModOffset{n}</code></td><td>Float / 0</td><td>Phase offset</td></tr>
+        <tr><td><code>_FXModSpeed{n}</code></td><td>Float / 1</td><td>Speed</td></tr>
+        <tr><td><code>_FXModMin{n}</code> / <code>_FXModMax{n}</code></td><td>Float / 0, 1</td><td>Output range min / max</td></tr>
+        <tr><td><code>_FXModInvert{n}</code></td><td>Toggle / 0</td><td>Invert</td></tr>
+        <tr><td><code>_FXModCurve{n}</code></td><td>Range(0.1,5) / 1</td><td>Response curve (pow)</td></tr>
+        <tr><td><code>_FXModManual{n}</code></td><td>Range(0,1) / 0.5</td><td>Manual source value</td></tr>
+        <tr><td><code>_FXModDistMin{n}</code> / <code>_FXModDistMax{n}</code></td><td>Float / 0, 10</td><td>CameraDistance normalization range</td></tr>
+        <tr><td><code>_FXModMaskTex</code></td><td>2D / white</td><td>Shared mask (R = slot 0, G = slot 1)</td></tr>
+      </tbody>
+    </table>
+
+    <h2 id="tips">Usage Tips</h2>
+    <ul>
+      <li><strong>Start with one slot</strong>: pick a Source, choose a Target, and raise Amount from 0. Nothing happens while Amount is 0 (neutral).</li>
+      <li><strong>React to music</strong>: AudioLink sources need <a href="audiolink.html">AudioLink</a> (<code>_AUDIOLINK</code>). In unsupported worlds they read neutral, so nothing breaks.</li>
+      <li><strong>Shape the output</strong>: adjust the output range with <code>Min/Max</code>, the response with <code>Curve</code>, and flip it with <code>Invert</code>.</li>
+      <li><strong>Mask</strong>: the R channel of <code>_FXModMaskTex</code> maps to slot 0 and the G channel to slot 1.</li>
+    </ul>
+
+    <nav class="page-nav"></nav>
+  </main>
+</div>
+<footer class="site-footer">&copy; 2025 Natane Toon Shader.</footer>
+<script src="../../../nav.js"></script>
+</body>
+</html>

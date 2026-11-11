@@ -1,0 +1,105 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Ghost - Natane Toon Shader</title>
+  <link rel="stylesheet" href="../../../styles.css">
+</head>
+<body>
+<header class="site-header"></header>
+<div class="page-wrapper">
+  <aside class="sidebar"></aside>
+  <main class="main-content">
+    <nav class="breadcrumb"></nav>
+    <h1>Ghost</h1>
+    <p class="page-subtitle">Artifact-free translucent ghost look — Natane/Toon Shader (Ghost) variant (v1.6.0)</p>
+
+    <h2 id="overview">Overview</h2>
+    <p>Ghost is a shader variant, <code>Natane/Toon Shader (Ghost)</code>, dedicated to translucent "ghost" looks. It structurally avoids the self-overlap artifacts of ordinary transparent shaders: double-blend where body parts overlap in depth, and backfaces bleeding through.</p>
+    <p>It works via a <strong>depth prepass</strong>: the first pass writes depth only (<code>ColorMask 0</code> + <code>ZWrite On</code>), and the forward passes render with <code>ZTest Equal</code>, so exactly one (the nearest) surface layer is shaded and blended per pixel. The prepass shares the same vertex path, so vertex deformations such as VAT, Smear, and Perspective Flat stay depth-consistent with the visible surface.</p>
+    <p>The look is a Fresnel-shaped alpha (transparent toward the center, opaque at the silhouette) plus an additive spectral rim glow. Overall opacity is controlled by the <code>_Color</code> alpha; the Fresnel alpha multiplies on top of it.</p>
+
+    <h2 id="params">Parameters</h2>
+
+    <div class="param-card">
+      <div class="param-header">
+        <span class="param-name">Rim Color</span>
+        <span class="param-prop">_GhostRimColor</span>
+        <span class="param-badge badge-color">color (HDR)</span>
+      </div>
+      <div class="param-body">
+        <p>Color added along the silhouette. HDR: values above 1 combine with Bloom for a strong glow.</p>
+        <p class="param-default">Default: (0.4, 0.8, 1.2, 1)</p>
+      </div>
+      <div class="param-tip">Pale blue spectral colors are the classic ghost look; with world Bloom the rim glows ethereally.</div>
+    </div>
+
+    <div class="param-card">
+      <div class="param-header">
+        <span class="param-name">Fresnel Alpha</span>
+        <span class="param-prop">_GhostFresnelAlpha</span>
+        <span class="param-badge badge-range">range</span>
+      </div>
+      <div class="param-body">
+        <p>Center fade amount. 0 = no Fresnel alpha change, 1 = the center (surfaces facing the viewer) fades out fully.</p>
+        <p class="param-default">Default: 0.7</p>
+      </div>
+      <div class="param-tip">This is the key to the "see-through inside, visible edges" spectral quality.</div>
+    </div>
+
+    <div class="param-card">
+      <div class="param-header">
+        <span class="param-name">Fresnel Power</span>
+        <span class="param-prop">_GhostFresnelPower</span>
+        <span class="param-badge badge-float">float</span>
+      </div>
+      <div class="param-body">
+        <p>Exponent of the Fresnel curve. Higher values leave only a thin visible edge.</p>
+        <p class="param-default">Default: 2.5</p>
+      </div>
+      <div class="param-tip">Raise for a sharper, thinner edge; lower for a softer falloff.</div>
+    </div>
+
+    <div class="param-card">
+      <div class="param-header">
+        <span class="param-name">Rim Strength</span>
+        <span class="param-prop">_GhostRimStrength</span>
+        <span class="param-badge badge-float">float</span>
+      </div>
+      <div class="param-body">
+        <p>Intensity of the additive rim glow. 0 disables the glow.</p>
+        <p class="param-default">Default: 1.0</p>
+      </div>
+      <div class="param-tip">This variant has no outline pass, so use the rim glow as the outline substitute.</div>
+    </div>
+
+    <div class="param-card">
+      <div class="param-header">
+        <span class="param-name">Depth Cutoff</span>
+        <span class="param-prop">_GhostDepthCutoff</span>
+        <span class="param-badge badge-range">range</span>
+      </div>
+      <div class="param-body">
+        <p>Minimum alpha rendered by the depth prepass. Texels below this alpha are excluded from depth so fully invisible regions do not occlude other transparents.</p>
+        <p class="param-default">Default: 0.02</p>
+      </div>
+      <div class="param-tip">If thin-alpha areas like hair tips act as an "invisible wall", raise this value slightly.</div>
+    </div>
+
+    <h2 id="tips">Usage Tips</h2>
+    <ul>
+      <li><strong>Fading feet</strong>: for "the lower body dissolves into air", combine with <a href="../advanced/height-fade.html">Height Fade</a> in alpha mode along the Y axis; it stays consistent with the depth prepass.</li>
+      <li><strong>Overall opacity</strong>: adjust via the <code>_Color</code> alpha. Even at high transparency the silhouette always reads as one clean glass-like layer.</li>
+      <li><strong>No outline</strong>: the outline pass is intentionally removed for this single-layer variant.</li>
+      <li><strong>No shadows</strong>: there is no ShadowCaster pass, avoiding opaque shadows from a translucent object.</li>
+      <li>Renders in the Transparent queue and declares <code>VRCFallback = ToonTransparent</code>.</li>
+    </ul>
+
+    <nav class="page-nav"></nav>
+  </main>
+</div>
+<footer class="site-footer">&copy; 2025 Natane Toon Shader.</footer>
+<script src="../../../nav.js"></script>
+</body>
+</html>

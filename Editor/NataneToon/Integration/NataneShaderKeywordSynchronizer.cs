@@ -45,6 +45,9 @@ namespace NataneToon.Editor
             ("_Specular", "_SPECULAR"),
             ("_SpecularDither", "_SPECULAR_DITHER"),
             ("_HairSpecular", "_HAIR_SPECULAR"),
+            ("_UseHairSpecMask", "_HAIR_SPEC_MASK"),
+            ("_UseHairSpecShiftTex", "_HAIR_SPEC_SHIFT_TEX"),
+            ("_QuestLite", "_QUEST_LITE"),
 
             // Rim Light
             ("_RimLight", "_RIM_LIGHT"),
@@ -184,6 +187,9 @@ namespace NataneToon.Editor
 
             // Perspective Flat
             ("_PerspectiveFlat", "_PERSPECTIVE_FLAT"),
+            ("_FaceOrtho", "_FACE_ORTHO"),
+            ("_UseFaceOrthoMask", "_FACE_ORTHO_MASK"),
+            ("_MirrorTexture", "_MIRROR_TEXTURE"),
 
             // Height Fade / Intersection Fade
             ("_HeightFade", "_HEIGHT_FADE"),
@@ -237,6 +243,25 @@ namespace NataneToon.Editor
 
             // Fur (Fur variant only)
             ("_Fur", "_FUR"),
+
+            // Expression Effects (v1.6.0 batch 1)
+            ("_LineBoil", "_LINE_BOIL"),
+            ("_ShapedHighlight", "_SHAPED_HIGHLIGHT"),
+            ("_Topographic", "_TOPOGRAPHIC"),
+            ("_FXModulator", "_FX_MODULATOR"),
+
+            // Shadow Shape Rig (NPR2026 P1)
+            // ここが単一の真実。ビルド最適化・VariantStripper・
+            // NataneToonBuildSettings.hlsl の #undef ガードは全てこの行から派生する。
+            ("_ShadowShapeRig", "_SHADOW_SHAPE_RIG"),
+
+            // Expression Effects (v1.6.0 batch 2)
+            ("_Lenticular", "_LENTICULAR"),
+            ("_Caustics", "_CAUSTICS"),
+            ("_PixelArt", "_PIXEL_ART"),
+
+            // Expression Effects (影の玉ボケ)
+            ("_ShadowBokeh", "_SHADOW_BOKEH"),
         };
 
         // SaveAssets による再インポート→再同期の無限ループを防止

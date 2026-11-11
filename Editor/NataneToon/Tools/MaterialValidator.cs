@@ -29,16 +29,10 @@ namespace NataneToon.Editor
             "_MainTex", "_BumpMap", "_MicroNormalMap", "_ClearCoatMask", "_ClearCoatNormalMap", "_CavityMap", "_TransmissionMask", "_SkinSpecMask", "_HairStrandDirectionMap", "_HairTransmissionMask", "_EmissionMap", "_MatCapTex", "_MatCapTex2", "_MatCapTex3", "_RampTex", "_ParallaxMap"
         };
 
-        private static readonly string[] ActiveFeatureKeywords =
-        {
-            "_SPECULAR", "_RIM_LIGHT", "_RIM_LIGHT_2", "_OFFSET_RIM_LIGHT", "_SSS", "_MATCAP", "_OUTLINE", "_EMISSION",
-            "_DISSOLVE", "_HUE_SHIFT", "_NORMALMAP", "_REFLECTION", "_ENV_RIM", "_PARALLAX", "_REFRACTION",
-            "_IRIDESCENCE", "_GLITTER", "_MATCAP_2", "_MATCAP_3", "_AUDIOLINK", "_HOLOGRAM", "_GLITCH",
-            "_HOLOGRAM_NOISE", "_DECAL", "_VAT", "_VERTEX_ANIMATION", "_PIXEL_VERTEX_LIGHTS", "_DETAIL_MAP",
-            "_TRIPLANAR", "_HEIGHT_FOG", "_SURFACE_COVER", "_MIRROR_CONTROL", "_QUEST_LITE", "_WATER_DRIP",
-            "_VIDEO_TEXTURE", "_INTERSECTION_FADE", "_SCREEN_TONE", "_SCREEN_EDGE", "_HATCHING", "_USE_LIGHT_VOLUME",
-            "_LTCGI", "_HAIR_SPECULAR", "_WATERCOLOR", "_SMEAR", "_BACKFACE_TEXTURE", "_FUR"
-        };
+        // 実体は NatanePerformanceFeatureKeywords（上流の NataneToon.Editor 側）。
+        // ここに private で置いていた間は監査から突合できず、v1.6/1.7 で追加された
+        // 機能の登録漏れが検出されないままになっていた。
+        private static string[] ActiveFeatureKeywords => NatanePerformanceFeatureKeywords.Counted;
 
         private static readonly string[] LookMixerNprKeywords =
         {
@@ -105,6 +99,7 @@ namespace NataneToon.Editor
 
         private void OnGUI()
         {
+            NataneToonInspectorComponents.DrawWindowBackground(position);
             DrawHeader();
             EditorGUILayout.Space(SPACE_SMALL);
             DrawMaterialSelection();
@@ -364,6 +359,9 @@ namespace NataneToon.Editor
                 if (checkUnusedFeatures) ValidateUnusedFeatures(material);
                 if (checkTextureCompression) ValidateTextureCompression(material);
                 ValidateLookMixer(material);
+                ValidateDissolveToggleMigration(material);
+                ValidateStencilPairing(material);
+                ValidateShadowShapeRig(material);
             }
 
             autoFixAvailable = validationResults.Any(r => r.autoFixAction != null);
@@ -596,6 +594,190 @@ namespace NataneToon.Editor
                         });
                     }
                 }
+            }
+        }
+
+        /// <summary>
+        /// v1.7 で「効いていなかったトグル」を実際に効かせた 2 件（NPR2026 F3 / F4）の移行検出。
+        ///
+        /// 以前はどちらもシェーダー側が無視していたため、トグルが OFF のままでも
+        /// マスク／AudioLink ディゾルブは動いていた。今はトグルが実際のゲートなので、
+        /// 「設定はしてあるがトグルが OFF」のマテリアルは見た目が変わる。
+        /// 該当するものを検出し、ワンクリックで元の見た目へ戻せるようにする。
+        /// </summary>
+        private void ValidateDissolveToggleMigration(Material material)
+        {
+            // F3: マスクを割り当てているのに _UseDissolveMask が OFF
+            if (material.HasProperty("_UseDissolveMask") &&
+                material.HasProperty("_DissolveMask") &&
+                material.GetFloat("_UseDissolveMask") < 0.5f &&
+                material.GetTexture("_DissolveMask") != null)
+            {
+                validationResults.Add(new ValidationResult
+                {
+                    material = material,
+                    category = "Migration",
+                    severity = ValidationSeverity.Warning,
+                    issue = "ディゾルブマスクが割り当てられていますが「ディゾルブマスクを使う」が OFF です",
+                    suggestion = "v1.7 でこのトグルが実際のゲートになりました。以前の見た目を保つには ON にしてください",
+                    autoFixAction = () =>
+                    {
+                        Undo.RecordObject(material, "Enable Dissolve Mask");
+                        material.SetFloat("_UseDissolveMask", 1f);
+                        EditorUtility.SetDirty(material);
+                    }
+                });
+            }
+
+            // F4: AudioLink ディゾルブ強度を設定しているのに _AudioLinkDissolve が OFF
+            if (material.HasProperty("_AudioLinkDissolve") &&
+                material.HasProperty("_AudioLinkDissolveIntensity") &&
+                material.GetFloat("_AudioLinkDissolve") < 0.5f &&
+                material.GetFloat("_AudioLinkDissolveIntensity") > 0.001f)
+            {
+                validationResults.Add(new ValidationResult
+                {
+                    material = material,
+                    category = "Migration",
+                    severity = ValidationSeverity.Warning,
+                    issue = "AudioLink ディゾルブ強度が設定されていますが「ディゾルブ連動を有効化」が OFF です",
+                    suggestion = "v1.7 でこのトグルが実際のゲートになりました。以前の見た目を保つには ON にしてください",
+                    autoFixAction = () =>
+                    {
+                        Undo.RecordObject(material, "Enable AudioLink Dissolve");
+                        material.SetFloat("_AudioLinkDissolve", 1f);
+                        EditorUtility.SetDirty(material);
+                    }
+                });
+            }
+        }
+
+        /// <summary>
+        /// ステンシルの Writer / Cutter の片方だけが存在する状態を検出する。
+        ///
+        /// See Through Hair 系のセットアップは 2 つのマテリアルが対で初めて意味を持つ。
+        /// Writer だけなら「眉が手前に描かれるだけ」、Cutter だけなら「くり抜く領域が無い」で、
+        /// どちらも見た目上は何も起きない。原因が分かりにくいので明示的に検出する。
+        /// </summary>
+        private void ValidateStencilPairing(Material material)
+        {
+            if (!material.HasProperty("_StencilRef") ||
+                !material.HasProperty("_StencilComp") ||
+                !material.HasProperty("_StencilOp"))
+            {
+                return;
+            }
+
+            int reference = Mathf.RoundToInt(material.GetFloat("_StencilRef"));
+            if (reference <= 0) return;   // ステンシル未使用
+
+            int comp = Mathf.RoundToInt(material.GetFloat("_StencilComp"));
+            int op = Mathf.RoundToInt(material.GetFloat("_StencilOp"));
+
+            bool isWriter = comp == (int)UnityEngine.Rendering.CompareFunction.Always &&
+                            op == (int)UnityEngine.Rendering.StencilOp.Replace;
+            bool isCutter = comp == (int)UnityEngine.Rendering.CompareFunction.NotEqual ||
+                            comp == (int)UnityEngine.Rendering.CompareFunction.Equal;
+
+            if (!isWriter && !isCutter) return;
+
+            // 同じ参照値を持つ相方が、検証対象のマテリアル群の中に居るかを見る。
+            bool hasCounterpart = false;
+            foreach (Material other in materialsToValidate)
+            {
+                if (other == null || other == material) continue;
+                if (!other.HasProperty("_StencilRef") || !other.HasProperty("_StencilComp")) continue;
+                if (Mathf.RoundToInt(other.GetFloat("_StencilRef")) != reference) continue;
+
+                int otherComp = Mathf.RoundToInt(other.GetFloat("_StencilComp"));
+                int otherOp = other.HasProperty("_StencilOp")
+                    ? Mathf.RoundToInt(other.GetFloat("_StencilOp"))
+                    : (int)UnityEngine.Rendering.StencilOp.Keep;
+
+                bool otherIsWriter = otherComp == (int)UnityEngine.Rendering.CompareFunction.Always &&
+                                     otherOp == (int)UnityEngine.Rendering.StencilOp.Replace;
+                bool otherIsCutter = otherComp == (int)UnityEngine.Rendering.CompareFunction.NotEqual ||
+                                     otherComp == (int)UnityEngine.Rendering.CompareFunction.Equal;
+
+                if ((isWriter && otherIsCutter) || (isCutter && otherIsWriter))
+                {
+                    hasCounterpart = true;
+                    break;
+                }
+            }
+
+            if (hasCounterpart) return;
+
+            validationResults.Add(new ValidationResult
+            {
+                material = material,
+                category = "Stencil",
+                severity = ValidationSeverity.Warning,
+                issue = isWriter
+                    ? $"ステンシル Writer（参照値 {reference}）に対応する Cutter が見つかりません"
+                    : $"ステンシル Cutter（参照値 {reference}）に対応する Writer が見つかりません",
+                suggestion = "Writer（眉・目）と Cutter（前髪）は対で初めて機能します。" +
+                             "ステンシルプリセットツールで両方に同じ参照値を設定してください"
+            });
+        }
+
+        /// <summary>
+        /// Shadow Shape Rig（NPR2026 P1）の使い方の検出。
+        ///
+        /// 1. 有効なのに全スロットの半径が 0 → 何も起きない。設定したつもりの取りこぼし。
+        /// 2. _SHADOW_EDGE_NOISE との併用 → 影の境界を 2 系統が同時に変形するため、
+        ///    どちらの効果を見ているのか分からなくなる。
+        /// </summary>
+        private void ValidateShadowShapeRig(Material material)
+        {
+            if (!material.HasProperty("_ShadowShapeRig")) return;
+            if (!material.IsKeywordEnabled("_SHADOW_SHAPE_RIG")) return;
+
+            bool anySlotActive = false;
+            for (int slot = 0; slot < 4; slot++)
+            {
+                string prop = "_ShadowRigParams" + slot;
+                if (!material.HasProperty(prop)) continue;
+
+                Vector4 p = material.GetVector(prop);
+                if (p.z > 0.00001f && p.w > 0.00001f)
+                {
+                    anySlotActive = true;
+                    break;
+                }
+            }
+
+            if (!anySlotActive)
+            {
+                validationResults.Add(new ValidationResult
+                {
+                    material = material,
+                    category = "Unused Feature",
+                    severity = ValidationSeverity.Warning,
+                    issue = "影シェイプリグが有効ですが、全スロットの半径が 0 で何も起きていません",
+                    suggestion = "スロットの半径を設定するか、機能を無効化してください",
+                    autoFixAction = () =>
+                    {
+                        Undo.RecordObject(material, "Disable Shadow Shape Rig");
+                        material.SetFloat("_ShadowShapeRig", 0f);
+                        material.DisableKeyword("_SHADOW_SHAPE_RIG");
+                        EditorUtility.SetDirty(material);
+                    }
+                });
+                return;
+            }
+
+            if (material.IsKeywordEnabled("_SHADOW_EDGE_NOISE"))
+            {
+                validationResults.Add(new ValidationResult
+                {
+                    material = material,
+                    category = "Combination",
+                    severity = ValidationSeverity.Info,
+                    issue = "影シェイプリグと影エッジノイズを併用しています",
+                    suggestion = "どちらも影の境界を変形させるため効果が重なります。" +
+                                 "狙った形にならない場合は片方を切って確認してください"
+                });
             }
         }
 

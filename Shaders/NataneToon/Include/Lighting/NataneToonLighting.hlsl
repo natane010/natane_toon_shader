@@ -5,6 +5,176 @@
 
 // Lighting Calculation Functions
 
+// ===== 影の自然さ（単一入口） =====
+//
+// 「影のフェード感」を決める操作子はこれまで 9 個に散らばっており
+// (_WrapAmount / _LitSoftness / _ShadowSmoothing / _ShadowBlend /
+//  _StepBorderSmooth / _ShadingGradientWidth / _SoftLightingIntensity /
+//  _ShadingMode / _ShadowSharpness)、どれを触れば「PBR のような自然な影」に
+// なるのか分からない状態だった。_ShadowNaturalness はそれらの代表値を
+// まとめて押し上げる入口。
+//
+// いずれも max() で「下限を引き上げる」だけにしてあるのが要点。上書きにすると
+// 個別調整した値が無視されて、詳細設定が効かなくなる。
+//
+// 係数は「1.0 で PBR 寄りの自然な減衰、既定 0 で従来と完全に同一」になるよう定めた。
+
+float NataneShadowNaturalWrap()
+{
+    // 0.35 はハーフランバート(0.5)よりやや控えめ。トゥーンの陰影は残る。
+    return max(_WrapAmount, _ShadowNaturalness * 0.35);
+}
+
+float NataneShadowNaturalSmoothing()
+{
+    // 段階を連続へ寄せる量。1.0 まで上げるとトゥーンの段が完全に消えるので 0.6 止まり。
+    return max(_ShadowSmoothing, _ShadowNaturalness * 0.6);
+}
+
+float NataneShadowNaturalStepBorder()
+{
+    return max(_StepBorderSmooth, _ShadowNaturalness * 0.35);
+}
+
+// ===== Bump terminator softening =====
+// Estevez, Lecocq, Stein, "A Microfacet-Based Shadowing Function to Solve the Bump
+// Terminator Problem" (Ray Tracing Gems, 2019). A normal map can light pixels the real
+// geometry turns away from the light; with a hard toon step that shows as a jagged,
+// leaking terminator. The mapped normal's deviation from the geometric normal is treated
+// as a microfacet roughness and the matching GGX shadowing term fades the leak smoothly.
+//   Ng = interpolated vertex normal, Ns = normal-mapped normal, L = light direction.
+// Returns 1 when the two normals agree (no bump), so unmapped areas are unchanged.
+half NataneBumpTerminatorShadow(half3 Ng, half3 Ns, half3 L)
+{
+    half cosNgL = dot(Ng, L);
+    half cosNgNs = dot(Ng, Ns);
+    half cosNsL = dot(Ns, L);
+
+    half cosI = min(abs(cosNgL), 0.9999);
+    half cosD = min(abs(cosNgNs), 0.9999);
+    half alpha2 = saturate(0.125 * (1.0 / max(cosD * cosD, 1e-4) - 1.0));
+    half tan2I = 1.0 / max(cosI * cosI, 1e-6) - 1.0;
+    half g1 = 2.0 / (1.0 + sqrt(1.0 + alpha2 * tan2I));
+
+    // Light on the geometric back side while the mapped normal still faces it: pure leak.
+    return (cosNgL * cosNgNs * cosNsL < 0.0) ? 0.0 : g1;
+}
+
+// ===== Non-linear irradiance from L1 spherical harmonics =====
+// Light Volumes store L0 + L1 only. The linear evaluation (L0 + dot(L1, n)) under-shoots
+// the lit side and goes flat or negative on the far side. Both reconstructions below add
+// back the contrast a higher-order fit would have, from the same four coefficients.
+// Inputs follow the Unity / VRC Light Volumes convention (linear eval = L0 + dot(L1, n)).
+
+// "ZH3: Quadratic Zonal Harmonics" (Roughton et al., I3D 2024), hallucinated variant:
+// adds the missing L2 zonal lobe around one shared luminance axis, so there is no
+// per-channel hue shift and no pow().
+float3 NataneSHL1ZH3(float3 n, float3 L0, float3 L1r, float3 L1g, float3 L1b)
+{
+    const float3 lumWeights = float3(0.2126, 0.7152, 0.0722);
+    float3 axis = L1r * lumWeights.r + L1g * lumWeights.g + L1b * lumWeights.b;
+    axis *= rsqrt(max(dot(axis, axis), 1e-8));
+
+    float3 l1Axis = float3(dot(L1r, axis), dot(L1g, axis), dot(L1b, axis));
+    float3 ratio = 0.8660254 * abs(l1Axis) / max(L0, 1e-5);
+    float3 zonal = L0 * (0.08 * ratio + 0.6 * ratio * ratio);
+
+    float fZ = dot(axis, n);
+    float3 linearEval = L0 + float3(dot(L1r, n), dot(L1g, n), dot(L1b, n));
+    return max(0.0, linearEval + 0.2795085 * zonal * (3.0 * fZ * fZ - 1.0));
+}
+
+// Geomerics non-linear fit (Hazel, "Converting SH Radiance to Irradiance"), per channel.
+// Never negative; restores the full dynamic range of a strongly directional probe.
+float NataneSHL1Geomerics(float L0, float3 L1, float3 n)
+{
+    float R0 = max(L0, 1e-5);
+    float3 R1 = 0.5 * L1;
+    float lenR1 = max(length(R1), 1e-5);
+    float q = 0.5 * (1.0 + dot(R1 / lenR1, n));
+    float r = min(lenR1 / R0, 1.0);
+    float p = 1.0 + 2.0 * r;
+    float a = (1.0 - r) / (1.0 + r);
+    return R0 * (a + (1.0 - a) * (p + 1.0) * pow(max(q, 1e-5), p));
+}
+
+#if defined(_USE_LIGHT_VOLUME) || defined(NATANE_FORCE_LIGHTVOLUME_HELPERS)
+// mode: 0 = linear (identical to LightVolumeEvaluate), 1 = ZH3, 2 = Geomerics.
+float3 NataneLightVolumeEvaluateMode(float3 n, float3 L0, float3 L1r, float3 L1g, float3 L1b, float mode)
+{
+    if (mode < 0.5)
+        return LightVolumeEvaluate(n, L0, L1r, L1g, L1b);
+    if (mode < 1.5)
+        return NataneSHL1ZH3(n, L0, L1r, L1g, L1b);
+    return float3(
+        NataneSHL1Geomerics(L0.r, L1r, n),
+        NataneSHL1Geomerics(L0.g, L1g, n),
+        NataneSHL1Geomerics(L0.b, L1b, n));
+}
+#endif
+
+// ===== Light Volume key light (toon decomposition of L0 + L1) =====
+// Baked / volume lighting arrives as irradiance SH, which shades like a soft gradient and
+// gives a toon material nothing to put its terminator on. This splits the four
+// coefficients into the pieces a toon pipeline expects:
+//   keyDir    dominant direction d of the L1 band (shared luminance axis, no hue split)
+//   keyColor  irradiance facing d:        E(d)  = L0 + L1.d
+//   fillColor irradiance facing away:     E(-d) = L0 - L1.d   (what really reaches the shade)
+// Feeding keyDir / keyColor to the normal toon path and using fillColor as the ambient
+// floor reproduces E(d) on the lit side exactly, keeps a painted shadow colour from
+// dropping below the light that is physically there, and puts a clean toon boundary
+// where the baked light actually comes from (per pixel, so it follows the avatar
+// through the volume and includes point light volumes).
+// Inputs follow the VRC Light Volumes convention (linear eval = L0 + dot(L1, n)).
+void NataneSHL1KeyLight(float3 L0, float3 L1r, float3 L1g, float3 L1b,
+                        out half3 keyDir, out half3 keyColor, out half3 fillColor)
+{
+    const float3 lumWeights = float3(0.2126, 0.7152, 0.0722);
+    float3 axis = L1r * lumWeights.r + L1g * lumWeights.g + L1b * lumWeights.b;
+    float axisLenSq = dot(axis, axis);
+    // Perfectly uniform ambient has no direction: light from above, like the SH fallback.
+    float3 d = (axisLenSq > 1e-8) ? axis * rsqrt(axisLenSq) : float3(0.0, 1.0, 0.0);
+    float3 l1d = float3(dot(L1r, d), dot(L1g, d), dot(L1b, d));
+    keyDir = d;
+    keyColor = max(0.0, L0 + l1d);
+    fillColor = max(0.0, L0 - l1d);
+}
+
+// ===== Matte diffuse: energy-preserving Oren-Nayar (EON) =====
+// Portsmouth, Kutz, Hill, "EON: A Practical Energy-Preserving Rough Diffuse BRDF"
+// (JCGT 2025). Rough, powdery surfaces (unglazed clay, cotton, dry skin, felt) do not
+// follow Lambert: they stay brighter toward the terminator when lit from the viewer's
+// side and fall off faster when lit from behind, which is the cue that reads as "matte".
+// The multiple-scattering term returns the energy classic Oren-Nayar loses and, because
+// it is tinted by albedo^2, deepens the saturation of coloured matte surfaces.
+// Returns the BRDF relative to Lambert (multiply N.L by it): 1 at roughness 0.
+//   NdotL, NdotV must be > 0;  LdotV = dot(L, V);  r = roughness 0..1;  rho = albedo.
+half3 NataneEONDiffuseRatio(half NdotL, half NdotV, half LdotV, half r, half3 rho)
+{
+    const half c1 = 0.5 - 2.0 / (3.0 * UNITY_PI);
+    const half c2 = 2.0 / 3.0 - 28.0 / (15.0 * UNITY_PI);
+
+    half AF = 1.0 / (1.0 + c1 * r);
+
+    // Single scattering (Fujii's improved Oren-Nayar, the "FON" term)
+    half s = LdotV - NdotL * NdotV;
+    half sOverT = (s > 0.0) ? s / max(max(NdotL, NdotV), 1e-3) : s;
+    half single = AF * (1.0 + r * sOverT);
+
+    // Multiple scattering: analytic fit of the directional albedo E(mu)
+    half mcL = 1.0 - NdotL;
+    half mcV = 1.0 - NdotV;
+    half gL = mcL * (0.0571085289 + mcL * (0.491881867 + mcL * (-0.332181442 + mcL * 0.0714429953)));
+    half gV = mcV * (0.0571085289 + mcV * (0.491881867 + mcV * (-0.332181442 + mcV * 0.0714429953)));
+    half EL = AF * (1.0 + r * gL);
+    half EV = AF * (1.0 + r * gV);
+    half avgE = AF * (1.0 + c2 * r);
+    half3 rhoMsOverRho = rho * avgE / max(1.0 - rho * (1.0 - avgE), 1e-3);
+    half3 multi = rhoMsOverRho * (max(1e-4, 1.0 - EV) * max(1e-4, 1.0 - EL) / max(1e-4, 1.0 - avgE));
+
+    return max(0.0, single) + multi;
+}
+
 // Toon Shading with adjustable steps and sharpness
 // Creates cel-shaded stepped lighting effect
 float ToonShading(float ndotl, float steps, float sharpness)
@@ -36,7 +206,10 @@ float ToonShading(float ndotl, float steps, float sharpness)
     // Apply anti-aliasing to prevent harsh pixelation while maintaining sharpness
     // Use smaller smoothstep range for cleaner anime look
     // _StepBorderSmooth を追加して段階境界のなじませ幅を拡張
-    float smoothRange = saturate(sharpness + _StepBorderSmooth) * 0.5;
+    float smoothRange = saturate(sharpness + NataneShadowNaturalStepBorder()) * 0.5;
+    // Floor the band by the screen-space derivative so the cel boundary stays
+    // ~1px anti-aliased at any distance/angle (prevents shimmering, esp. in VR).
+    smoothRange = min(max(smoothRange, fwidth(ndotl * steps) * 0.5), 0.5);
     float smoothedStep = smoothstep(0.5 - smoothRange, 0.5 + smoothRange, stepPosition);
 
     // Combine for final toon value with better precision
@@ -69,6 +242,8 @@ float GradientShading(float ndotl, float gradientWidth)
     // Create smooth gradient using smoothstep
     // gradientWidth controls the softness of the transition
     float halfWidth = gradientWidth * 0.5;
+    // Keep the boundary at least ~1px wide in screen space to avoid aliasing.
+    halfWidth = max(halfWidth, fwidth(ndotl) * 0.5);
     float gradient = smoothstep(shadowBoundary - halfWidth, shadowBoundary + halfWidth, ndotl);
 
     return saturate(gradient);
@@ -146,7 +321,7 @@ float ApplyLightBlend(float lightValue)
 // Creates a dithering effect for softer shadow transitions
 float DitheringPattern(float2 screenPos, float scale)
 {
-    return NataneGetDitherThreshold(StabilizeDitherCoord(screenPos), scale);
+    return NataneGetFadeDitherThreshold(StabilizeDitherCoord(screenPos), scale);
 }
 
 // Specular occlusion approximation based on visibility, view angle, and roughness.
@@ -381,7 +556,24 @@ half3 SheenHighlight(half3 normal, half3 viewDir, half3 lightDir)
     viewNormal.x *= NataneMirrorSign();
     half NdotV = max(0.0, dot(normalize(viewNormal), float3(0, 0, 1)));
     half NdotL = max(0.0, dot(normal, lightDir));
-    // Charlie sheen approximation: grazing angle fabric luster
+    if (_SheenModel >= 0.5)
+    {
+        // Charlie sheen: inverted-Gaussian NDF of Estevez & Kulla, "Production Friendly
+        // Microfacet Sheen BRDF" (2017) with Neubelt's visibility term (as in Filament).
+        // Unlike the Fresnel-style term below it has a real microfibre lobe: the luster
+        // follows the half vector and widens with roughness, so velvet, wool and fleece
+        // read as different cloths instead of the same rim glow.
+        half3 H = normalize(viewDir + lightDir);
+        half NdotH = saturate(dot(normal, H));
+        half alpha = max(_SheenRoughness * _SheenRoughness, 0.01);
+        half invAlpha = 1.0 / alpha;
+        half sin2h = max(1.0 - NdotH * NdotH, 0.0078125);   // keeps pow() finite on half
+        half D = (2.0 + invAlpha) * pow(sin2h, invAlpha * 0.5) * (0.5 / UNITY_PI);
+        half V = 1.0 / (4.0 * (NdotL + NdotV - NdotL * NdotV) + 1e-3);
+        half charlie = D * V * NdotL * UNITY_PI;
+        return min(charlie, 4.0) * _SheenColor.rgb * _SheenIntensity;
+    }
+    // Classic: grazing angle fabric luster
     half sheen = pow(1.0 - NdotV, _SheenPower) * NdotL;
     return saturate(sheen) * _SheenColor.rgb * _SheenIntensity;
 }
@@ -390,13 +582,19 @@ half3 SheenHighlight(half3 normal, half3 viewDir, half3 lightDir)
 // Subsurface Scattering (Translucency)
 // Simulates light passing through thin or translucent materials
 #if defined(_SSS)
-half3 SubsurfaceScattering(half3 normal, half3 lightDir, half3 viewDir, half thickness, half atten, float powerOverride)
+// lightColor: pass the light the direction came from. This used to read _LightColor0
+// directly, which is black in baked-only worlds where the direction falls back to a
+// vertex light / light probe, so transmission vanished there.
+half3 SubsurfaceScattering(half3 normal, half3 lightDir, half3 viewDir, half thickness, half atten, float powerOverride, half3 lightColor)
 {
     // Distort the normal for more realistic scattering effect
     half3 distortedNormal = normal + normalize(viewDir) * _SSSDistortion;
 
-    // Calculate back-lit effect (light passing through the object)
-    half backLight = max(0.0, dot(-normalize(distortedNormal), lightDir));
+    // Calculate back-lit effect (light passing through the object).
+    // rsqrt with an epsilon guards the case where the distortion cancels
+    // the normal and the vector collapses to ~zero (normalize would NaN).
+    half3 backDir = -distortedNormal * rsqrt(max(dot(distortedNormal, distortedNormal), 1e-4));
+    half backLight = max(0.0, dot(backDir, lightDir));
 
     // Apply power function for falloff and multiply by inverse thickness
     // Thicker areas scatter less light
@@ -405,7 +603,7 @@ half3 SubsurfaceScattering(half3 normal, half3 lightDir, half3 viewDir, half thi
     // Apply intensity, attenuation, and light color
     backLight *= _SSSIntensity * atten;
 
-    return backLight * _SSSColor.rgb * _LightColor0.rgb;
+    return backLight * _SSSColor.rgb * lightColor;
 }
 #endif // _SSS
 
@@ -430,11 +628,11 @@ half3 SubsurfaceScatteringLUT(half ndotl, half3 normal, half3 worldPos, half thi
 half3 CubemapReflection(half3 worldNormal, half3 viewDir, half smoothness, half metallic)
 {
     // Calculate reflection vector
+    // No mirror compensation: in a mirror the view direction already comes from the
+    // reflected camera position, so the world-space reflection vector is correct as is.
+    // (Flipping it in view space sampled the cubemap from the wrong side in mirrors and
+    // disagreed with the PBR path, which never flipped.)
     half3 reflectDir = reflect(-viewDir, worldNormal);
-    // Mirror compensation: flip reflection X in view space, then back to world
-    float3 viewReflect = mul((float3x3)UNITY_MATRIX_V, reflectDir);
-    viewReflect.x *= NataneMirrorSign();
-    reflectDir = mul(viewReflect, (float3x3)UNITY_MATRIX_V);
 
     // Calculate mip level based on smoothness (roughness = 1 - smoothness)
     half roughness = 1.0 - smoothness;
@@ -476,11 +674,8 @@ half3 CubemapReflection(half3 worldNormal, half3 viewDir, half smoothness, half 
 #if defined(_ENV_RIM)
 half3 EnvironmentalRim(half3 worldNormal, half3 viewDir, float powerOverride)
 {
-    // Calculate reflection vector with mirror compensation
+    // World-space reflection vector; valid in mirrors without compensation (see CubemapReflection).
     half3 reflectDir = reflect(-viewDir, worldNormal);
-    float3 viewReflect = mul((float3x3)UNITY_MATRIX_V, reflectDir);
-    viewReflect.x *= NataneMirrorSign();
-    reflectDir = mul(viewReflect, (float3x3)UNITY_MATRIX_V);
 
     // Sample environment cubemap
     half3 envColor = texCUBE(_EnvRimCube, reflectDir).rgb;
@@ -524,26 +719,41 @@ float3 CalculateRefraction(float3 worldNormal, float3 viewDir, float refractionI
 }
 #endif // _REFRACTION
 
+// Face-relative light basis, shared by ApplySDFShadow and ApplyShadowShapeRig.
+//
+// Both need "where is the light horizontally, relative to the face". Duplicating the
+// derivation would let the two drift apart, and a rig that follows a slightly different
+// notion of "front" than the SDF map does is very hard to debug from the visual alone.
+//
+// FdotL: +1 light in front of the face, -1 behind.
+// RdotL: +1 light to the face's right, -1 to its left.
+void NataneFaceLightBasis(float3 lightDir, out float FdotL, out float RdotL)
+{
+    // Transform face directions from object to world space.
+    // The tiny epsilon keeps normalize() from producing NaN when the author leaves an
+    // axis at exactly zero.
+    float3 faceForward = normalize(mul((float3x3)unity_ObjectToWorld, _FaceForwardDirection.xyz) + float3(0, 0, 0.0001));
+    float3 faceRight = normalize(mul((float3x3)unity_ObjectToWorld, _FaceRightDirection.xyz) + float3(0.0001, 0, 0));
+    float3 faceUp = cross(faceForward, faceRight);
+
+    // Project light direction onto the face plane (remove the vertical component).
+    // NaN guard: if lightDir is zero or parallel to faceUp, fall back to faceForward.
+    float3 rawLightDirFlat = lightDir - dot(lightDir, faceUp) * faceUp;
+    float flatLen = length(rawLightDirFlat);
+    float3 lightDirFlat = (flatLen > 0.001) ? (rawLightDirFlat / flatLen) : faceForward;
+
+    FdotL = dot(faceForward, lightDirFlat);
+    RdotL = dot(faceRight, lightDirFlat);
+}
+
 // SDF Shadow Map
 // Uses signed distance field to add directional-independent shadows (like face shadows)
 float ApplySDFShadow(float2 uv, float ndotl, float3 lightDir, float3 worldPos)
 {
     #ifdef _SDF_MAP
         #ifdef _FACE_SDF_ROTATION
-            // Transform face directions from object to world space
-            float3 faceForward = normalize(mul((float3x3)unity_ObjectToWorld, _FaceForwardDirection.xyz) + float3(0, 0, 0.0001));
-            float3 faceRight = normalize(mul((float3x3)unity_ObjectToWorld, _FaceRightDirection.xyz) + float3(0.0001, 0, 0));
-            float3 faceUp = cross(faceForward, faceRight);
-
-            // Project light direction onto face plane (remove vertical component)
-            // NaN guard: if lightDir is zero or parallel to faceUp, fallback to faceForward
-            float3 rawLightDirFlat = lightDir - dot(lightDir, faceUp) * faceUp;
-            float flatLen = length(rawLightDirFlat);
-            float3 lightDirFlat = (flatLen > 0.001) ? (rawLightDirFlat / flatLen) : faceForward;
-
-            // Calculate light direction relative to face
-            float FdotL = dot(faceForward, lightDirFlat);
-            float RdotL = dot(faceRight, lightDirFlat);
+            float FdotL, RdotL;
+            NataneFaceLightBasis(lightDir, FdotL, RdotL);
 
             // Mirror UV.x when light comes from the left
             float2 sdfUV = uv;
@@ -552,8 +762,24 @@ float ApplySDFShadow(float2 uv, float ndotl, float3 lightDir, float3 worldPos)
             // Sample SDF map
             float sdfValue = NATANE_SAMPLE_REPEAT(_SDFMap, sdfUV).r;
 
-            // Threshold based on forward dot light
-            float threshold = FdotL * 0.5 + 0.5 + _SDFOffset;
+            // Threshold based on forward dot light.
+            //
+            // lightDir points from the surface toward the light, so FdotL = +1 means the
+            // light is in front of the face and FdotL = -1 means it is behind.
+            //
+            // The baked map stores s(theta_t) where s(theta) = (1 - cos theta) / 2 is the
+            // monotonic [0,1] encoding of the horizontal light angle at which the texel
+            // flips into shadow. A texel is lit while s(theta) < s(theta_t), so the
+            // threshold must be s(theta) itself:
+            //
+            //     lit  <=>  theta < theta_t
+            //          <=>  cos theta > cos theta_t
+            //          <=>  (1 - cos theta) / 2 < (1 - cos theta_t) / 2
+            //
+            // The previous form (FdotL * 0.5 + 0.5) had the sign inverted, which made a
+            // front-facing light shadow almost the whole face. Fixed in v1.7 — see
+            // Documentation~/NPR2026_P2_FACE_SDF_BAKE.md for the derivation.
+            float threshold = (1.0 - FdotL) * 0.5 + _SDFOffset;
 
             // Apply softness
             float shadowEdge = _SDFSoftness * 0.5;
@@ -578,6 +804,55 @@ float ApplySDFShadow(float2 uv, float ndotl, float3 lightDir, float3 worldPos)
     #else
         return ndotl;
     #endif
+}
+
+// Shadow Shape Rig
+// Locally biases the shading boundary with up to four elliptical rigs, so the shape of the
+// shadow can be art-directed instead of falling out of the geometry alone.
+//
+//   ndotl' = saturate(ndotl + sum_i( w_i(uv) * strength_i ) * mask)
+//
+// strength > 0 pushes the boundary toward lit (the shadow shrinks),
+// strength < 0 pushes it toward shadow (the shadow grows).
+//
+// A slot whose radius is zero costs a single compare, so the four slots are effectively
+// free when unused — that is why they are unrolled rather than looped.
+float ApplyShadowShapeRig(float2 uv, float ndotl, float3 lightDir)
+{
+#ifdef _SHADOW_SHAPE_RIG
+    // Follow the light the way Shading Rig does: the rig drifts with the light direction
+    // instead of being pinned to the mesh. Projecting onto the face basis keeps the drift
+    // horizontal, which is what reads as "the shadow moved" rather than "the face turned".
+    float FdotL, RdotL;
+    NataneFaceLightBasis(lightDir, FdotL, RdotL);
+    float2 follow = float2(RdotL, FdotL) * _ShadowRigFollowScale;
+
+    // NOSAMPLER なので他のマスクと同じく _MainTex のサンプラーを共有する。
+    // 専用サンプラーを増やすと Quest のサンプラー上限に効いてくる。
+    half mask = lerp(1.0h, (half)NATANE_SAMPLE_SHARED_R(_ShadowRigMask, _MainTex, uv), (half)_ShadowRigMaskStrength);
+
+    half bias = 0.0h;
+
+    #define NATANE_RIG_SLOT(P, S) \
+        { \
+            float4 prm = P; \
+            prm.xy += follow * (S).w; \
+            bias += NataneRigWeight(uv, prm, radians((S).x), (half)(S).z) * (half)(S).y; \
+        }
+
+    NATANE_RIG_SLOT(_ShadowRigParams0, _ShadowRigShape0)
+    NATANE_RIG_SLOT(_ShadowRigParams1, _ShadowRigShape1)
+    NATANE_RIG_SLOT(_ShadowRigParams2, _ShadowRigShape2)
+    NATANE_RIG_SLOT(_ShadowRigParams3, _ShadowRigShape3)
+
+    #undef NATANE_RIG_SLOT
+
+    // Not saturated: callers apply wrap / naturalness to the signed N.L, and clamping here
+    // changed the shading as soon as the keyword was on, even with no rig placed.
+    return ndotl + bias * mask;
+#else
+    return ndotl;
+#endif
 }
 
 // Shading Grade Map
