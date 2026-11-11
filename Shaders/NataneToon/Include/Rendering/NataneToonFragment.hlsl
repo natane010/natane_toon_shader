@@ -405,6 +405,10 @@ half4 frag(v2f i) : SV_Target
         half3 worldNormal = i.worldNormal; // Already normalized in vertex shader
     #endif
 
+    // Geometric specular AA kernel for the GGX lobes (see NataneToonPBR.hlsl).
+    // Derivatives are taken here, outside any branch; strength 0 (default) keeps it at 0.
+    nataneGSAAKernel = NataneComputeGSAAKernel(normalize(i.worldNormal)) * saturate(_SpecularAAGeometric);
+
     // ===== Detail Map (Secondary UV) =====
     #ifdef _DETAIL_MAP
     if (_DetailMap >= 0.5)
@@ -719,6 +723,16 @@ half4 frag(v2f i) : SV_Target
     #endif
     half ndotl = dot(shadingNormal, lightDir);
 
+    // ===== Bump terminator softening =====
+    // Only the lit side is scaled, so the shade never gets darker than before.
+    #ifdef _NORMALMAP
+    if (_BumpTerminatorStrength > 0.001)
+    {
+        half bumpShadow = NataneBumpTerminatorShadow(normalize(i.worldNormal), worldNormal, lightDir);
+        ndotl = ndotl > 0.0 ? ndotl * lerp(1.0, bumpShadow, saturate(_BumpTerminatorStrength)) : ndotl;
+    }
+    #endif
+
     // ===== SDF Shadow Map =====
     // Apply SDF shadow to ndotl before lighting calculations
     ndotl = ApplySDFShadow(uv, ndotl, lightDir, i.worldPos);
@@ -1009,8 +1023,9 @@ half4 frag(v2f i) : SV_Target
             LightVolumeSH(i.worldPos, L0, L1r, L1g, L1b);
 
             // Evaluate direct and indirect lighting from Light Volume
-            float3 directLightLV = LightVolumeEvaluate(worldNormal, L0, L1r, L1g, L1b);
-            float3 indirectLightLV = LightVolumeEvaluate(-worldNormal, L0, L1r, L1g, L1b);
+            // _LightVolumeSHMode 0 (default) is the plain linear evaluation, as before.
+            float3 directLightLV = NataneLightVolumeEvaluateMode(worldNormal, L0, L1r, L1g, L1b, _LightVolumeSHMode);
+            float3 indirectLightLV = NataneLightVolumeEvaluateMode(-worldNormal, L0, L1r, L1g, L1b, _LightVolumeSHMode);
 
             // Gentle clamp to prevent over-brightening
             directLightLV = min(directLightLV, float3(1.1, 1.1, 1.1));
@@ -1062,6 +1077,21 @@ half4 frag(v2f i) : SV_Target
         #else
             half3 directResult = lerp(shadowColor, half3(1, 1, 1), shadingValue);
         #endif
+
+        // ===== Shadow border tint (terminator colour) =====
+        // A saturated band along the lit / shadow boundary, the cue that makes skin and
+        // cloth read as lit volumes rather than two flat tones. "borderEdge" follows
+        // whatever transition the shading mode produced (toon step, gradient, ramp, cast
+        // shadow edge); "borderHalo" widens it around the N.L terminator by _ShadowBorderWidth.
+        if (_ShadowBorderStrength > 0.001)
+        {
+            half borderEdge = 4.0 * shadingValue * (1.0 - shadingValue);
+            half borderHalo = saturate(1.0 - abs(continuousShadingLit * atten - 0.5) / max(_ShadowBorderWidth * 0.5, 0.001));
+            borderHalo *= step(0.001, _ShadowBorderWidth);
+            half borderMask = saturate(max(borderEdge, borderHalo)) * saturate(_ShadowBorderStrength);
+            borderMask *= (1.0 - shadowReceiveMask);
+            directResult *= lerp(half3(1, 1, 1), _ShadowBorderColor.rgb, borderMask);
+        }
 
         // Light color application (with LightColorInfluence preservation)
         half lightColorLum = CALC_LUMINANCE(effectiveLightColor);
@@ -1524,6 +1554,10 @@ half4 frag(v2f i) : SV_Target
         #ifndef UNITY_PASS_FORWARDBASE
             specContrib *= _AdditionalLightIntensity;
         #endif
+
+        // Fade the highlight inside the shade (0 = unchanged). Cast shadows are already
+        // handled by atten above; this follows the toon shading itself.
+        specContrib *= lerp(1.0, shadingValue, saturate(_SpecularShadowMask));
 
         // Apply glossiness and matte material quality
         specContrib *= _Glossiness * specularOcclusion;
@@ -2187,6 +2221,16 @@ half4 frag(v2f i) : SV_Target
         #endif
         col.rgb = ApplyEffectBlendPost(preRefraction, col.rgb, refractionBlendFaded, _RefractionBlendMode);
     } // if (_Refraction >= 0.5)
+    #endif
+
+    // ===== Highlight compression (ForwardBase only, before emission) =====
+    // Rolls off over-bright lit colour without clipping a channel or shifting the hue.
+    // Placed before emission / glitter so their HDR output still drives world bloom.
+    #ifdef UNITY_PASS_FORWARDBASE
+    if (_HighlightCompress > 0.001)
+    {
+        col.rgb = lerp(col.rgb, NataneNeutralHighlightCompress(max(col.rgb, 0.0)), saturate(_HighlightCompress));
+    }
     #endif
 
     // ===== Emission (ForwardBase only) =====

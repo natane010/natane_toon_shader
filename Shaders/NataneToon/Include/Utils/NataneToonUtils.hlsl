@@ -1347,6 +1347,27 @@ float2 StabilizeDitherCoord(float2 screenPixelPos)
 }
 #endif
 
+// ===== Highlight compression (Khronos PBR Neutral, highlight part only) =====
+// Compresses on the PEAK channel, so no channel clips and the hue is kept; colours
+// below 0.76 pass through untouched. Only the roll-off and the desaturation toward
+// white are used: the tone mapper's dark-end offset is left out so shadows and
+// mid-tones stay exactly as painted. Output peak is always below 1.
+// Reference: Khronos PBR Neutral Tone Mapper (2024), pbrNeutral.glsl.
+half3 NataneNeutralHighlightCompress(half3 c)
+{
+    const half startCompression = 0.76;
+    const half desaturation = 0.15;
+    const half d = 1.0 - startCompression;
+
+    half peak = max(c.r, max(c.g, c.b));
+    half safePeak = max(peak, startCompression);
+    half newPeak = 1.0 - d * d / (safePeak + d - startCompression);
+    half3 compressed = c * (newPeak / safePeak);
+    half g = 1.0 - 1.0 / (desaturation * (safePeak - newPeak) + 1.0);
+    compressed = lerp(compressed, half3(newPeak, newPeak, newPeak), g);
+    return peak < startCompression ? c : compressed;
+}
+
 // ===== Shared Dithering / Alpha Functions =====
 // NataneBayer4x4 / NataneBayerThreshold4x4 / NataneFadeDitherScale are defined in
 // NataneToonCamera.hlsl (shared with the outline pass).

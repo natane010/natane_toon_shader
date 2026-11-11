@@ -258,6 +258,14 @@ Shader "Natane/Toon Shader (X-Ray)"
         _LightColorInfluence ("Light Color Influence", Range(0, 1)) = 1
         _ShadowReceive ("Shadow Receive", Range(0, 1)) = 1
         _ShadowSmoothing ("Shadow Map Smoothing", Range(0, 1)) = 0
+        _ShadowBorderColor ("Shadow Border Color", Color) = (1, 0.55, 0.45, 1)
+        _ShadowBorderStrength ("Shadow Border Strength", Range(0, 1)) = 0
+        _ShadowBorderWidth ("Shadow Border Width", Range(0, 1)) = 0.3
+        _SpecularShadowMask ("Specular Shadow Mask", Range(0, 1)) = 0
+        _BumpTerminatorStrength ("Bump Terminator Softening", Range(0, 1)) = 0
+        _SpecularAAGeometric ("Geometric Specular AA (GGX)", Range(0, 1)) = 0
+        _HighlightCompress ("Highlight Compression (Neutral)", Range(0, 1)) = 0
+        [Enum(Linear,0,ZH3,1,Geomerics,2)] _LightVolumeSHMode ("Light Volume SH Mode", Float) = 0
 
         _ShadowNaturalness ("Shadow Naturalness (自然な影)", Range(0, 1)) = 0
         [Space(5)]

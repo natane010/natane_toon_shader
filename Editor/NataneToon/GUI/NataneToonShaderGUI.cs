@@ -2271,6 +2271,8 @@ public class NataneToonShaderGUI : ShaderGUI
                   "0.3 to 0.5 reads as natural shading; above 0.7 becomes nearly continuous."),
                 MessageType.Info);
 
+            DrawSemiRealFinishControls();
+
             EditorGUILayout.Space(SECTION_SPACING);
             DrawProperty("_ShadowReceive", L("影の受け取り", "Shadow Receive"));
             DrawHelpToggle("ShadowReceive", L("他のオブジェクトからの影がこのマテリアルに与える影響を制御します。1 = 完全な影、0 = 影なし。", "Controls how shadows from other objects affect this material. 1 = Full shadow, 0 = No shadow."), MessageType.Info);
@@ -10681,6 +10683,11 @@ public class NataneToonShaderGUI : ShaderGUI
             () => { Undo.RecordObject(targetMaterial, "Apply Toon-PBR Hybrid"); ApplyToonPbrHybridStyle(targetMaterial); });
 
         DrawWizardStyleButton(
+            L("セミリアル Toon", "Semi-Real Toon"),
+            L("リアル寄りのトゥーン。影境界の色味＋GGXハイライト＋自然な減衰", "Toon close to real: tinted terminator + GGX highlight + natural falloff"),
+            () => { Undo.RecordObject(targetMaterial, "Apply Semi-Real Toon"); ApplySemiRealToonStyle(targetMaterial); SynchronizeKeywordsAndRefreshInspectorCaches(); });
+
+        DrawWizardStyleButton(
             L("Near PBR", "Near PBR"),
             L("リアルな質感・滑らかなライティング", "Realistic textures, smooth lighting"),
             () => { Undo.RecordObject(targetMaterial, "Apply Near PBR"); ApplyNearPbrStyle(targetMaterial); });
@@ -10904,6 +10911,142 @@ public class NataneToonShaderGUI : ShaderGUI
         EditorUtility.SetDirty(mat);
     }
 
+    private static void SetFloatIfPresent(Material mat, string name, float value)
+    {
+        if (mat != null && mat.HasProperty(name)) mat.SetFloat(name, value);
+    }
+
+    private static void SetColorIfPresent(Material mat, string name, Color value)
+    {
+        if (mat != null && mat.HasProperty(name)) mat.SetColor(name, value);
+    }
+
+    /// <summary>
+    /// セミリアル Toon プリセット。
+    /// トゥーンの陰影構造は残したまま、(1) 連続寄りの減衰、(2) 影境界の色味、
+    /// (3) GGX ハイライト（_PBR_LIKE）、(4) ハイライトの安定化と白飛び抑制を足す。
+    /// テクスチャやマスク、アウトライン、リムの ON/OFF には触れない。
+    /// </summary>
+    internal void ApplySemiRealToonStyle(Material mat)
+    {
+        if (mat == null) return;
+
+        // --- Shading: gradient base with a natural falloff ---
+        SetFloatIfPresent(mat, "_ShadingMode", 1f);            // Gradient
+        SetFloatIfPresent(mat, "_ShadingGradientWidth", 0.35f);
+        SetFloatIfPresent(mat, "_LitSoftness", 0.4f);
+        SetFloatIfPresent(mat, "_ShadowNaturalness", 0.45f);
+        SetFloatIfPresent(mat, "_ShadowBlend", 0.35f);
+        SetFloatIfPresent(mat, "_LightBlend", 0.35f);
+        SetFloatIfPresent(mat, "_AlbedoPreservation", 0.6f);
+
+        // --- Shadow colour: light, slightly cool, a little more saturated than the lit side ---
+        SetColorIfPresent(mat, "_ShadowColor", new Color(0.78f, 0.67f, 0.71f, 1f));
+        SetFloatIfPresent(mat, "_ShadowSaturation", 1.15f);
+
+        // --- Terminator tint ---
+        SetColorIfPresent(mat, "_ShadowBorderColor", new Color(1f, 0.62f, 0.52f, 1f));
+        SetFloatIfPresent(mat, "_ShadowBorderStrength", 0.35f);
+        SetFloatIfPresent(mat, "_ShadowBorderWidth", 0.25f);
+
+        // --- Look mixer: toon base with a PBR share; NPR effects stay at full strength ---
+        SetFloatIfPresent(mat, "_LookMode", 4f);               // Hybrid
+        SetFloatIfPresent(mat, "_ToonWeight", 1f);
+        SetFloatIfPresent(mat, "_NprWeight", 1f);
+        SetFloatIfPresent(mat, "_PbrWeight", 0.35f);
+
+        // --- GGX highlight (derived keyword: no toggle property drives it) ---
+        mat.EnableKeyword("_PBR_LIKE");
+        SetFloatIfPresent(mat, "_Smoothness", 0.45f);
+        SetFloatIfPresent(mat, "_Glossiness", 0.6f);
+        SetFloatIfPresent(mat, "_MatteEffect", 0.15f);
+
+        // --- Stability / finish ---
+        SetFloatIfPresent(mat, "_SpecularShadowMask", 0.7f);
+        SetFloatIfPresent(mat, "_BumpTerminatorStrength", 1f);
+        SetFloatIfPresent(mat, "_SpecularAAGeometric", 1f);
+        SetFloatIfPresent(mat, "_HighlightCompress", 0.6f);
+        SetFloatIfPresent(mat, "_LightVolumeSHMode", 1f);      // ZH3
+        SetFloatIfPresent(mat, "_RimShadowMask", 0.5f);
+        SetFloatIfPresent(mat, "_RimDirStrength", 0.5f);
+
+        Undo.SetCurrentGroupName(L("プリセット適用: セミリアル Toon", "Apply Preset: Semi-Real Toon"));
+        EditorUtility.SetDirty(mat);
+    }
+
+    /// <summary>
+    /// 「セミリアル仕上げ」グループ。すべて既定値で無効（0 / Linear）なので、
+    /// 触らない限り既存マテリアルの見た目は変わらない。
+    /// </summary>
+    private void DrawSemiRealFinishControls()
+    {
+        EditorGUILayout.Space(10);
+        DrawSubGroupHeader(L("セミリアル仕上げ", "Semi-Real Finish"));
+
+        DrawProperty("_ShadowBorderStrength", L("影境界の色味", "Shadow Border Tint"),
+            "明暗の境界に色の帯を乗せます。肌は赤み、布は彩度の高い同系色が定番。0 で無効。",
+            "Adds a tinted band along the lit / shadow boundary. Reddish for skin, a saturated shade of the base for cloth. 0 = off.");
+        MaterialProperty borderStrength = FindProperty("_ShadowBorderStrength", properties, false);
+        if (borderStrength != null && (borderStrength.hasMixedValue || borderStrength.floatValue > 0.001f))
+        {
+            EditorGUI.indentLevel++;
+            DrawColorProperty("_ShadowBorderColor", L("境界の色", "Border Color"));
+            DrawProperty("_ShadowBorderWidth", L("境界の幅", "Border Width"));
+            EditorGUI.indentLevel--;
+        }
+
+        DrawProperty("_SpecularShadowMask", L("影の中のスペキュラを抑える", "Specular Shadow Mask"),
+            "影側のハイライトを弱めます。0 で従来どおり。",
+            "Fades the toon specular inside the shade. 0 = as before.");
+
+        DrawProperty("_BumpTerminatorStrength", L("ノーマルマップ境界の補正", "Bump Terminator Softening"),
+            "ノーマルマップ使用時、影境界のギザギザや光漏れをなだらかにします（ノーマルマップ ON のときのみ有効）。",
+            "Smooths jagged, leaking shadow boundaries caused by normal maps (only with Normal Map enabled).");
+
+        // _PBR_LIKE は派生キーワードで対応するトグルプロパティが無いため、キーワードを直接切り替える。
+        if (targetMaterial != null)
+        {
+            bool pbrLikeOn = targetMaterial.IsKeywordEnabled("_PBR_LIKE");
+            EditorGUI.BeginChangeCheck();
+            bool newPbrLikeOn = EditorGUILayout.Toggle(
+                new GUIContent(
+                    L("GGX ハイライト (PBR スペキュラ)", "GGX Highlight (PBR Specular)"),
+                    L("Smoothness / Metallic に従う物理ベースのハイライトと映り込みを足します。強さは Look Mixer の PBR ウェイトに比例します。",
+                      "Adds a physically based highlight and reflection driven by Smoothness / Metallic. Its strength follows the Look Mixer PBR weight.")),
+                pbrLikeOn);
+            if (EditorGUI.EndChangeCheck())
+            {
+                foreach (Material mat in GetAllTargetMaterials())
+                {
+                    if (mat == null) continue;
+                    Undo.RecordObject(mat, L("GGX ハイライト切り替え", "Toggle GGX Highlight"));
+                    if (newPbrLikeOn) mat.EnableKeyword("_PBR_LIKE");
+                    else mat.DisableKeyword("_PBR_LIKE");
+                    EditorUtility.SetDirty(mat);
+                }
+                InvalidateInspectorCaches();
+            }
+            if (newPbrLikeOn)
+            {
+                EditorGUI.indentLevel++;
+                DrawProperty("_Smoothness", L("スムースネス", "Smoothness"));
+                DrawProperty("_Metallic", L("メタリック", "Metallic"));
+                DrawProperty("_SpecularAAGeometric", L("ハイライトのチラつき抑制", "Geometric Specular AA"),
+                    "細い形状や曲面でハイライトがチカチカするのを抑えます。VR で特に有効。",
+                    "Stops highlights from sparkling on thin or curved geometry. Most noticeable in VR.");
+                EditorGUI.indentLevel--;
+            }
+        }
+
+        DrawProperty("_HighlightCompress", L("白飛び抑制", "Highlight Compression"),
+            "明るいワールドで色が白く飛ぶのを、色相を保ったままなだらかに抑えます。エミッションには影響しません。",
+            "Rolls off blown-out colour in bright worlds while keeping the hue. Emission is not affected.");
+
+        DrawProperty("_LightVolumeSHMode", L("ライトボリュームの陰影", "Light Volume Shading"),
+            "Light Volumes の明暗の出し方。Linear = 従来、ZH3 / Geomerics = コントラストを復元（VRC Light Volumes 使用時のみ有効）。",
+            "How Light Volume lighting is reconstructed. Linear = as before, ZH3 / Geomerics restore contrast (only with VRC Light Volumes).");
+    }
+
     /// <summary>
     /// Apply Near PBR preset (3.2 Quick Setup)
     /// </summary>
@@ -10996,7 +11139,7 @@ public class NataneToonShaderGUI : ShaderGUI
                 ApplyGameCharacterStyle(mat);
                 break;
             case NataneToon.Editor.AutoSetupLook.SemiRealistic:
-                ApplyToonPbrHybridStyle(mat);
+                ApplySemiRealToonStyle(mat);
                 break;
         }
     }

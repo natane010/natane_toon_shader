@@ -85,6 +85,33 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `package.json` の対応 Unity を `2022.3` に更新。ローカルキーワード数（メインシェーダーで 110 超）と
   `PackageRequirements` / `#include_with_pragmas` の使用により、実際には 2019.4 では動作しない。
 
+### Added — セミリアル Toon / 表現の質
+すべて既定値で無効（0 または Linear）。既存マテリアルの見た目は変わらない。キーワードは増やしていない。
+- **影境界の色味** (`_ShadowBorderColor` / `_ShadowBorderStrength` / `_ShadowBorderWidth`):
+  明暗の境界に色の帯を乗せる。肌の赤み、布の高彩度な境界など、リアル寄りトゥーンの定番表現。
+  トゥーン段 / グラデーション / ランプ / 落ち影のどの境界にも追従する。
+- **影の中のスペキュラ抑制** (`_SpecularShadowMask`)。
+- **ノーマルマップ境界の補正** (`_BumpTerminatorStrength`): ノーマルマップ由来の光漏れとギザギザな影境界を
+  なだらかにする（Estevez et al., "A Microfacet-Based Shadowing Function to Solve the Bump Terminator
+  Problem", Ray Tracing Gems 2019）。
+- **GGX ハイライトのチラつき抑制** (`_SpecularAAGeometric`): 細い形状や曲面でハイライトが
+  チカチカするのを抑える。TAA の無い VR で効果が大きい
+  （Tokuyoshi & Kaplanyan, "Improved Geometric Specular Antialiasing", I3D 2019）。
+- **白飛び抑制** (`_HighlightCompress`): 明るいワールドでの白飛びを、色相を保ったままなだらかに抑える。
+  エミッションの手前で適用するのでブルームには影響しない（Khronos PBR Neutral のハイライト圧縮部）。
+- **ライトボリュームの陰影モード** (`_LightVolumeSHMode`): Linear（従来）/ ZH3 / Geomerics。
+  L1 までしか持たない Light Volumes から、高次相当のコントラストを復元する
+  （Roughton et al., "ZH3: Quadratic Zonal Harmonics", I3D 2024。Geomerics の非線形フィット）。
+- **GGX ハイライト (PBR スペキュラ) のトグルをインスペクタに追加**。`_PBR_LIKE` は派生キーワードで
+  UI から有効にする手段が無く、Look Mixer で PBR 寄りにしても GGX スペキュラが出なかった。
+- **「セミリアル Toon」プリセット**（クイックセットアップ）。グラデーション基調の陰影、影境界の色味、
+  GGX ハイライト、白飛び抑制をまとめて設定する。Auto Setup の「セミリアル」もこのプリセットを土台にする。
+- インスペクタの「シャドウ設定」に「セミリアル仕上げ」グループを追加（上記をまとめて配置）。
+
+### Fixed — Auto Setup
+- 髪プロファイルの `_HairSpecWidth1` が範囲外の値（0.12 / 0.15、本来は 1〜256 の指数）になっており、
+  髪全体が白く光る設定になっていた問題を修正。
+
 ### Added
 - **アウトライン幅の基準** (`_OutlineWidthMode`): `Legacy`（既定、従来どおり）と `Stable` を選べる。
   `Stable` はカメラのニアクリップに依存しない太さになり、エディタ / VRChat / カメラ / ミラーで

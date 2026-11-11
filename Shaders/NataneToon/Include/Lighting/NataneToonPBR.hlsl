@@ -1,6 +1,23 @@
 #ifndef NATANE_TOON_PBR_INCLUDED
 #define NATANE_TOON_PBR_INCLUDED
 
+// ===== Geometric specular anti-aliasing =====
+// Tokuyoshi & Kaplanyan, "Improved Geometric Specular Antialiasing" (I3D 2019).
+// Where the geometric normal changes quickly across a pixel (thin or strongly curved
+// geometry) the GGX lobe is narrower than the pixel footprint and the highlight
+// sparkles, which is very visible in VR without temporal AA. The kernel below is the
+// extra roughness that covers the footprint. It is computed once per pixel by the
+// fragment shader and consumed by every GGX lobe through NatanePBRSpecular.
+static half nataneGSAAKernel = 0.0;   // 0 = feature off (default)
+
+half NataneComputeGSAAKernel(half3 geomNormalWS)
+{
+    half3 du = ddx(geomNormalWS);
+    half3 dv = ddy(geomNormalWS);
+    half variance = 0.25 * (dot(du, du) + dot(dv, dv));   // screen-space variance sigma^2 = 0.25
+    return min(2.0 * variance, 0.18);                      // clamping threshold kappa = 0.18
+}
+
 // GGX Normal Distribution Function (Trowbridge-Reitz)
 half NataneGGX_D(half NdotH, half roughness)
 {
@@ -28,6 +45,10 @@ half3 NataneSchlickFresnel(half cosTheta, half3 F0)
 half3 NatanePBRSpecular(half3 normal, half3 viewDir, half3 lightDir,
                          half roughness, half3 F0, half3 lightColor, half atten)
 {
+    // Geometric specular AA: "roughness" is used as the GGX alpha here, so the kernel is
+    // added to alpha^2. With the kernel at 0 this is an exact no-op.
+    roughness = sqrt(saturate(roughness * roughness + nataneGSAAKernel));
+
     half3 H = normalize(viewDir + lightDir);
     half NdotH = max(0.001, dot(normal, H));
     half NdotL = max(0.001, dot(normal, lightDir));

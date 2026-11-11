@@ -36,6 +36,83 @@ float NataneShadowNaturalStepBorder()
     return max(_StepBorderSmooth, _ShadowNaturalness * 0.35);
 }
 
+// ===== Bump terminator softening =====
+// Estevez, Lecocq, Stein, "A Microfacet-Based Shadowing Function to Solve the Bump
+// Terminator Problem" (Ray Tracing Gems, 2019). A normal map can light pixels the real
+// geometry turns away from the light; with a hard toon step that shows as a jagged,
+// leaking terminator. The mapped normal's deviation from the geometric normal is treated
+// as a microfacet roughness and the matching GGX shadowing term fades the leak smoothly.
+//   Ng = interpolated vertex normal, Ns = normal-mapped normal, L = light direction.
+// Returns 1 when the two normals agree (no bump), so unmapped areas are unchanged.
+half NataneBumpTerminatorShadow(half3 Ng, half3 Ns, half3 L)
+{
+    half cosNgL = dot(Ng, L);
+    half cosNgNs = dot(Ng, Ns);
+    half cosNsL = dot(Ns, L);
+
+    half cosI = min(abs(cosNgL), 0.9999);
+    half cosD = min(abs(cosNgNs), 0.9999);
+    half alpha2 = saturate(0.125 * (1.0 / max(cosD * cosD, 1e-4) - 1.0));
+    half tan2I = 1.0 / max(cosI * cosI, 1e-6) - 1.0;
+    half g1 = 2.0 / (1.0 + sqrt(1.0 + alpha2 * tan2I));
+
+    // Light on the geometric back side while the mapped normal still faces it: pure leak.
+    return (cosNgL * cosNgNs * cosNsL < 0.0) ? 0.0 : g1;
+}
+
+// ===== Non-linear irradiance from L1 spherical harmonics =====
+// Light Volumes store L0 + L1 only. The linear evaluation (L0 + dot(L1, n)) under-shoots
+// the lit side and goes flat or negative on the far side. Both reconstructions below add
+// back the contrast a higher-order fit would have, from the same four coefficients.
+// Inputs follow the Unity / VRC Light Volumes convention (linear eval = L0 + dot(L1, n)).
+
+// "ZH3: Quadratic Zonal Harmonics" (Roughton et al., I3D 2024), hallucinated variant:
+// adds the missing L2 zonal lobe around one shared luminance axis, so there is no
+// per-channel hue shift and no pow().
+float3 NataneSHL1ZH3(float3 n, float3 L0, float3 L1r, float3 L1g, float3 L1b)
+{
+    const float3 lumWeights = float3(0.2126, 0.7152, 0.0722);
+    float3 axis = L1r * lumWeights.r + L1g * lumWeights.g + L1b * lumWeights.b;
+    axis *= rsqrt(max(dot(axis, axis), 1e-8));
+
+    float3 l1Axis = float3(dot(L1r, axis), dot(L1g, axis), dot(L1b, axis));
+    float3 ratio = 0.8660254 * abs(l1Axis) / max(L0, 1e-5);
+    float3 zonal = L0 * (0.08 * ratio + 0.6 * ratio * ratio);
+
+    float fZ = dot(axis, n);
+    float3 linearEval = L0 + float3(dot(L1r, n), dot(L1g, n), dot(L1b, n));
+    return max(0.0, linearEval + 0.2795085 * zonal * (3.0 * fZ * fZ - 1.0));
+}
+
+// Geomerics non-linear fit (Hazel, "Converting SH Radiance to Irradiance"), per channel.
+// Never negative; restores the full dynamic range of a strongly directional probe.
+float NataneSHL1Geomerics(float L0, float3 L1, float3 n)
+{
+    float R0 = max(L0, 1e-5);
+    float3 R1 = 0.5 * L1;
+    float lenR1 = max(length(R1), 1e-5);
+    float q = 0.5 * (1.0 + dot(R1 / lenR1, n));
+    float r = min(lenR1 / R0, 1.0);
+    float p = 1.0 + 2.0 * r;
+    float a = (1.0 - r) / (1.0 + r);
+    return R0 * (a + (1.0 - a) * (p + 1.0) * pow(max(q, 1e-5), p));
+}
+
+#if defined(_USE_LIGHT_VOLUME) || defined(NATANE_FORCE_LIGHTVOLUME_HELPERS)
+// mode: 0 = linear (identical to LightVolumeEvaluate), 1 = ZH3, 2 = Geomerics.
+float3 NataneLightVolumeEvaluateMode(float3 n, float3 L0, float3 L1r, float3 L1g, float3 L1b, float mode)
+{
+    if (mode < 0.5)
+        return LightVolumeEvaluate(n, L0, L1r, L1g, L1b);
+    if (mode < 1.5)
+        return NataneSHL1ZH3(n, L0, L1r, L1g, L1b);
+    return float3(
+        NataneSHL1Geomerics(L0.r, L1r, n),
+        NataneSHL1Geomerics(L0.g, L1g, n),
+        NataneSHL1Geomerics(L0.b, L1b, n));
+}
+#endif
+
 // Toon Shading with adjustable steps and sharpness
 // Creates cel-shaded stepped lighting effect
 float ToonShading(float ndotl, float steps, float sharpness)

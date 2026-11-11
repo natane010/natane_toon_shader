@@ -235,6 +235,16 @@ CBUFFER_START(UnityPerMaterial)
     // 個別パラメータを上書きせず「下限を引き上げる」だけなので、手動調整と喧嘩しない。
     float _ShadowNaturalness;
     float _ShadowMaxDarkness;
+    // Semi-realistic finish controls. All default to "off": 0 strength / mode 0 leaves
+    // every existing material pixel-identical.
+    half4 _ShadowBorderColor;        // tint of the band along the lit / shadow boundary
+    float _ShadowBorderStrength;
+    float _ShadowBorderWidth;
+    float _SpecularShadowMask;       // fades the toon specular inside the shade
+    float _BumpTerminatorStrength;   // softens normal-map light leaks at the terminator
+    float _SpecularAAGeometric;      // widens GGX roughness where the surface curves within a pixel
+    float _HighlightCompress;        // hue-preserving roll-off of over-bright lit colour
+    float _LightVolumeSHMode;        // 0 = linear L1, 1 = ZH3, 2 = Geomerics
     float _SmoothNormalShadingBlend;
     float _SmoothNormalMode;
     float _LightColorMin;
