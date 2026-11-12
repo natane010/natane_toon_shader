@@ -141,7 +141,7 @@ namespace NataneToon.Editor
                 if (mat.HasProperty("_UseDithering"))
                 {
                     mat.SetFloat("_UseDithering", 1f);
-                    mat.EnableKeyword("_DITHERING");
+                    mat.EnableKeyword("_USE_DITHERING");
                 }
             }
         }

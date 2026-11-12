@@ -92,40 +92,6 @@ Shader "Natane/Toon Shader (Background)"
         _ScreenToneBlend ("Blend", Range(0, 1)) = 1
         _ScreenToneBlur ("Mask Blur", Range(0, 1)) = 0
 
-        // ===== Illustration Style (美術ボード向け絵画調) =====
-        // NPR2026 P9: キャラ側にしか載っていなかった絵画調機能を背景へ展開する。
-        // GrabPass を要求する _SOFT_FILTER / _KUWAHARA_FILTER は、
-        // Background に GrabPass が無いため対象外（全背景マテリアルが
-        // 無条件に全画面コピーを払うことになるため、別途判断が要る）。
-        [Header(Illustration Style)]
-        [Toggle(_COLOR_QUANTIZE)] _UseColorQuantize ("Enable Color Quantize", Float) = 0
-        [Enum(RGB,0,HSV,1)] _QuantizeMode ("Quantize Mode", Float) = 1
-        _QuantizeLevels ("Quantize Levels", Range(2, 32)) = 8
-        _QuantizeHueLevels ("Hue Levels", Range(2, 36)) = 12
-        _QuantizeSatLevels ("Saturation Levels", Range(2, 16)) = 8
-        _QuantizeValLevels ("Value Levels", Range(2, 16)) = 8
-        _QuantizeDither ("Dither Amount", Range(0, 1)) = 0.5
-        _QuantizeBlend ("Quantize Blend", Range(0, 1)) = 1
-        _QuantizeMask ("Quantize Mask", 2D) = "white" {}
-
-        [Toggle(_LUT_3D)] _UseLUT3D ("Enable 3D LUT", Float) = 0
-        _LUT3DTex ("LUT Texture", 2D) = "white" {}
-        _LUT3DIntensity ("LUT Intensity", Range(0, 1)) = 1
-        _LUT3DSize ("LUT Grid Size", Float) = 32
-
-        [Toggle(_WATERCOLOR)] _UseWatercolor ("Enable Watercolor", Float) = 0
-        _WCEdgeDarkening ("Edge Darkening", Range(0, 2)) = 0.5
-        _WCWetEdge ("Wet Edge", Range(0, 1)) = 0.3
-        _WCGranulation ("Granulation", Range(0, 1)) = 0.4
-        _WCGranulationTex ("Granulation Texture", 2D) = "gray" {}
-        _WCPaperTex ("Paper Texture", 2D) = "white" {}
-        _WCPaperIntensity ("Paper Intensity", Range(0, 1)) = 0.3
-        _WCPaperTiling ("Paper Tiling", Float) = 1
-        _WCBlend ("Watercolor Blend", Range(0, 1)) = 1
-        _WCMask ("Watercolor Mask", 2D) = "white" {}
-
-        // _SOFT_FILTER, _KUWAHARA_FILTER removed (Background variant: no GrabPass)
-
         [Header(Halftone Shadow)]
         [Toggle(_HALFTONE_SHADOW)] _HalftoneShadow ("Enable Halftone Shadow", Float) = 0
         _HalftoneShadowColor ("Halftone Color", Color) = (0, 0, 0, 1)
@@ -748,6 +714,40 @@ Shader "Natane/Toon Shader (Background)"
         [Enum(Wave,0,Breath,1,Wind,2,Pulse,3)] _VertexAnimType ("Animation Type", Float) = 2
         [Toggle(_VERTEX_ANIM_MASK)] _UseVertexAnimMask ("Use Vertex Anim Mask", Float) = 0
         _VertexAnimMask ("Vertex Anim Mask", 2D) = "white" {}
+
+        // ===== Illustration Style (美術ボード向け絵画調) =====
+        // NPR2026 P9: キャラ側にしか載っていなかった絵画調機能を背景へ展開する。
+        // GrabPass を要求する _SOFT_FILTER / _KUWAHARA_FILTER は、
+        // Background に GrabPass が無いため対象外（全背景マテリアルが
+        // 無条件に全画面コピーを払うことになるため、別途判断が要る）。
+        [Header(Illustration Style)]
+        [Toggle(_COLOR_QUANTIZE)] _UseColorQuantize ("Enable Color Quantize", Float) = 0
+        [Enum(RGB,0,HSV,1)] _QuantizeMode ("Quantize Mode", Float) = 1
+        _QuantizeLevels ("Quantize Levels", Range(2, 32)) = 8
+        _QuantizeHueLevels ("Hue Levels", Range(2, 36)) = 12
+        _QuantizeSatLevels ("Saturation Levels", Range(2, 16)) = 8
+        _QuantizeValLevels ("Value Levels", Range(2, 16)) = 8
+        _QuantizeDither ("Dither Amount", Range(0, 1)) = 0.5
+        _QuantizeBlend ("Quantize Blend", Range(0, 1)) = 1
+        _QuantizeMask ("Quantize Mask", 2D) = "white" {}
+
+        [Toggle(_LUT_3D)] _UseLUT3D ("Enable 3D LUT", Float) = 0
+        _LUT3DTex ("LUT Texture", 2D) = "white" {}
+        _LUT3DIntensity ("LUT Intensity", Range(0, 1)) = 1
+        _LUT3DSize ("LUT Grid Size", Float) = 32
+
+        [Toggle(_WATERCOLOR)] _UseWatercolor ("Enable Watercolor", Float) = 0
+        _WCEdgeDarkening ("Edge Darkening", Range(0, 2)) = 0.5
+        _WCWetEdge ("Wet Edge", Range(0, 1)) = 0.3
+        _WCGranulation ("Granulation", Range(0, 1)) = 0.4
+        _WCGranulationTex ("Granulation Texture", 2D) = "gray" {}
+        _WCPaperTex ("Paper Texture", 2D) = "white" {}
+        _WCPaperIntensity ("Paper Intensity", Range(0, 1)) = 0.3
+        _WCPaperTiling ("Paper Tiling", Float) = 1
+        _WCBlend ("Watercolor Blend", Range(0, 1)) = 1
+        _WCMask ("Watercolor Mask", 2D) = "white" {}
+
+        // _SOFT_FILTER, _KUWAHARA_FILTER removed (Background variant: no GrabPass)
 
         // ===== Decal System (デカール) =====
         [Header(Decal System Stickers)]

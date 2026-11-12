@@ -58,7 +58,7 @@ namespace NataneToon.Editor
             L("マテリアル", "Material")
         };
 
-        [MenuItem("Tools/Natane/Optimization/アセット参照チェッカー Asset Reference Checker", false, 35)]
+        [MenuItem("Tools/Natane/最適化 Optimization/アセット参照チェッカー Asset Reference Checker", false, 35)]
         public static void ShowWindow()
         {
             var window = GetWindow<AssetReferenceChecker>(L("アセット参照チェッカー", "Asset Reference Checker"));

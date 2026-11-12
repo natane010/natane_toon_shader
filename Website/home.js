@@ -8,7 +8,7 @@
 (function () {
   'use strict';
 
-  var VERSION = 'v1.7.0';
+  var VERSION = 'v1.8.0';
 
   /* Feature preview images (optional): drop a screenshot at
      assets/previews/<preview>.jpg and it replaces the styled placeholder
@@ -50,6 +50,9 @@
       }
     ],
     updates: [
+      { title: { ja: 'lilToon からワンクリック移行', en: 'One-click Migration from lilToon' }, status: 'NEW' },
+      { title: { ja: '「効果を試す」ウィンドウ', en: 'Try Effects Window' }, status: 'NEW' },
+      { title: { ja: '幅を変えても崩れないインスペクター', en: 'Inspector That Survives Resizing' }, status: 'UPDATE' },
       { title: { ja: 'マット拡散（EON）', en: 'Matte Diffuse (EON)' }, status: 'NEW' },
       { title: { ja: 'Light Volume キーライト', en: 'Light Volume Key Light' }, href: 'params/lighting/light-volumes.html', status: 'NEW' },
       { title: { ja: 'Charlie シーン', en: 'Charlie Sheen' }, status: 'NEW' },

@@ -285,7 +285,7 @@ namespace NataneToon.Editor
             Table[(AutoSetupRole.Clothing, AutoSetupLook.Anime)] = new AutoSetupProfile
             {
                 baseStyle = AutoSetupLook.Anime,
-                enableKeywords = new[] { "_OUTLINE", "_SPECULAR", "_USE_NORMAL_MAP" },
+                enableKeywords = new[] { "_OUTLINE", "_SPECULAR", "_NORMALMAP" },
                 floatOverrides = new[]
                 {
                     ("_OutlineWidth", 0.08f), ("_OutlineTexColorBlend", 0.8f),
@@ -300,7 +300,7 @@ namespace NataneToon.Editor
             Table[(AutoSetupRole.Clothing, AutoSetupLook.GameCharacter)] = new AutoSetupProfile
             {
                 baseStyle = AutoSetupLook.GameCharacter,
-                enableKeywords = new[] { "_OUTLINE", "_SPECULAR", "_USE_NORMAL_MAP", "_RIM_LIGHT" },
+                enableKeywords = new[] { "_OUTLINE", "_SPECULAR", "_NORMALMAP", "_RIM_LIGHT" },
                 floatOverrides = new[]
                 {
                     ("_OutlineWidth", 0.08f), ("_OutlineTexColorBlend", 0.8f),
@@ -316,7 +316,7 @@ namespace NataneToon.Editor
             Table[(AutoSetupRole.Clothing, AutoSetupLook.SemiRealistic)] = new AutoSetupProfile
             {
                 baseStyle = AutoSetupLook.SemiRealistic,
-                enableKeywords = new[] { "_OUTLINE", "_SPECULAR", "_USE_NORMAL_MAP", "_RIM_LIGHT" },
+                enableKeywords = new[] { "_OUTLINE", "_SPECULAR", "_NORMALMAP", "_RIM_LIGHT" },
                 floatOverrides = new[]
                 {
                     ("_OutlineWidth", 0.06f), ("_OutlineTexColorBlend", 0.8f),
@@ -333,7 +333,7 @@ namespace NataneToon.Editor
             Table[(AutoSetupRole.Eye, AutoSetupLook.Anime)] = new AutoSetupProfile
             {
                 baseStyle = AutoSetupLook.Anime,
-                enableKeywords = new[] { "_PARALLAX", "_EMISSION", "_MAT_CAP" },
+                enableKeywords = new[] { "_PARALLAX", "_EMISSION", "_MATCAP" },
                 floatOverrides = new[]
                 {
                     ("_ParallaxScale", 0.02f), ("_EyeDepth", 0.15f),
@@ -348,7 +348,7 @@ namespace NataneToon.Editor
             Table[(AutoSetupRole.Eye, AutoSetupLook.GameCharacter)] = new AutoSetupProfile
             {
                 baseStyle = AutoSetupLook.GameCharacter,
-                enableKeywords = new[] { "_PARALLAX", "_EMISSION", "_MAT_CAP" },
+                enableKeywords = new[] { "_PARALLAX", "_EMISSION", "_MATCAP" },
                 floatOverrides = new[]
                 {
                     ("_ParallaxScale", 0.02f), ("_EyeDepth", 0.15f),
@@ -364,7 +364,7 @@ namespace NataneToon.Editor
             Table[(AutoSetupRole.Eye, AutoSetupLook.SemiRealistic)] = new AutoSetupProfile
             {
                 baseStyle = AutoSetupLook.SemiRealistic,
-                enableKeywords = new[] { "_PARALLAX", "_EMISSION", "_MAT_CAP", "_SPECULAR" },
+                enableKeywords = new[] { "_PARALLAX", "_EMISSION", "_MATCAP", "_SPECULAR" },
                 floatOverrides = new[]
                 {
                     ("_ParallaxScale", 0.02f), ("_EyeDepth", 0.15f),
@@ -381,7 +381,7 @@ namespace NataneToon.Editor
             Table[(AutoSetupRole.Metal, AutoSetupLook.Anime)] = new AutoSetupProfile
             {
                 baseStyle = AutoSetupLook.Anime,
-                enableKeywords = new[] { "_REFLECTION", "_SPECULAR", "_MAT_CAP" },
+                enableKeywords = new[] { "_REFLECTION", "_SPECULAR", "_MATCAP" },
                 floatOverrides = new[]
                 {
                     ("_ReflectionIntensity", 0.6f), ("_ReflectionSmoothness", 0.8f), ("_Metallic", 0.9f),
@@ -396,7 +396,7 @@ namespace NataneToon.Editor
             Table[(AutoSetupRole.Metal, AutoSetupLook.GameCharacter)] = new AutoSetupProfile
             {
                 baseStyle = AutoSetupLook.GameCharacter,
-                enableKeywords = new[] { "_REFLECTION", "_SPECULAR", "_MAT_CAP", "_RIM_LIGHT", "_OUTLINE" },
+                enableKeywords = new[] { "_REFLECTION", "_SPECULAR", "_MATCAP", "_RIM_LIGHT", "_OUTLINE" },
                 floatOverrides = new[]
                 {
                     ("_ReflectionIntensity", 0.6f), ("_ReflectionSmoothness", 0.8f), ("_Metallic", 0.9f),
@@ -413,7 +413,7 @@ namespace NataneToon.Editor
             Table[(AutoSetupRole.Metal, AutoSetupLook.SemiRealistic)] = new AutoSetupProfile
             {
                 baseStyle = AutoSetupLook.SemiRealistic,
-                enableKeywords = new[] { "_REFLECTION", "_SPECULAR", "_MAT_CAP", "_RIM_LIGHT" },
+                enableKeywords = new[] { "_REFLECTION", "_SPECULAR", "_MATCAP", "_RIM_LIGHT" },
                 floatOverrides = new[]
                 {
                     ("_ReflectionIntensity", 0.7f), ("_ReflectionSmoothness", 0.85f), ("_Metallic", 0.95f),

@@ -1196,7 +1196,7 @@ public class NataneToonShaderGUI : ShaderGUI
             if (Event.current.type == EventType.Repaint)
                 EditorGUI.DrawRect(badgeRect, badgeBackground);
 
-            string badgeLabel = allEnabled ? "ON" : mixed ? "MIX" : canEnable ? "OFF" : "LOCK";
+            string badgeLabel = allEnabled ? "ON" : mixed ? "MIX" : canEnable ? "OFF" : L("上限", "FULL");
             if (allEnabled)
             {
                 GUI.Label(badgeRect, badgeLabel, BadgeStyleOn);
@@ -1220,9 +1220,9 @@ public class NataneToonShaderGUI : ShaderGUI
                 EditorGUIUtility.AddCursorRect(badgeRect, canEnable || allEnabled || mixed ? MouseCursor.Link : MouseCursor.Arrow);
                 string tooltip = canEnable
                     ? (addedSamplers > 0
-                        ? L($"クリックで切り替え（+{addedSamplers} sampler）", $"Click to toggle (+{addedSamplers} sampler)")
-                        : L("クリックで切り替え", "Click to toggle"))
-                    : L("Sampler上限のため有効化できません", "Cannot enable because of the sampler limit");
+                        ? L($"クリックで ON/OFF を切り替え（テクスチャ枠 +{addedSamplers}）", $"Click to toggle (+{addedSamplers} texture slot(s))")
+                        : L("クリックで ON/OFF を切り替え", "Click to toggle"))
+                    : L("テクスチャ枠が足りません。使っていない機能を OFF にすると有効化できます。", "No texture slots left. Turn off an unused feature to enable this one.");
                 GUI.Label(badgeRect, new GUIContent(string.Empty, tooltip));
 
                 if (Event.current.type == EventType.MouseDown && Event.current.button == 0 && badgeRect.Contains(Event.current.mousePosition))
@@ -1361,8 +1361,8 @@ public class NataneToonShaderGUI : ShaderGUI
                 MessageType.None);
 
             EditorGUILayout.Space();
-            DrawProperty("_FinalHighlightBlend", L("Highlight Blend (Prevent Blow-out)", "Highlight Blend (Prevent Blow-out)"));
-            DrawProperty("_HighlightThreshold", L("Highlight Threshold", "Highlight Threshold"));
+            DrawProperty("_FinalHighlightBlend", L("明部の白飛び防止", "Prevent Blown Highlights"));
+            DrawProperty("_HighlightThreshold", L("白飛び防止の開始点", "Blow-out Start"));
             DrawHelpToggle(
                 "HighlightBlend",
                 L("しきい値を超えた明るすぎる部分をやわらげます。",
@@ -1370,8 +1370,8 @@ public class NataneToonShaderGUI : ShaderGUI
                 MessageType.Info);
 
             EditorGUILayout.Space();
-            DrawProperty("_FinalShadowBlend", L("Shadow Blend (Prevent Crush)", "Shadow Blend (Prevent Crush)"));
-            DrawProperty("_ShadowThreshold", L("Shadow Threshold", "Shadow Threshold"));
+            DrawProperty("_FinalShadowBlend", L("暗部の黒つぶれ防止", "Prevent Crushed Darks"));
+            DrawProperty("_ShadowThreshold", L("黒つぶれ防止の開始点", "Crush Start"));
             DrawHelpToggle(
                 "ShadowBlend",
                 L("しきい値より暗い部分のつぶれをやわらげます。",
@@ -1386,15 +1386,15 @@ public class NataneToonShaderGUI : ShaderGUI
         DrawProperty("_Glossiness", L("Glossiness", "Glossiness"));
         DrawHelpToggle(
             "Glossiness",
-            L("Controls the intensity of reflective effects such as specular, rim, MatCap, and reflection.",
+            L("スペキュラー・リム・MatCap・リフレクションなど、光る反射系の効果をまとめて強めたり弱めたりします。",
               "Controls the intensity of reflective effects such as specular, rim, MatCap, and reflection."),
             MessageType.Info);
 
         EditorGUILayout.Space();
-        DrawProperty("_MatteEffect", L("Matte Effect (Additional Gloss Reduction)", "Matte Effect (Additional Gloss Reduction)"));
+        DrawProperty("_MatteEffect", L("マット効果（さらにツヤを抑える）", "Matte Effect (Extra Gloss Reduction)"));
         DrawHelpToggle(
             "MatteEffect",
-            L("Further reduces gloss on top of the Glossiness control.",
+            L("光沢スライダーに加えて、さらにツヤを抑えてマットな見た目にします。",
               "Further reduces gloss on top of the Glossiness control."),
             MessageType.Info);
     }
@@ -1467,13 +1467,13 @@ public class NataneToonShaderGUI : ShaderGUI
         EditorGUILayout.Space(SECTION_SPACING);
         EditorGUILayout.LabelField(L($"{layerName} Texture Settings", $"{layerName} Texture Settings"), EditorStyles.boldLabel);
 
-        DrawProperty($"_{layerName}Tex", $"{layerName} Texture");
-        DrawProperty($"_{layerName}TexHueShift", "Hue Shift");
-        DrawProperty($"_{layerName}TexSaturation", "Saturation");
-        DrawProperty($"_{layerName}TexValue", "Brightness");
+        DrawProperty($"_{layerName}Tex", L($"{layerName} レイヤーのテクスチャ", $"{layerName} Layer Texture"));
+        DrawProperty($"_{layerName}TexHueShift", L("色相シフト", "Hue Shift"));
+        DrawProperty($"_{layerName}TexSaturation", L("彩度", "Saturation"));
+        DrawProperty($"_{layerName}TexValue", L("明るさ", "Brightness"));
         DrawHelpToggle(
             "MakeupTextureHSV",
-            L("Adjust hue, saturation, and brightness for this layer.",
+            L("このレイヤーの色味・鮮やかさ・明るさを調整します。",
               "Adjust hue, saturation, and brightness for this layer."),
             MessageType.None);
 
@@ -1481,15 +1481,15 @@ public class NataneToonShaderGUI : ShaderGUI
         DrawProperty($"_{layerName}TexBlendMode", L("Blend Mode", "Blend Mode"));
         DrawHelpToggle(
             "MakeupTextureBlendMode",
-            L($"Choose how the layer blends. Suggested usage: {usageHint}.",
+            L($"下の色への重ね方を選びます。おすすめの用途: {usageHint}",
               $"Choose how the layer blends. Suggested usage: {usageHint}."),
             MessageType.Info);
 
         EditorGUILayout.Space();
-        DrawProperty($"_{layerName}TexMask", L($"{layerName} Tex Mask", $"{layerName} Tex Mask"));
+        DrawProperty($"_{layerName}TexMask", L($"{layerName} レイヤーのマスク", $"{layerName} Layer Mask"));
         DrawHelpToggle(
             "MakeupTextureMask",
-            L("White applies the texture. Black disables it. The mask is multiplied by the texture alpha.",
+            L("白い部分にだけテクスチャが乗り、黒い部分には乗りません（テクスチャの透明度とも掛け合わされます）。",
               "White applies the texture. Black disables it. The mask is multiplied by the texture alpha."),
             MessageType.Info);
 
@@ -1559,7 +1559,7 @@ public class NataneToonShaderGUI : ShaderGUI
             EditorGUI.BeginDisabledGroup(!shadowHasMesh);
             EditorGUILayout.BeginHorizontal();
             GUILayout.FlexibleSpace();
-            if (GUILayout.Button(L("Shadow Map を自動生成", "Auto-Generate Shadow Map"), GUILayout.Height(22), GUILayout.Width(200)))
+            if (GUILayout.Button(L("Shadow Map を自動生成", "Auto-Generate Shadow Map"), GUILayout.Height(22), GUILayout.MinWidth(40f), GUILayout.MaxWidth(200f)))
             {
                 MapGeneratorGUIBridge.GenerateShadowForMaterial(targetMaterial);
             }
@@ -1567,7 +1567,7 @@ public class NataneToonShaderGUI : ShaderGUI
             EditorGUILayout.EndHorizontal();
             if (!shadowHasMesh)
             {
-                EditorGUILayout.HelpBox(L("シーン内にメッシュが必要です", "Mesh required in scene"), MessageType.Info);
+                EditorGUILayout.HelpBox(L("このマテリアルを使っているアバターをシーンに置いてから押してください。", "Place an avatar that uses this material in the scene, then press the button."), MessageType.Info);
             }
             EditorGUI.EndDisabledGroup();
         }
@@ -1588,14 +1588,13 @@ public class NataneToonShaderGUI : ShaderGUI
         GUI.backgroundColor = prevBg;
 
         EditorGUILayout.BeginHorizontal();
-        EditorGUILayout.LabelField(
+        NataneToonInspectorComponents.DrawShrinkLabel(
             L("lilToon からの移行マテリアル", "Migrated from lilToon"),
             EditorStyles.boldLabel);
-        GUILayout.FlexibleSpace();
         if (GUILayout.Button(L("再最適化", "Re-optimize"), EditorStyles.miniButton))
         {
-            quickSetupWizardMode = 3;
-            SetFoldout("QuickSetup", true);
+            // 以前は存在しないモード 3 を指定しており、別タブにいると何も起きないように見えた。
+            OpenQuickSetup();
         }
         EditorGUILayout.EndHorizontal();
 
@@ -1639,11 +1638,11 @@ public class NataneToonShaderGUI : ShaderGUI
         if (isLegacy)
         {
             EditorGUILayout.HelpBox(
-                L("レガシーモードです。スライダー操作で自動的に切り替わります。",
-                  "Legacy mode. Adjusting sliders will auto-upgrade the mode."),
-                MessageType.Warning);
+                L("見た目プリセットは自動判定中です。スライダーを動かすと、近いプリセットに自動で固定されます。",
+                  "The look preset is being auto-detected. Moving a slider locks it to the nearest preset."),
+                MessageType.Info);
 
-            if (GUILayout.Button(L("→ 明示モードに切り替え", "→ Switch to Explicit Mode"), GUILayout.Height(22)))
+            if (GUILayout.Button(L("今のプリセットで固定する", "Lock the Current Preset"), GUILayout.Height(22)))
             {
                 LookMode suggested = SuggestLookMode(currentToon, currentNpr, currentPbr);
                 if (suggested == LookMode.Legacy) suggested = LookMode.Hybrid;
@@ -1740,8 +1739,8 @@ public class NataneToonShaderGUI : ShaderGUI
         }
 
         EditorUtility.DisplayDialog(
-            L("LilToon Migration", "LilToon Migration"),
-            L("Could not open the lilToon migration tool. Please check whether the migration assembly compiled successfully.", "Could not open the lilToon migration tool. Please check whether the migration assembly compiled successfully."),
+            L("lilToon から移行", "lilToon Migration"),
+            L("lilToon 移行ツールを開けませんでした。Console にコンパイルエラーが出ていないか確認してください。", "Could not open the lilToon migration tool. Please check whether the migration assembly compiled successfully."),
             "OK");
     }
 
@@ -2313,7 +2312,7 @@ public class NataneToonShaderGUI : ShaderGUI
             EditorGUILayout.Space(5);
             NataneToonShaderGUIHelpers.DrawPCSSControls(DrawToggle, DrawProperty, DrawHelpToggle);
 
-            DrawProperty("_ShadowMaxDarkness", L("影の最大暗さ", "Shadow Maximum Darkness"));
+            DrawProperty("_ShadowMaxDarkness", L("影の明るさの下限", "Shadow Brightness Floor"));
             DrawHelpToggle("ShadowMaxDarkness", L("影の最小明るさです。0 = 完全に暗い、1 = 暗くならない。影が真っ黒になりすぎるのを防ぎます。", "Minimum shadow brightness. 0 = Fully dark, 1 = No darkening. Prevents shadows from becoming too black."), MessageType.Info);
 
             EditorGUILayout.Space(10);
@@ -2399,19 +2398,15 @@ public class NataneToonShaderGUI : ShaderGUI
             if (softnessCount >= 3)
             {
                 EditorGUILayout.HelpBox(
-                    L("⚠️ 過度なソフトネス警告\n\n" +
-                    "複数のソフトネスパラメータが高い値です。\n" +
-                    "シェーディングが非常にぼやけます。\n\n" +
-                    "推奨:\n" +
-                    "メインパラメータ1-2個を選び、\n" +
-                    "他は 0.3 以下に抑えてください。",
-                    "⚠️ Excessive Softness Warning\n\n" +
+                    L("ぼかし系の値が重なって、影がぼやけて見えるかもしれません。\n" +
+                    "主役にするスライダーを 1〜2 個に絞り、ほかは 0.3 以下にすると輪郭が戻ります。",
+                    "Softness is stacking up\n\n" +
                     "Multiple softness parameters are set to high values.\n" +
                     "Shading will become very blurry.\n\n" +
                     "Recommended:\n" +
                     "Choose 1-2 main parameters and\n" +
                     "keep others below 0.3."),
-                    MessageType.Warning);
+                    MessageType.Info);
             }
 
             EditorGUILayout.Space();
@@ -2581,12 +2576,12 @@ public class NataneToonShaderGUI : ShaderGUI
 
             using (new EditorGUILayout.HorizontalScope())
             {
-                EditorGUILayout.LabelField(
+                GUILayout.Label(
                     new GUIContent(
-                        L("GrabPass / テッセレーション未使用: Lite バリアントにすると軽くなります", "No GrabPass / tessellation feature in use: the Lite variant is lighter"),
+                        L("画面コピーを使う効果がオフです。Lite 版にすると軽くなります", "No screen-copy effect is in use: the Lite variant is lighter"),
                         L("屈折/ソフトフィルタ/クワハラ/カラーブリーディング/色収差を使っていないため、Lite バリアントに切り替えると画面コピーのコストを丸ごと削減できます。",
                           "Refraction / Soft Filter / Kuwahara / Color Bleeding / Chromatic Aberration are all off, so switching to the Lite variant removes the full-screen copy.")),
-                    EditorStyles.miniLabel);
+                    NataneToonInspectorComponents.WrappedMiniLabel, GUILayout.MinWidth(0f));
                 if (GUILayout.Button(L("Lite に変換", "Convert"), EditorStyles.miniButton, GUILayout.Width(76f)))
                 {
                     ConvertTargetsToLite(liteShaderName);
@@ -2652,7 +2647,7 @@ public class NataneToonShaderGUI : ShaderGUI
         {
             EditorGUILayout.HelpBox(
                 L(
-                    $"このマテリアルは推定 Sampler 上限を超えています ({estimate.EstimatedSamplers}/{estimate.Limit})。\n見た目は保持されますが、新しい重い機能は有効化できません。不要な機能を無効化して上限内に戻してください。",
+                    $"テクスチャ枠の上限を超えています ({estimate.EstimatedSamplers}/{estimate.Limit})。\n今の見た目はそのまま保たれますが、新しい機能は ON にできません。使っていない機能を OFF にすると空きができます。",
                     $"This material is over the estimated sampler limit ({estimate.EstimatedSamplers}/{estimate.Limit}).\nThe current look is preserved, but new heavy features cannot be enabled. Disable some features to get back under the limit."),
                 MessageType.Warning);
             return;
@@ -2925,7 +2920,7 @@ public class NataneToonShaderGUI : ShaderGUI
                 EditorGUI.BeginDisabledGroup(!specRoughnessHasAlbedo);
                 EditorGUILayout.BeginHorizontal();
                 GUILayout.FlexibleSpace();
-                if (GUILayout.Button(L("Roughness を自動生成", "Auto-Generate Roughness"), GUILayout.Height(22), GUILayout.Width(200)))
+                if (GUILayout.Button(L("Roughness を自動生成", "Auto-Generate Roughness"), GUILayout.Height(22), GUILayout.MinWidth(40f), GUILayout.MaxWidth(200f)))
                 {
                     MapGeneratorGUIBridge.GenerateRoughnessForMaterial(targetMaterial);
                 }
@@ -2973,7 +2968,7 @@ public class NataneToonShaderGUI : ShaderGUI
                 EditorGUI.BeginDisabledGroup(!flowHasMesh);
                 EditorGUILayout.BeginHorizontal();
                 GUILayout.FlexibleSpace();
-                if (GUILayout.Button(L("Flow Map を自動生成", "Auto-Generate Flow Map"), GUILayout.Height(22), GUILayout.Width(200)))
+                if (GUILayout.Button(L("Flow Map を自動生成", "Auto-Generate Flow Map"), GUILayout.Height(22), GUILayout.MinWidth(40f), GUILayout.MaxWidth(200f)))
                 {
                     bool ok = NataneToonMapGenerator.TryGenerateFlowMap(targetMaterial, out string msg);
                     EditorUtility.DisplayDialog(ok ? L("完了", "Done") : L("失敗", "Failed"), msg, L("閉じる", "Close"));
@@ -3317,7 +3312,7 @@ public class NataneToonShaderGUI : ShaderGUI
                 EditorGUI.BeginDisabledGroup(!thicknessHasMesh);
                 EditorGUILayout.BeginHorizontal();
                 GUILayout.FlexibleSpace();
-                if (GUILayout.Button(L("Thickness を自動生成", "Auto-Generate Thickness"), GUILayout.Height(22), GUILayout.Width(200)))
+                if (GUILayout.Button(L("Thickness を自動生成", "Auto-Generate Thickness"), GUILayout.Height(22), GUILayout.MinWidth(40f), GUILayout.MaxWidth(200f)))
                 {
                     bool ok = NataneToonMapGenerator.TryGenerateThickness(targetMaterial, out string msg);
                     EditorUtility.DisplayDialog(ok ? L("完了", "Done") : L("失敗", "Failed"), msg, L("閉じる", "Close"));
@@ -5428,7 +5423,7 @@ public class NataneToonShaderGUI : ShaderGUI
                 EditorGUI.BeginDisabledGroup(!canAutoGenerateNormal);
                 EditorGUILayout.BeginHorizontal();
                 GUILayout.FlexibleSpace();
-                if (GUILayout.Button(L("Normal を自動生成", "Auto-Generate Normal"), GUILayout.Height(22), GUILayout.Width(180)))
+                if (GUILayout.Button(L("Normal を自動生成", "Auto-Generate Normal"), GUILayout.Height(22), GUILayout.MinWidth(40f), GUILayout.MaxWidth(180f)))
                 {
                     MapGeneratorGUIBridge.GenerateNormalForMaterial(targetMaterial);
                 }
@@ -5499,7 +5494,7 @@ public class NataneToonShaderGUI : ShaderGUI
                 EditorGUI.BeginDisabledGroup(!roughnessHasAlbedo);
                 EditorGUILayout.BeginHorizontal();
                 GUILayout.FlexibleSpace();
-                if (GUILayout.Button(L("Roughness を自動生成", "Auto-Generate Roughness"), GUILayout.Height(22), GUILayout.Width(200)))
+                if (GUILayout.Button(L("Roughness を自動生成", "Auto-Generate Roughness"), GUILayout.Height(22), GUILayout.MinWidth(40f), GUILayout.MaxWidth(200f)))
                 {
                     MapGeneratorGUIBridge.GenerateRoughnessForMaterial(targetMaterial);
                 }
@@ -6230,12 +6225,12 @@ public class NataneToonShaderGUI : ShaderGUI
                 EditorGUI.BeginDisabledGroup(!aoHasMesh);
                 EditorGUILayout.BeginHorizontal();
                 GUILayout.FlexibleSpace();
-                if (GUILayout.Button(L("AO を自動生成", "Auto-Generate AO"), GUILayout.Height(22), GUILayout.Width(180)))
+                if (GUILayout.Button(L("AO を自動生成", "Auto-Generate AO"), GUILayout.Height(22), GUILayout.MinWidth(40f), GUILayout.MaxWidth(180f)))
                 {
                     bool ok = NataneToonMapGenerator.TryGenerateAO(targetMaterial, out string msg);
                     EditorUtility.DisplayDialog(ok ? L("完了", "Done") : L("失敗", "Failed"), msg, L("閉じる", "Close"));
                 }
-                if (GUILayout.Button(L("Curvature を生成", "Generate Curvature"), GUILayout.Height(22), GUILayout.Width(180)))
+                if (GUILayout.Button(L("Curvature を生成", "Generate Curvature"), GUILayout.Height(22), GUILayout.MinWidth(40f), GUILayout.MaxWidth(180f)))
                 {
                     bool ok = NataneToonMapGenerator.TryGenerateCurvature(targetMaterial, out string msg);
                     EditorUtility.DisplayDialog(ok ? L("完了", "Done") : L("失敗", "Failed"), msg, L("閉じる", "Close"));
@@ -6246,13 +6241,13 @@ public class NataneToonShaderGUI : ShaderGUI
                 // Additional map generation buttons (Shadow, Roughness)
                 EditorGUILayout.BeginHorizontal();
                 GUILayout.FlexibleSpace();
-                if (GUILayout.Button(L("Shadow Map を生成", "Generate Shadow Map"), GUILayout.Height(22), GUILayout.Width(180)))
+                if (GUILayout.Button(L("Shadow Map を生成", "Generate Shadow Map"), GUILayout.Height(22), GUILayout.MinWidth(40f), GUILayout.MaxWidth(180f)))
                 {
                     MapGeneratorGUIBridge.GenerateShadowForMaterial(targetMaterial);
                 }
                 bool hasAlbedo = targetMaterial.HasProperty("_MainTex") && targetMaterial.GetTexture("_MainTex") != null;
                 EditorGUI.BeginDisabledGroup(!hasAlbedo);
-                if (GUILayout.Button(L("Roughness を生成", "Generate Roughness"), GUILayout.Height(22), GUILayout.Width(180)))
+                if (GUILayout.Button(L("Roughness を生成", "Generate Roughness"), GUILayout.Height(22), GUILayout.MinWidth(40f), GUILayout.MaxWidth(180f)))
                 {
                     MapGeneratorGUIBridge.GenerateRoughnessForMaterial(targetMaterial);
                 }
@@ -6263,7 +6258,7 @@ public class NataneToonShaderGUI : ShaderGUI
                 // All maps at once button
                 EditorGUILayout.BeginHorizontal();
                 GUILayout.FlexibleSpace();
-                if (GUILayout.Button(L("★ 全マップ一括生成", "★ Generate All Maps"), GUILayout.Height(26), GUILayout.Width(365)))
+                if (GUILayout.Button(L("★ 全マップ一括生成", "★ Generate All Maps"), GUILayout.Height(26), GUILayout.MinWidth(40f), GUILayout.MaxWidth(365f)))
                 {
                     MapGeneratorGUIBridge.GenerateAllForMaterial(targetMaterial);
                 }
@@ -6988,25 +6983,21 @@ public class NataneToonShaderGUI : ShaderGUI
     // 手作業で5つの値を合わせずに組めるようにする。
     private void DrawStencilPresetButtons()
     {
-        EditorGUILayout.BeginHorizontal();
-        EditorGUILayout.LabelField(L("プリセット", "Preset"), GUILayout.Width(EditorGUIUtility.labelWidth - 4));
-        if (GUILayout.Button(L("標準", "Default"), EditorStyles.miniButtonLeft))
-        {
-            ApplyStencilPreset(0, 8 /*Always*/, 0 /*Keep*/);
-        }
-        if (GUILayout.Button(L("書き込み", "Writer"), EditorStyles.miniButtonMid))
-        {
-            ApplyStencilPreset(1, 8 /*Always*/, 2 /*Replace*/);
-        }
-        if (GUILayout.Button(L("一致で表示", "Reader"), EditorStyles.miniButtonMid))
-        {
-            ApplyStencilPreset(1, 3 /*Equal*/, 0 /*Keep*/);
-        }
-        if (GUILayout.Button(L("不一致で表示", "Reader (Inv)"), EditorStyles.miniButtonRight))
-        {
-            ApplyStencilPreset(1, 6 /*NotEqual*/, 0 /*Keep*/);
-        }
-        EditorGUILayout.EndHorizontal();
+        // ラベル + 4 ボタンの 1 行は狭いと右端が切れるため、ラベルを上に出してボタンを折り返す。
+        GUILayout.Label(L("プリセット", "Preset"), EditorStyles.miniBoldLabel);
+        int stencilPreset = NataneToonInspectorComponents.DrawFlowButtons(
+            new[]
+            {
+                new GUIContent(L("標準", "Default"), L("ステンシルを使わない通常の状態に戻します。", "Back to the normal state without stencil.")),
+                new GUIContent(L("書き込み", "Writer"), L("マスクになる側。描いた場所に参照値を書き込みます。", "The mask side: writes the reference value where it draws.")),
+                new GUIContent(L("一致で表示", "Reader"), L("マスク越しにだけ表示します。", "Shows only through the mask.")),
+                new GUIContent(L("不一致で表示", "Reader (Inv)"), L("マスクの外側にだけ表示します。", "Shows only outside the mask."))
+            },
+            86f);
+        if (stencilPreset == 0) ApplyStencilPreset(0, 8 /*Always*/, 0 /*Keep*/);
+        else if (stencilPreset == 1) ApplyStencilPreset(1, 8 /*Always*/, 2 /*Replace*/);
+        else if (stencilPreset == 2) ApplyStencilPreset(1, 3 /*Equal*/, 0 /*Keep*/);
+        else if (stencilPreset == 3) ApplyStencilPreset(1, 6 /*NotEqual*/, 0 /*Keep*/);
         EditorGUILayout.HelpBox(
             L("書き込み側のマテリアルに「書き込み」、そのマスク越しにだけ見せたい側に「一致で表示」を適用します。参照値は両者で揃えてください。",
               "Apply 'Writer' to the masking material and 'Reader' to the material that should only appear through that mask. Keep Reference values matching."),
@@ -7500,11 +7491,22 @@ public class NataneToonShaderGUI : ShaderGUI
         MaterialProperty colorProperty = FindProperty(colorPropertyName, properties, false);
         if (colorProperty == null) return;
 
+        // 色数が多いパレットでも右端からはみ出さないよう、幅に収まる数で折り返す。
+        int swatchesPerRow = Mathf.Max(4, Mathf.FloorToInt((EditorGUIUtility.currentViewWidth - 110f - EditorGUI.indentLevel * 15f) / 21f));
+        int swatchIndex = 0;
         EditorGUILayout.BeginHorizontal();
         GUILayout.Label(L("パレット", "Palette"), EditorStyles.miniLabel, GUILayout.Width(50f));
         foreach (NataneToon.MaterialSystem.ColorPalette.ColorEntry entry in palette.colors)
         {
             if (entry == null) continue;
+            if (swatchIndex > 0 && swatchIndex % swatchesPerRow == 0)
+            {
+                GUILayout.FlexibleSpace();
+                EditorGUILayout.EndHorizontal();
+                EditorGUILayout.BeginHorizontal();
+                GUILayout.Space(54f);
+            }
+            swatchIndex++;
             Color oldBg = GUI.backgroundColor;
             GUI.backgroundColor = entry.color;
             string tooltip = string.IsNullOrEmpty(entry.description) ? entry.name : $"{entry.name}\n{entry.description}";
@@ -7515,6 +7517,7 @@ public class NataneToonShaderGUI : ShaderGUI
             }
             GUI.backgroundColor = oldBg;
         }
+        GUILayout.FlexibleSpace();
         EditorGUILayout.EndHorizontal();
     }
 
@@ -7533,6 +7536,12 @@ public class NataneToonShaderGUI : ShaderGUI
         bool newEnabled = enabled;
 
         EditorGUILayout.BeginHorizontal();
+
+        // インデントは明示的な余白で取り、行の中ではインデント 0 で描く。
+        // （幅 16 固定のチェックボックスにインデントが掛かると、入れ子のセクションで枠からはみ出して切れていた）
+        int toggleRowIndent = EditorGUI.indentLevel;
+        if (toggleRowIndent > 0) GUILayout.Space(toggleRowIndent * 15f);
+        EditorGUI.indentLevel = 0;
 
         // 1. チェックボックス（ラベルなし）
         using (new EditorGUI.DisabledScope(!canEnable))
@@ -7557,9 +7566,17 @@ public class NataneToonShaderGUI : ShaderGUI
             GUI.color = statusOldColor;
         }
 
-        // 3. ラベル
-        EditorGUILayout.LabelField(label);
+        // 3. ラベル（狭いときは縮んで切れ、全文はツールチップで読める。クリックでも切り替えられる）
+        using (new EditorGUI.DisabledScope(!canEnable))
+        {
+            if (GUILayout.Button(new GUIContent(label, label), EditorStyles.label, GUILayout.MinWidth(0f)) && !changed)
+            {
+                newEnabled = !enabled;
+                changed = true;
+            }
+        }
 
+        EditorGUI.indentLevel = toggleRowIndent;
         EditorGUILayout.EndHorizontal();
 
         if (!enabled && !canEnable)
@@ -7628,9 +7645,9 @@ public class NataneToonShaderGUI : ShaderGUI
     {
         Color oldColor = GUI.color;
         GUI.color = NataneToonShaderGUIStyles.SamplerBlockHintColor;
-        EditorGUILayout.LabelField(
+        NataneToonInspectorComponents.DrawWrappedLabel(
             L(
-                $"Sampler 制限のため有効化できません (+{evaluation.AddedSamplers}, 推定 {evaluation.AfterEnable.EstimatedSamplers}/{evaluation.AfterEnable.Limit})",
+                $"テクスチャ枠が足りないため ON にできません（必要 +{evaluation.AddedSamplers}、ON にすると {evaluation.AfterEnable.EstimatedSamplers}/{evaluation.AfterEnable.Limit}）。使っていない機能を OFF にしてください。",
                 $"Cannot enable because of the sampler limit (+{evaluation.AddedSamplers}, estimated {evaluation.AfterEnable.EstimatedSamplers}/{evaluation.AfterEnable.Limit})"),
             EditorStyles.wordWrappedMiniLabel);
         GUI.color = oldColor;
@@ -8205,16 +8222,19 @@ public class NataneToonShaderGUI : ShaderGUI
     private void DrawLineBoilPresetButtons()
     {
         EditorGUILayout.LabelField(L("プリセット（1クリックで作画テンポを設定）", "Presets (one-click drawing tempo)"), EditorStyles.miniBoldLabel);
-        EditorGUILayout.BeginHorizontal();
-        if (GUILayout.Button(new GUIContent(L("クリーンアニメ", "Clean Anime"), L("FPS12・弱い位置揺れ。安定したTVアニメ風。", "FPS 12, weak position jitter. Stable TV-anime look.")), EditorStyles.miniButtonLeft))
-            ApplyLineBoilPreset("Clean Anime", 12f, 0.5f, 0.1f, 0f, 1f);
-        if (GUILayout.Button(new GUIContent(L("鉛筆", "Pencil"), L("FPS8・中くらいの位置＋太さ揺れ。", "FPS 8, medium position + width jitter.")), EditorStyles.miniButtonMid))
-            ApplyLineBoilPreset("Pencil", 8f, 1.5f, 0.4f, 0f, 1f);
-        if (GUILayout.Button(new GUIContent(L("ラフスケッチ", "Rough Sketch"), L("FPS6・強く不規則。ラフな線画風。", "FPS 6, strong irregular jitter. Rough sketch feel.")), EditorStyles.miniButtonMid))
-            ApplyLineBoilPreset("Rough Sketch", 6f, 3f, 0.6f, 0.005f, 2f);
-        if (GUILayout.Button(new GUIContent(L("ストップモーション", "Stop Motion"), L("FPS5・UV揺れ入り。コマ撮り風。", "FPS 5 with UV jitter. Stop-motion feel.")), EditorStyles.miniButtonRight))
-            ApplyLineBoilPreset("Stop Motion", 5f, 2f, 0.3f, 0.02f, 2f);
-        EditorGUILayout.EndHorizontal();
+        int boilPreset = NataneToonInspectorComponents.DrawFlowButtons(
+            new[]
+            {
+                new GUIContent(L("クリーンアニメ", "Clean Anime"), L("FPS12・弱い位置揺れ。安定したTVアニメ風。", "FPS 12, weak position jitter. Stable TV-anime look.")),
+                new GUIContent(L("鉛筆", "Pencil"), L("FPS8・中くらいの位置＋太さ揺れ。", "FPS 8, medium position + width jitter.")),
+                new GUIContent(L("ラフスケッチ", "Rough Sketch"), L("FPS6・強く不規則。ラフな線画風。", "FPS 6, strong irregular jitter. Rough sketch feel.")),
+                new GUIContent(L("ストップモーション", "Stop Motion"), L("FPS5・UV揺れ入り。コマ撮り風。", "FPS 5 with UV jitter. Stop-motion feel."))
+            },
+            104f);
+        if (boilPreset == 0) ApplyLineBoilPreset("Clean Anime", 12f, 0.5f, 0.1f, 0f, 1f);
+        else if (boilPreset == 1) ApplyLineBoilPreset("Pencil", 8f, 1.5f, 0.4f, 0f, 1f);
+        else if (boilPreset == 2) ApplyLineBoilPreset("Rough Sketch", 6f, 3f, 0.6f, 0.005f, 2f);
+        else if (boilPreset == 3) ApplyLineBoilPreset("Stop Motion", 5f, 2f, 0.3f, 0.02f, 2f);
     }
 
     private void DrawLineBoilSection()
@@ -8695,7 +8715,7 @@ public class NataneToonShaderGUI : ShaderGUI
                 DrawCurrentStateRow(L("見た目プリセット", "Look Mode"), GetCurrentLookModeLabel());
                 DrawCurrentStateRow(L("移行状態", "Migration"), GetCurrentMigrationSummary(), true);
                 DrawCurrentStateRow(L("主な有効機能", "Active Features"), GetActiveFeatureSummary(targetMaterial, 4), true);
-                DrawCurrentStateRow(L("Sampler / Pass", "Sampler / Pass"), GetSamplerBudgetSummary(samplerBudget));
+                DrawCurrentStateRow(L("テクスチャ枠 / 描画パス", "Texture Slots / Passes"), GetSamplerBudgetSummary(samplerBudget));
             }
         }
         EndBoxedSection(GetFoldout("CurrentState"));
@@ -8759,8 +8779,8 @@ public class NataneToonShaderGUI : ShaderGUI
         EditorGUILayout.BeginHorizontal();
         if (GUILayout.Button(L("Auto Setup で再最適化", "Re-optimize with Auto Setup"), GUILayout.Height(22)))
         {
-            quickSetupWizardMode = 3;
-            SetFoldout("QuickSetup", true);
+            // 以前は存在しないモード 3 を指定しており、別タブにいると何も起きないように見えた。
+            OpenQuickSetup();
         }
         if (GUILayout.Button(L("移行ツール", "Migration Tool"), GUILayout.Height(22)))
         {
@@ -9078,10 +9098,13 @@ public class NataneToonShaderGUI : ShaderGUI
 
                 string tooltip = !isEnabled && !canEnable
                     ? L(
-                        $"Sampler 制限のため有効化できません (+{toggleEvaluation.AddedSamplers}, 推定 {toggleEvaluation.AfterEnable.EstimatedSamplers}/{toggleEvaluation.AfterEnable.Limit})",
+                        $"テクスチャ枠が足りないため ON にできません（必要 +{toggleEvaluation.AddedSamplers}、ON にすると {toggleEvaluation.AfterEnable.EstimatedSamplers}/{toggleEvaluation.AfterEnable.Limit}）",
                         $"Cannot enable because of the sampler limit (+{toggleEvaluation.AddedSamplers}, estimated {toggleEvaluation.AfterEnable.EstimatedSamplers}/{toggleEvaluation.AfterEnable.Limit})")
                     : string.Empty;
-                Rect btnRect = GUILayoutUtility.GetRect(new GUIContent(features[i][1], tooltip), EditorStyles.miniButton, GUILayout.Height(20));
+                // 文字幅ベースの矩形だと列ごとに幅がばらつき、狭いと行からはみ出す。行を等分する。
+                Rect btnRect = GUILayoutUtility.GetRect(0f, 20f, GUILayout.ExpandWidth(true), GUILayout.MinWidth(0f));
+                btnRect = new Rect(btnRect.x + 1f, btnRect.y + 1f, Mathf.Max(0f, btnRect.width - 2f), btnRect.height - 2f);
+                if (string.IsNullOrEmpty(tooltip)) tooltip = features[i][1];
 
                 if (Event.current.type == EventType.Repaint)
                 {
@@ -9125,7 +9148,15 @@ public class NataneToonShaderGUI : ShaderGUI
                 }
 
                 if (i % columns == columns - 1 || i == features.Length - 1)
+                {
+                    // 最終行が埋まらないときは空セルで埋め、セル幅を他の行と揃える。
+                    if (i == features.Length - 1)
+                    {
+                        for (int filler = (i % columns) + 1; filler < columns; filler++)
+                            GUILayoutUtility.GetRect(0f, 20f, GUILayout.ExpandWidth(true), GUILayout.MinWidth(0f));
+                    }
                     EditorGUILayout.EndHorizontal();
+                }
             }
 
             // Fill remaining columns if last row is incomplete
@@ -9147,7 +9178,7 @@ public class NataneToonShaderGUI : ShaderGUI
             else { rating = "A"; ratingColor = NataneToonColorPalette.PerformanceA; }
 
             EditorGUILayout.BeginHorizontal();
-            EditorGUILayout.LabelField(L($"有効機能: {enabledCount}/{features.Length}", $"Active Features: {enabledCount}/{features.Length}"), GUILayout.Width(120));
+            GUILayout.Label(L($"有効機能: {enabledCount}/{features.Length}", $"Active Features: {enabledCount}/{features.Length}"), EditorStyles.miniLabel, GUILayout.ExpandWidth(false));
             Rect barRect = GUILayoutUtility.GetRect(0, 16, GUILayout.ExpandWidth(true));
             if (Event.current.type == EventType.Repaint)
             {
@@ -9155,7 +9186,10 @@ public class NataneToonShaderGUI : ShaderGUI
                 float fillWidth = barRect.width * Mathf.Clamp01((float)budget.EstimatedSamplers / budget.Limit);
                 EditorGUI.DrawRect(new Rect(barRect.x, barRect.y, fillWidth, barRect.height), ratingColor);
             }
-            EditorGUILayout.LabelField($"S {budget.EstimatedSamplers}/{budget.Limit} · {rating}", GUILayout.Width(82));
+            GUILayout.Label(
+                new GUIContent($"Tex {budget.EstimatedSamplers}/{budget.Limit} · {rating}",
+                    L("使用中のテクスチャ枠 / 上限 · 負荷ランク", "Texture slots in use / limit · load rating")),
+                EditorStyles.miniLabel, GUILayout.ExpandWidth(false));
             EditorGUILayout.EndHorizontal();
 
             EditorGUILayout.Space(4);
@@ -9267,7 +9301,7 @@ public class NataneToonShaderGUI : ShaderGUI
             ? targetMaterial.shader.name.Replace("Natane/", string.Empty)
             : L("シェーダー未設定", "No Shader");
         string subtitle = $"{shaderName}  ·  {GetRenderingModeLabel(GetCurrentRenderingMode())}";
-        string sampler = $"S {budget.EstimatedSamplers}/{budget.Limit}";
+        string sampler = $"Tex {budget.EstimatedSamplers}/{budget.Limit}";
 
         FeaturePerformanceRating rating = GetFeaturePerformanceRating();
         string ratingText = L($"負荷 {rating.Grade}", $"Perf {rating.Grade}");
@@ -9366,6 +9400,7 @@ public class NataneToonShaderGUI : ShaderGUI
             materialEditor?.Repaint();
         });
         menu.AddSeparator(string.Empty);
+        menu.AddItem(new GUIContent(L("効果を試す...", "Try Effects...")), false, OpenEffectTryout);
         menu.AddItem(new GUIContent(L("キーワードを同期", "Synchronize Keywords")), false, SynchronizeKeywordsAndRefreshInspectorCaches);
         menu.AddItem(new GUIContent(L("現在のタブを全展開", "Expand Current Tab")), false, () => SetCurrentTabFoldouts(true));
         menu.AddItem(new GUIContent(L("現在のタブを全折り畳み", "Collapse Current Tab")), false, () => SetCurrentTabFoldouts(false));
@@ -9625,34 +9660,34 @@ public class NataneToonShaderGUI : ShaderGUI
 
         EditorGUILayout.LabelField(
             nothingListed
-                ? L("このタブで使用中の機能はまだありません。下のボタンでセクションを開き、ヘッダーの OFF バッジで有効化します。",
-                    "No feature in this tab is in use yet. Open a section with a button below, then enable it with the OFF badge on its header.")
-                : L("ボタンでセクションを開き、ヘッダーの OFF バッジで有効化します。",
-                    "Open a section with a button, then enable it with the OFF badge on its header."),
+                ? L("このタブで使用中の機能はまだありません。下のボタンを押すと設定欄が開きます。開いた欄の見出し右端にある「OFF」をクリックすると ON になります。",
+                    "No feature in this tab is in use yet. A button below opens its settings; click the \"OFF\" badge at the right of that heading to turn it on.")
+                : L("ボタンを押すと設定欄が開きます。開いた欄の見出し右端にある「OFF」をクリックすると ON になります。",
+                    "A button opens its settings; click the \"OFF\" badge at the right of that heading to turn it on."),
             EditorStyles.wordWrappedMiniLabel);
         EditorGUILayout.Space(2f);
 
-        float viewWidth = EditorGUIUtility.currentViewWidth;
-        int columns = viewWidth < 350f ? 2 : (viewWidth < 520f ? 3 : 4);
-        float buttonWidth = Mathf.Max(60f, (viewWidth - 64f) / columns - 4f);
-
+        // 行の実幅を等分して並べる（以前は「ビュー幅 - 64」から幅を見積もっていて、
+        // カードの入れ子やスクロールバーの有無で右端のボタンが切れることがあった）。
+        var addButtons = new GUIContent[addable.Count];
         for (int i = 0; i < addable.Count; i++)
+            addButtons[i] = new GUIContent(addable[i].Label, addable[i].Label + "\n" + addable[i].Description);
+
+        int addClicked = NataneToonInspectorComponents.DrawFlowButtons(addButtons, 112f, 20f, EditorStyles.miniButton, -1, 48f);
+        if (addClicked >= 0)
         {
-            if (i % columns == 0)
-                EditorGUILayout.BeginHorizontal();
+            SetFoldout(addable[addClicked].Key, true);
+            if (materialEditor != null) materialEditor.Repaint();
+        }
 
-            NataneInspectorSectionDescriptor addableSection = addable[i];
-            if (GUILayout.Button(
-                    new GUIContent(addableSection.Label, addableSection.Description),
-                    EditorStyles.miniButton,
-                    GUILayout.Width(buttonWidth)))
-            {
-                SetFoldout(addableSection.Key, true);
-                if (materialEditor != null) materialEditor.Repaint();
-            }
-
-            if (i % columns == columns - 1 || i == addable.Count - 1)
-                EditorGUILayout.EndHorizontal();
+        EditorGUILayout.Space(2f);
+        if (GUILayout.Button(
+                new GUIContent(
+                    L("どれを足すか迷ったら: 効果を試す", "Not sure which to add? Try Effects"),
+                    L("各効果を見本の設定つきで 1 クリックで ON にして、見た目を確かめてから残すか決められます。", "Switch each effect on with a sample setup in one click, then decide whether to keep it.")),
+                EditorStyles.miniButton))
+        {
+            OpenEffectTryout();
         }
         EditorGUILayout.Space(4f);
     }
@@ -10329,6 +10364,16 @@ public class NataneToonShaderGUI : ShaderGUI
             quickSetupWizardMode = 1;
         EditorGUILayout.EndHorizontal();
 
+        if (GUILayout.Button(
+                new GUIContent(
+                    L("効果を試す（1 クリックで ON・元に戻せる）", "Try Effects (one click on, revertible)"),
+                    L("リムライトやグリッターなどの効果を、見本の設定つきで 1 クリックで ON にして見た目を確かめられます。気に入らなければ「元に戻す」で試す前の状態に戻ります。",
+                      "Switch on effects such as rim light or glitter with a sample setup in one click. Revert restores the material to how it was before trying.")),
+                GUILayout.Height(24)))
+        {
+            OpenEffectTryout();
+        }
+
         EditorGUILayout.Space(4);
 
         switch (quickSetupWizardMode)
@@ -10476,16 +10521,11 @@ public class NataneToonShaderGUI : ShaderGUI
         EditorGUILayout.EndHorizontal();
 
         // Visual description for row 1
-        EditorGUILayout.BeginHorizontal();
-        EditorGUILayout.LabelField(
+        DrawTwoColumnCaptions(
             L("→ はっきりした影境界・3段階の明暗・クリーンなセル調",
               "→ Sharp shadow edges, 3-step shading, clean cel look"),
-            EditorStyles.miniLabel);
-        EditorGUILayout.LabelField(
             L("→ なめらかなグラデーション影・柔らかい光の回り込み・イラスト風",
-              "→ Smooth gradient shadows, soft light wrap, illustration style"),
-            EditorStyles.miniLabel);
-        EditorGUILayout.EndHorizontal();
+              "→ Smooth gradient shadows, soft light wrap, illustration style"));
 
         EditorGUILayout.Space(4);
 
@@ -10515,15 +10555,12 @@ public class NataneToonShaderGUI : ShaderGUI
 
         // Visual description for row 2
         EditorGUILayout.BeginHorizontal();
-        EditorGUILayout.LabelField(
+        EditorGUILayout.EndHorizontal();
+        DrawTwoColumnCaptions(
             L("→ トゥーンの明暗＋PBRの質感・バランス型",
               "→ Toon shading + PBR textures, balanced look"),
-            EditorStyles.miniLabel);
-        EditorGUILayout.LabelField(
             L("→ リアルな質感・滑らかなライティング・写実的",
-              "→ Realistic textures, smooth lighting, photorealistic"),
-            EditorStyles.miniLabel);
-        EditorGUILayout.EndHorizontal();
+              "→ Realistic textures, smooth lighting, photorealistic"));
 
         EditorGUILayout.Space(4);
 
@@ -10538,10 +10575,9 @@ public class NataneToonShaderGUI : ShaderGUI
             ApplyGameCharacterStyle(targetMaterial);
             SynchronizeKeywordsAndRefreshInspectorCaches();
         }
-        EditorGUILayout.LabelField(
+        NataneToonInspectorComponents.DrawWrappedLabel(
             L("→ 2段影・シャープ境界・リムライト・スペキュラー・テクスチャ連動アウトライン",
-              "→ 2-step shadows, sharp edges, rim light, specular, texture-linked outline"),
-            EditorStyles.miniLabel);
+              "→ 2-step shadows, sharp edges, rim light, specular, texture-linked outline"));
 
         DrawQuickSetupPresetHints();
 
@@ -10746,6 +10782,21 @@ public class NataneToonShaderGUI : ShaderGUI
 
     // ===== P-10: Onboarding Panel =====
 
+    /// <summary>セットアップタブのクイックセットアップを開いて表示する。</summary>
+    private void OpenQuickSetup()
+    {
+        quickSetupWizardMode = 0;
+        selectedTab = 0;
+        SetFoldout("QuickSetup", true);
+        if (materialEditor != null) materialEditor.Repaint();
+    }
+
+    /// <summary>「効果を試す」ウィンドウを、このマテリアルを対象にして開く。</summary>
+    private void OpenEffectTryout()
+    {
+        NataneToolBridge.OpenConsolidatedWindow(NataneToolMenuPaths.EffectTryout, 0, targetMaterial, "EffectTryout");
+    }
+
     private void DrawOnboardingPanel()
     {
         Color oldBg = GUI.backgroundColor;
@@ -10760,34 +10811,47 @@ public class NataneToonShaderGUI : ShaderGUI
 
         EditorGUILayout.Space(2);
 
-        EditorGUILayout.LabelField(
+        GUILayout.Label(
             L("Natane Toon Shader へようこそ！以下の手順でかんたんにセットアップできます。",
               "Welcome to Natane Toon Shader! Follow these steps for a quick setup."),
-            EditorStyles.wordWrappedMiniLabel);
+            NataneToonInspectorComponents.WrappedMiniLabel, GUILayout.MinWidth(0f));
 
         EditorGUILayout.Space(4);
 
         // Step indicators
         DrawOnboardingStep("1",
             L("「クイックセットアップ」でスタイルを選ぶ", "Choose a style in Quick Setup"),
-            L("セットアップタブの一番上にあります", "Found at the top of the Setup tab"));
+            L("セットアップタブの一番上にあります（下のボタンで開けます）", "At the top of the Setup tab (the button below opens it)"));
         DrawOnboardingStep("2",
+            L("「効果を試す」で気になる効果を 1 クリックで体験する", "Try any effect with one click in Try Effects"),
+            L("見本の設定つきで ON になり、気に入らなければ元に戻せます", "Turns on with a sample setup; revert if you don't like it"));
+        DrawOnboardingStep("3",
             L("各タブで機能を有効化・調整する", "Enable and adjust features in each tab"),
             L("Ctrl+1~5 でタブ切替できます", "Switch tabs with Ctrl+1~5"));
-        DrawOnboardingStep("3",
-            L("機能一覧で有効状態を確認する", "Check active features in Feature Overview"),
-            L("パフォーマンス評価も表示されます", "Performance rating is also shown"));
 
         EditorGUILayout.Space(4);
 
-        EditorGUILayout.BeginHorizontal();
-        GUILayout.FlexibleSpace();
-        if (GUILayout.Button(L("OK、はじめる！", "OK, Let's go!"), GUILayout.Width(130), GUILayout.Height(25)))
+        int onboardingAction = NataneToonInspectorComponents.DrawFlowButtons(
+            new[]
+            {
+                new GUIContent(L("クイックセットアップを開く", "Open Quick Setup")),
+                new GUIContent(L("効果を試す", "Try Effects"), L("効果を 1 クリックで ON にして見た目を確かめ、元に戻せるウィンドウを開きます。", "Opens a window where each effect can be switched on with one click and reverted.")),
+                new GUIContent(L("OK、はじめる！", "OK, Let's go!"))
+            },
+            130f, 24f, GUI.skin.button, -1, 56f);
+        if (onboardingAction == 0)
+        {
+            OpenQuickSetup();
+        }
+        else if (onboardingAction == 1)
+        {
+            OpenEffectTryout();
+        }
+        else if (onboardingAction == 2)
         {
             _onboardingDismissed = true;
             EditorPrefs.SetBool(OnboardingPrefsKey, true);
         }
-        EditorGUILayout.EndHorizontal();
 
         EditorGUILayout.EndVertical();
         EditorGUILayout.Space(4);
@@ -10802,8 +10866,8 @@ public class NataneToonShaderGUI : ShaderGUI
 
         // Step content
         EditorGUILayout.BeginVertical();
-        EditorGUILayout.LabelField(title, EditorStyles.miniBoldLabel);
-        EditorGUILayout.LabelField(hint, EditorStyles.wordWrappedMiniLabel);
+        GUILayout.Label(title, NataneToonInspectorComponents.WrappedMiniLabel, GUILayout.MinWidth(0f));
+        GUILayout.Label(hint, NataneToonInspectorComponents.WrappedMiniLabel, GUILayout.MinWidth(0f));
         EditorGUILayout.EndVertical();
 
         EditorGUILayout.EndHorizontal();
@@ -10858,11 +10922,32 @@ public class NataneToonShaderGUI : ShaderGUI
 
     private void DrawQuickSetupHint(string title, string description)
     {
-        using (new EditorGUILayout.VerticalScope(EditorStyles.helpBox))
+        using (new EditorGUILayout.VerticalScope(EditorStyles.helpBox, GUILayout.MinWidth(0f)))
         {
-            EditorGUILayout.LabelField(title, EditorStyles.miniBoldLabel);
-            EditorGUILayout.LabelField(description, EditorStyles.wordWrappedMiniLabel);
+            GUILayout.Label(new GUIContent(title, title), EditorStyles.miniBoldLabel, GUILayout.MinWidth(0f));
+            GUILayout.Label(description, NataneToonInspectorComponents.WrappedMiniLabel, GUILayout.MinWidth(0f));
         }
+    }
+
+    /// <summary>
+    /// 2 つのボタンの下に並べる説明文。広いときは 2 列、狭いときは縦に積み、どちらも折り返す。
+    /// （LabelField の横並びは最小幅が大きく、狭いインスペクターで右側が切れていた）
+    /// </summary>
+    private void DrawTwoColumnCaptions(string left, string right)
+    {
+        GUIStyle style = NataneToonInspectorComponents.WrappedMiniLabel;
+        if (NataneToonInspectorComponents.IsNarrow)
+        {
+            GUILayout.Label(left, style, GUILayout.MinWidth(0f));
+            GUILayout.Label(right, style, GUILayout.MinWidth(0f));
+            return;
+        }
+
+        float half = Mathf.Max(60f, (EditorGUIUtility.currentViewWidth - 48f) * 0.5f);
+        EditorGUILayout.BeginHorizontal();
+        GUILayout.Label(left, style, GUILayout.MinWidth(0f), GUILayout.MaxWidth(half));
+        GUILayout.Label(right, style, GUILayout.MinWidth(0f), GUILayout.MaxWidth(half));
+        EditorGUILayout.EndHorizontal();
     }
 
     /// <summary>
@@ -11635,7 +11720,14 @@ public class NataneToonShaderGUI : ShaderGUI
     /// </summary>
     public override void AssignNewShaderToMaterial(Material material, Shader oldShader, Shader newShader)
     {
-        base.AssignNewShaderToMaterial(material, oldShader, newShader);
+        // lilToon から切り替えた場合は、色・影・輪郭線などの設定を引き継ぐ。
+        // 素のシェーダー切り替えでは同名プロパティしか残らず、輪郭線が 10 倍の太さになる等で
+        // 「移行したら壊れた」ように見えていた。変換できなかった場合は従来どおり割り当てる。
+        bool convertedFromLilToon = NataneToon.Editor.NataneLilToonMigrationBridge.TryConvertOnShaderChange(material, oldShader, newShader);
+        if (!convertedFromLilToon)
+        {
+            base.AssignNewShaderToMaterial(material, oldShader, newShader);
+        }
 
         // Validate keywords after shader assignment
         targetMaterial = material;

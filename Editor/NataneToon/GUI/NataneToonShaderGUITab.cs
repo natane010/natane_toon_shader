@@ -182,7 +182,7 @@ namespace NataneToon.Editor
                 GUI.color = NataneToonShaderGUIStyles.SamplerBlockHintColor;
                 EditorGUILayout.LabelField(
                     L(
-                        $"Sampler 制限のため有効化できません (+{toggleEvaluation.AddedSamplers}, 推定 {toggleEvaluation.AfterEnable.EstimatedSamplers}/{toggleEvaluation.AfterEnable.Limit})",
+                        $"テクスチャ枠が足りないため ON にできません（必要 +{toggleEvaluation.AddedSamplers}、ON にすると {toggleEvaluation.AfterEnable.EstimatedSamplers}/{toggleEvaluation.AfterEnable.Limit}）",
                         $"Cannot enable because of the sampler limit (+{toggleEvaluation.AddedSamplers}, estimated {toggleEvaluation.AfterEnable.EstimatedSamplers}/{toggleEvaluation.AfterEnable.Limit})"),
                     EditorStyles.wordWrappedMiniLabel);
                 GUI.color = oldHintColor;

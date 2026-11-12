@@ -22,6 +22,11 @@ namespace NataneToon.Editor
         private static GUIStyle _subtitleStyle;
         private static GUIStyle _chipStyle;
         private static GUIStyle _groupStyle;
+        private static GUIStyle _groupIndexStyle;
+        private static GUIStyle _groupSummaryStyle;
+        private static GUIStyle _groupLabelStyle;
+        // 計測用の使い回し GUIContent（OnGUI ごとの確保を避ける）
+        private static readonly GUIContent _measureContent = new GUIContent();
         private static GUIStyle _inlineMessageStyle;
         private static GUIStyle _captionStyle;
         private static GUIStyle _hintStyle;
@@ -68,6 +73,12 @@ namespace NataneToon.Editor
             };
             // Pages のセクション見出しはメインテキスト色（--text）で強調する
             _groupStyle.normal.textColor = NataneToonEditorTheme.Text;
+            // 見出しは 1 回の OnGUI で何度も描くので、派生スタイルは毎回 new せずここで作っておく。
+            _groupIndexStyle = new GUIStyle(_groupStyle) { fontStyle = FontStyle.Bold };
+            Color groupBrand = NataneToonColorPalette.BrandPrimary;
+            _groupIndexStyle.normal.textColor = new Color(groupBrand.r, groupBrand.g, groupBrand.b, dark ? 0.85f : 1f);
+            _groupSummaryStyle = new GUIStyle(_groupStyle) { alignment = TextAnchor.MiddleRight, clipping = TextClipping.Clip };
+            _groupLabelStyle = new GUIStyle(_groupStyle) { clipping = TextClipping.Clip };
 
             _inlineMessageStyle = new GUIStyle(EditorStyles.wordWrappedMiniLabel)
             {
@@ -184,7 +195,8 @@ namespace NataneToon.Editor
             if (string.IsNullOrEmpty(description)) return;
             EnsureStyles();
             Rect rect = EditorGUILayout.GetControlRect(false, 14f);
-            GUI.Label(rect, description, _captionStyle);
+            // 狭い幅では一行に収まらず切れるので、全文をツールチップでも読めるようにする。
+            GUI.Label(rect, new GUIContent(description, description), _captionStyle);
         }
 
         /// <summary>
@@ -194,7 +206,8 @@ namespace NataneToon.Editor
         {
             if (string.IsNullOrEmpty(hint)) return;
             EnsureStyles();
-            EditorGUILayout.LabelField((IsJapanese ? "推奨: " : "Recommended: ") + hint, _hintStyle);
+            // LabelField は高さ 1 行固定のため、折り返した 2 行目以降が切れていた。
+            DrawWrappedLabel((IsJapanese ? "推奨: " : "Recommended: ") + hint, _hintStyle);
         }
 
         private static GUIStyle _docLinkStyle;
@@ -249,6 +262,146 @@ namespace NataneToon.Editor
         public static bool IsNarrow => EditorGUIUtility.currentViewWidth < NataneUIConstants.INSPECTOR_WIDTH_NARROW;
         public static bool IsWide => EditorGUIUtility.currentViewWidth >= NataneUIConstants.INSPECTOR_WIDTH_WIDE;
 
+        // ------------------------------------------------------------------
+        // 幅可変レイアウト用の共通部品
+        //
+        // EditorGUILayout.LabelField は「ラベル幅 + フィールド幅」ぶんの最小幅を要求し、
+        // 高さも 1 行固定なので、横並びの行に置くとインスペクターを狭めたときに
+        // はみ出す / 切れる。可変幅の場所では以下を使うこと。
+        // ------------------------------------------------------------------
+
+        private static GUIStyle _wrappedMiniStyle;
+        private static GUIStyle _wrappedStyle;
+
+        /// <summary>折り返す miniLabel。</summary>
+        public static GUIStyle WrappedMiniLabel
+        {
+            get
+            {
+                if (_wrappedMiniStyle == null)
+                    _wrappedMiniStyle = new GUIStyle(EditorStyles.miniLabel) { wordWrap = true };
+                return _wrappedMiniStyle;
+            }
+        }
+
+        /// <summary>折り返す通常ラベル。</summary>
+        public static GUIStyle WrappedLabel
+        {
+            get
+            {
+                if (_wrappedStyle == null)
+                    _wrappedStyle = new GUIStyle(EditorStyles.label) { wordWrap = true };
+                return _wrappedStyle;
+            }
+        }
+
+        /// <summary>
+        /// 幅に合わせて折り返し、必要な行数ぶんの高さを確保するラベル。
+        /// インデントは EditorGUI.indentLevel に従う。
+        /// </summary>
+        public static void DrawWrappedLabel(string text, GUIStyle style = null)
+        {
+            if (string.IsNullOrEmpty(text)) return;
+            GUIStyle s = style ?? WrappedMiniLabel;
+            if (!s.wordWrap) s = new GUIStyle(s) { wordWrap = true };
+
+            float indent = EditorGUI.indentLevel * 15f;
+            if (indent > 0f)
+            {
+                EditorGUILayout.BeginHorizontal();
+                GUILayout.Space(indent);
+                GUILayout.Label(text, s, GUILayout.MinWidth(0f));
+                EditorGUILayout.EndHorizontal();
+            }
+            else
+            {
+                GUILayout.Label(text, s, GUILayout.MinWidth(0f));
+            }
+        }
+
+        /// <summary>
+        /// 横並びの行の中で、幅が足りなければ縮んで切れる（行を押し広げない）一行ラベル。
+        /// </summary>
+        public static void DrawShrinkLabel(string text, GUIStyle style = null, params GUILayoutOption[] options)
+        {
+            GUIStyle s = style ?? EditorStyles.label;
+            var content = new GUIContent(text, text);
+            if (options != null && options.Length > 0)
+                GUILayout.Label(content, s, options);
+            else
+                GUILayout.Label(content, s, GUILayout.MinWidth(0f));
+        }
+
+        /// <summary>
+        /// 現在のインスペクター幅に、指定の最小幅のボタンが横に何個入るか（1 以上）。
+        /// Layout と Repaint で同じ値になるよう、矩形ではなくビュー幅から求める。
+        /// </summary>
+        public static int ColumnsFor(float minItemWidth, int maxColumns, float reservedWidth = 40f)
+        {
+            float available = Mathf.Max(60f, EditorGUIUtility.currentViewWidth - reservedWidth - EditorGUI.indentLevel * 15f);
+            int columns = Mathf.FloorToInt(available / Mathf.Max(20f, minItemWidth));
+            return Mathf.Clamp(columns, 1, Mathf.Max(1, maxColumns));
+        }
+
+        /// <summary>
+        /// ボタン列を、幅が足りなければ複数行に折り返して描く。押されたボタンの添字を返す（なければ -1）。
+        /// 固定幅ボタンの横並び（狭いと右端が切れる）の置き換え用。
+        /// </summary>
+        public static int DrawFlowButtons(GUIContent[] buttons, float minButtonWidth, float height = 20f, GUIStyle style = null, int selected = -1, float reservedWidth = 40f)
+        {
+            if (buttons == null || buttons.Length == 0) return -1;
+            GUIStyle s = style ?? EditorStyles.miniButton;
+            int columns = ColumnsFor(minButtonWidth, buttons.Length, reservedWidth);
+            int clicked = -1;
+            const float gap = 3f;
+
+            for (int start = 0; start < buttons.Length; start += columns)
+            {
+                Rect row = EditorGUI.IndentedRect(GUILayoutUtility.GetRect(0f, height, GUILayout.ExpandWidth(true)));
+                float cell = (row.width - gap * (columns - 1)) / columns;
+                for (int c = 0; c < columns && start + c < buttons.Length; c++)
+                {
+                    int index = start + c;
+                    Rect r = new Rect(row.x + (cell + gap) * c, row.y, cell, row.height);
+                    bool isSelected = index == selected;
+                    Color oldBg = GUI.backgroundColor;
+                    if (isSelected) GUI.backgroundColor = NataneToonEditorTheme.Accent;
+                    if (GUI.Button(r, buttons[index], s)) clicked = index;
+                    GUI.backgroundColor = oldBg;
+                }
+                GUILayout.Space(2f);
+            }
+            return clicked;
+        }
+
+        public static int DrawFlowButtons(string[] labels, float minButtonWidth, float height = 20f, GUIStyle style = null, int selected = -1, float reservedWidth = 40f)
+        {
+            if (labels == null) return -1;
+            var contents = new GUIContent[labels.Length];
+            for (int i = 0; i < labels.Length; i++) contents[i] = new GUIContent(labels[i]);
+            return DrawFlowButtons(contents, minButtonWidth, height, style, selected, reservedWidth);
+        }
+
+        /// <summary>
+        /// 中央寄せの単独ボタン。希望幅より狭いインスペクターでは幅いっぱいまで縮む
+        /// （FlexibleSpace + 固定幅だと狭いときに左右が切れる）。
+        /// </summary>
+        public static bool DrawCenteredButton(GUIContent content, float preferredWidth, float height = 22f, GUIStyle style = null)
+        {
+            GUIStyle s = style ?? GUI.skin.button;
+            EditorGUILayout.BeginHorizontal();
+            GUILayout.FlexibleSpace();
+            bool clicked = GUILayout.Button(content, s, GUILayout.MinWidth(40f), GUILayout.MaxWidth(preferredWidth), GUILayout.ExpandWidth(true), GUILayout.Height(height));
+            GUILayout.FlexibleSpace();
+            EditorGUILayout.EndHorizontal();
+            return clicked;
+        }
+
+        public static bool DrawCenteredButton(string label, float preferredWidth, float height = 22f, GUIStyle style = null)
+        {
+            return DrawCenteredButton(new GUIContent(label), preferredWidth, height, style);
+        }
+
         /// <summary>
         /// ツール系 EditorWindow 共通のテーマ背景。サイト固定モード(SiteDark/SiteLight)のときだけ
         /// ウィンドウ全面を --bg-deep で塗る（マテリアルインスペクターの Task A3 と同じ挙動）。
@@ -290,19 +443,31 @@ namespace NataneToon.Editor
                 EditorGUI.DrawRect(new Rect(panelRect.x, panelRect.y, 3f, panelRect.height), NataneToonColorPalette.BrandPrimary);
             }
 
-            EditorGUILayout.BeginHorizontal();
-            EditorGUILayout.BeginVertical();
-            EditorGUILayout.LabelField(title, _titleStyle, GUILayout.Height(19f));
-            if (!string.IsNullOrEmpty(subtitle))
-                EditorGUILayout.LabelField(subtitle.ToUpperInvariant(), _subtitleStyle, GUILayout.Height(16f));
-            EditorGUILayout.EndVertical();
+            // タイトル + チップ 3 個 + ボタン 2 個を 1 行に並べるには約 520px 必要。
+            // それ未満では「タイトル + ボタン」「サブタイトル」「チップ」の 3 段に積む。
+            // （以前は 1 行固定で、狭めると言語切替と ⋮ メニューが右へ押し出されて押せなくなっていた）
+            bool singleRow = IsWide;
+            string subtitleText = string.IsNullOrEmpty(subtitle) ? null : subtitle.ToUpperInvariant();
 
-            GUILayout.FlexibleSpace();
-            if (!IsCompact && !string.IsNullOrEmpty(variant))
-                DrawStatusChip(variant, NataneInspectorStatus.Neutral, 86f);
-            if (!string.IsNullOrEmpty(ratingText))
-                DrawStatusChip(ratingText, ratingStatus, IsCompact ? 56f : 64f, ratingTooltip);
-            DrawStatusChip(sampler, samplerStatus, IsCompact ? 64f : 82f);
+            EditorGUILayout.BeginHorizontal();
+            if (singleRow)
+            {
+                EditorGUILayout.BeginVertical();
+                GUILayout.Label(new GUIContent(title, title), _titleStyle, GUILayout.MinWidth(0f), GUILayout.Height(19f));
+                if (subtitleText != null)
+                    GUILayout.Label(new GUIContent(subtitleText, subtitle), _subtitleStyle, GUILayout.MinWidth(0f), GUILayout.Height(16f));
+                EditorGUILayout.EndVertical();
+
+                if (!string.IsNullOrEmpty(variant))
+                    DrawStatusChip(variant, NataneInspectorStatus.Neutral, 86f);
+                if (!string.IsNullOrEmpty(ratingText))
+                    DrawStatusChip(ratingText, ratingStatus, 64f, ratingTooltip);
+                DrawStatusChip(sampler, samplerStatus, 82f, SamplerChipTooltip);
+            }
+            else
+            {
+                GUILayout.Label(new GUIContent(title, title), _titleStyle, GUILayout.MinWidth(0f), GUILayout.Height(20f));
+            }
 
             if (GUILayout.Button(IsJapanese ? "JP" : "EN", EditorStyles.miniButton, GUILayout.Width(30f), GUILayout.Height(20f)))
                 onLanguageClick?.Invoke();
@@ -310,17 +475,46 @@ namespace NataneToon.Editor
                 onMenuClick.Invoke();
             EditorGUILayout.EndHorizontal();
 
-            if (IsCompact && !string.IsNullOrEmpty(variant))
+            if (!singleRow)
             {
-                EditorGUILayout.Space(2f);
-                EditorGUILayout.LabelField(variant, _subtitleStyle);
+                if (subtitleText != null)
+                    GUILayout.Label(new GUIContent(subtitleText, subtitle), _subtitleStyle, GUILayout.MinWidth(0f), GUILayout.Height(16f));
+
+                // チップは行の幅を等分して並べる（最大 110px）。どれだけ狭くても行からはみ出さない。
+                int chipCount = 1 + (string.IsNullOrEmpty(variant) ? 0 : 1) + (string.IsNullOrEmpty(ratingText) ? 0 : 1);
+                Rect chipRow = GUILayoutUtility.GetRect(0f, 20f, GUILayout.ExpandWidth(true));
+                const float chipGap = 4f;
+                float chipWidth = Mathf.Min(110f, (chipRow.width - chipGap * (chipCount - 1)) / chipCount);
+                float chipX = chipRow.x;
+                if (!string.IsNullOrEmpty(variant))
+                {
+                    DrawStatusChip(new Rect(chipX, chipRow.y, chipWidth, 20f), variant, NataneInspectorStatus.Neutral, variant);
+                    chipX += chipWidth + chipGap;
+                }
+                if (!string.IsNullOrEmpty(ratingText))
+                {
+                    DrawStatusChip(new Rect(chipX, chipRow.y, chipWidth, 20f), ratingText, ratingStatus, ratingTooltip);
+                    chipX += chipWidth + chipGap;
+                }
+                DrawStatusChip(new Rect(chipX, chipRow.y, chipWidth, 20f), sampler, samplerStatus, SamplerChipTooltip);
             }
 
             EditorGUILayout.EndVertical();
             EditorGUILayout.Space(NataneUIConstants.INSPECTOR_SPACE_XS);
         }
 
+        private static string SamplerChipTooltip => L(
+            "使用中のテクスチャ枠 / 上限。機能を ON にすると増え、上限に達すると新しい機能を ON にできなくなります（使っていない機能を OFF にすると空きます）。",
+            "Texture slots in use / limit. Enabling features uses more; at the limit no further feature can be enabled (turn off unused ones to free slots).");
+
         public static void DrawStatusChip(string text, NataneInspectorStatus status, float width = 72f, string tooltip = null)
+        {
+            Rect rect = GUILayoutUtility.GetRect(width, 20f, GUILayout.Width(width), GUILayout.Height(20f));
+            DrawStatusChip(rect, text, status, tooltip);
+        }
+
+        /// <summary>指定矩形にチップを描く（幅可変レイアウト用）。</summary>
+        public static void DrawStatusChip(Rect rect, string text, NataneInspectorStatus status, string tooltip = null)
         {
             EnsureStyles();
             Color background;
@@ -346,7 +540,6 @@ namespace NataneToon.Editor
                     break;
             }
 
-            Rect rect = GUILayoutUtility.GetRect(width, 20f, GUILayout.Width(width), GUILayout.Height(20f));
             if (Event.current.type == EventType.Repaint)
                 EditorGUI.DrawRect(rect, background);
 
@@ -381,21 +574,31 @@ namespace NataneToon.Editor
             if (index >= 0)
             {
                 string indexText = (index + 1).ToString("00") + " /";
-                GUIStyle indexStyle = new GUIStyle(_groupStyle) { fontStyle = FontStyle.Bold };
-                Color brand = NataneToonColorPalette.BrandPrimary;
-                indexStyle.normal.textColor = new Color(brand.r, brand.g, brand.b,
-                    NataneToonEditorTheme.IsDark ? 0.85f : 1f);
-                Vector2 indexSize = indexStyle.CalcSize(new GUIContent(indexText));
+                GUIStyle indexStyle = _groupIndexStyle;
+                _measureContent.text = indexText;
+                Vector2 indexSize = indexStyle.CalcSize(_measureContent);
                 GUI.Label(new Rect(rect.x, rect.y, indexSize.x, rect.height), indexText, indexStyle);
                 labelX = rect.x + indexSize.x + 4f;
             }
 
-            GUI.Label(new Rect(labelX, rect.y, rect.x + rect.width * 0.65f - labelX, rect.height), label, _groupStyle);
+            // 右端のサマリーの実寸を先に確保し、残りをラベルに使う。
+            // （以前はラベル 65% 固定 + サマリーを全幅に重ね描きしていて、狭いと文字が重なった）
+            float summaryWidth = 0f;
             if (!string.IsNullOrEmpty(summary))
             {
-                GUIStyle right = new GUIStyle(_groupStyle) { alignment = TextAnchor.MiddleRight };
-                GUI.Label(rect, summary, right);
+                GUIStyle right = _groupSummaryStyle;
+                _measureContent.text = label;
+                float labelNeeded = _groupStyle.CalcSize(_measureContent).x + 6f;
+                _measureContent.text = summary;
+                summaryWidth = Mathf.Min(right.CalcSize(_measureContent).x + 4f,
+                    Mathf.Max(0f, rect.xMax - labelX - labelNeeded));
+                if (summaryWidth >= 24f)
+                    GUI.Label(new Rect(rect.xMax - summaryWidth, rect.y, summaryWidth, rect.height), new GUIContent(summary, summary), right);
+                else
+                    summaryWidth = 0f;
             }
+            GUIStyle labelStyle = _groupLabelStyle;
+            GUI.Label(new Rect(labelX, rect.y, Mathf.Max(0f, rect.xMax - summaryWidth - labelX), rect.height), new GUIContent(label, label), labelStyle);
             EditorGUILayout.Space(2f);
         }
 
@@ -410,14 +613,15 @@ namespace NataneToon.Editor
                         ? NataneToonColorPalette.Success
                         : NataneToonColorPalette.Info;
 
-            float height = _inlineMessageStyle.CalcHeight(new GUIContent(message), Mathf.Max(120f, EditorGUIUtility.currentViewWidth - 42f));
-            Rect rect = GUILayoutUtility.GetRect(0f, height + 6f, GUILayout.ExpandWidth(true));
+            // 高さはレイアウト側に実際の幅から計算させる。以前は「ビュー幅 - 42」で見積もっていたため、
+            // 入れ子のボックス内やスクロールバー表示時に実幅が足りず、最後の行が切れていた。
+            Rect rect = GUILayoutUtility.GetRect(new GUIContent(message), _inlineMessageStyle, GUILayout.ExpandWidth(true), GUILayout.MinWidth(0f));
             if (Event.current.type == EventType.Repaint)
             {
                 EditorGUI.DrawRect(rect, new Color(accent.r, accent.g, accent.b, NataneToonEditorTheme.IsDark ? 0.10f : 0.08f));
                 EditorGUI.DrawRect(new Rect(rect.x, rect.y, 3f, rect.height), accent);
             }
-            GUI.Label(new Rect(rect.x + 4f, rect.y + 2f, rect.width - 6f, rect.height - 4f), message, _inlineMessageStyle);
+            GUI.Label(rect, message, _inlineMessageStyle);
         }
 
         public static int DrawTabBar(int selectedTab, string[] labels, string[] compactLabels)
@@ -426,6 +630,22 @@ namespace NataneToon.Editor
             string[] visibleLabels = IsNarrow && compactLabels != null ? compactLabels : labels;
             int count = visibleLabels != null ? visibleLabels.Length : 0;
             if (count == 0) return selectedTab;
+
+            // 420〜520px 付近では長いラベルが 1 タブに収まらず両端が切れていた。
+            // 実測して収まらないラベルが 1 つでもあれば短縮ラベルに切り替える。
+            if (visibleLabels == labels && compactLabels != null && compactLabels.Length == count)
+            {
+                float estimatedTabWidth = (EditorGUIUtility.currentViewWidth - 28f) / count;
+                for (int i = 0; i < count; i++)
+                {
+                    _measureContent.text = labels[i];
+                    if (_tabStyleActive.CalcSize(_measureContent).x + 8f > estimatedTabWidth)
+                    {
+                        visibleLabels = compactLabels;
+                        break;
+                    }
+                }
+            }
 
             Rect barRect = GUILayoutUtility.GetRect(0f, 30f, GUILayout.ExpandWidth(true));
             float tabWidth = barRect.width / count;

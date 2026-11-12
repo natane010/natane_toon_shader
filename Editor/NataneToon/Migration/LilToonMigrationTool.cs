@@ -10,7 +10,7 @@ namespace NataneToon.Editor
 
     /// <summary>
     /// </summary>
-    public class LilToonMigrationTool : EditorWindow
+    public partial class LilToonMigrationTool : EditorWindow
     {
         private const string MigrationMetadataVersion = "2026-03-11-liltoon-ui-v1";
 
@@ -36,6 +36,8 @@ namespace NataneToon.Editor
         private bool showPreview = false;
         private Material previewMaterial = null;
         private bool autoOptimize = true;
+        /// <summary>null 以外なら自動判定を使わず、このシェーダーへ変換する（シェーダー欄から選んだ場合）。</summary>
+        private Shader forcedTargetShader = null;
         private const float CompactLayoutWidth = 720f;
         private const float NarrowLayoutWidth = 560f;
 
@@ -114,10 +116,27 @@ namespace NataneToon.Editor
             // --- 設定 (コンパクト) ---
             EditorGUILayout.BeginVertical(EditorStyles.helpBox);
             autoOptimize = EditorGUILayout.Toggle(L("Auto Setup で自動最適化", "Auto-optimize with Auto Setup"), autoOptimize);
-            createBackup = EditorGUILayout.Toggle(L("バックアップを作成", "Create Backup"), createBackup);
+            using (new EditorGUI.DisabledScope(!replaceOriginal))
+            {
+                createBackup = EditorGUILayout.Toggle(
+                    new GUIContent(
+                        L("バックアップを作成", "Create Backup"),
+                        L("「元マテリアルを直接置換」のときだけ使われます。通常の変換は元マテリアルを変更しないため、バックアップは不要です。",
+                          "Only used with Replace Original. A normal conversion leaves the source material untouched, so no backup is needed.")),
+                    createBackup);
+            }
             conversionMode = (ConversionMode)EditorGUILayout.Popup(
                 L("変換モード", "Conversion Mode"),
                 (int)conversionMode, conversionModeDisplayNames);
+
+            bool autoConvert = NataneLilToonMigrationBridge.AutoConvertOnShaderChange;
+            bool newAutoConvert = EditorGUILayout.Toggle(
+                new GUIContent(
+                    L("シェーダー欄の切り替えでも引き継ぐ", "Also Convert on Shader Switch"),
+                    L("マテリアルのシェーダー欄で lilToon から Natane Toon に切り替えたとき、色・影・輪郭線などの設定を自動で引き継ぎます（Ctrl+Z で戻せます）。",
+                      "When a material's shader dropdown is switched from lilToon to Natane Toon, carry over colors, shadows, outline and more automatically (Ctrl+Z reverts).")),
+                autoConvert);
+            if (newAutoConvert != autoConvert) NataneLilToonMigrationBridge.AutoConvertOnShaderChange = newAutoConvert;
 
             // 上級オプション (折りたたみ)
             replaceOriginal = EditorGUILayout.Toggle(L("元マテリアルを直接置換", "Replace Original"), replaceOriginal);
@@ -598,11 +617,13 @@ namespace NataneToon.Editor
 
                     EditorUtility.DisplayProgressBar(
                         L("Converting Materials", "Converting Materials"),
-                        L($"Converting {i + 1}/{lilToonMaterials.Count}: {lilToonMaterials[i].name}", $"Converting {i + 1}/{lilToonMaterials.Count}: {lilToonMaterials[i].name}"),
-                        (float)i / lilToonMaterials.Count
+                        L($"変換中 {i + 1}/{allEntries.Count}: {material.name}", $"Converting {i + 1}/{allEntries.Count}: {material.name}"),
+                        (float)i / allEntries.Count
                     );
 
-                    var report = ConvertMaterialWithReport(lilToonMaterials[i]);
+                    // 以前は現在ページ分しか入っていない lilToonMaterials[i] を参照しており、
+                    // 100 件を超えるプロジェクトや 2 ページ目以降で別のマテリアルを変換 / 例外になっていた。
+                    var report = ConvertMaterialWithReport(material);
                     reports.Add(report);
                     if (report.success)
                     {
@@ -765,13 +786,17 @@ namespace NataneToon.Editor
             try
             {
                 string sourcePath = AssetDatabase.GetAssetPath(sourceMaterial);
-                if (string.IsNullOrEmpty(sourcePath))
+                bool isAsset = !string.IsNullOrEmpty(sourcePath);
+                // 直接置換ならアセットでなくても変換できる（シーン上のインスタンスなど）。
+                // 複製モードは保存先を元アセットの隣に作るので、アセットであることが必須。
+                if (!isAsset && !replaceOriginal)
                 {
                     throw new System.InvalidOperationException($"Source material is not a project asset: {sourceMaterial.name}");
                 }
 
-                // Create backup if requested
-                if (createBackup)
+                // バックアップは元マテリアルを書き換えるときだけ作る。
+                // 複製モードでは元が無傷で残るため、作っても再実行のたびに増えるだけだった。
+                if (createBackup && replaceOriginal && isAsset)
                 {
                     string backupPath = GetBackupMaterialPath(sourcePath);
                     AssetDatabase.CopyAsset(sourcePath, backupPath);
@@ -790,7 +815,9 @@ namespace NataneToon.Editor
 
                 DetectMultipleShadowLayers(originalProperties, report);
 
-                Shader nataneToonShader = DetectNataneShaderVariant(sourceMaterial);
+                Shader nataneToonShader = forcedTargetShader != null
+                    ? forcedTargetShader
+                    : DetectNataneShaderVariant(sourceMaterial);
                 if (nataneToonShader == null)
                 {
                     Debug.LogError(L("Natane Toon Shader が見つかりません。プロジェクトにインポートされているか確認してください。", "Natane Toon Shader not found! Please make sure it's in your project."));
@@ -801,6 +828,11 @@ namespace NataneToon.Editor
                 report.infos.Add($"Using shader: {nataneToonShader.name}");
 
                 // Change shader
+                if (replaceOriginal)
+                {
+                    // 直接置換は Ctrl+Z で lilToon へ戻せるようにする。
+                    Undo.RecordObject(targetMaterial, "lilToon → Natane Toon");
+                }
                 targetMaterial.shader = nataneToonShader;
                 ApplyLilToonMigrationMetadata(targetMaterial, sourceMaterial, sourceMaterial.shader != null ? sourceMaterial.shader.name : "lilToon");
                 if (targetMaterial.HasProperty("_LilToonExactCompatibility"))
@@ -2260,9 +2292,26 @@ namespace NataneToon.Editor
                 if (cutoutShader != null) return cutoutShader;
             }
 
+            // --- Step 2.5: lilToonMulti は _TransparentMode が描画モードの正 ---
+            // 0=Opaque 1=Cutout 2=Transparent 3=Refraction 4=Fur 5=FurCutout 6=Gem
+            bool isLilToon = NataneShaderCatalog.IsLilToonShader(sourceMaterial.shader.name);
+            if (isLilToon && shaderName.Contains("multi") && sourceMaterial.HasProperty("_TransparentMode"))
+            {
+                int transparentMode = Mathf.RoundToInt(sourceMaterial.GetFloat("_TransparentMode"));
+                string multiTarget =
+                    (transparentMode == 1 || transparentMode == 5) ? "Natane/Toon Shader (Cutout)" :
+                    (transparentMode == 2 || transparentMode == 3 || transparentMode == 6) ? "Natane/Toon Shader (Transparent)" :
+                    "Natane/Toon Shader";
+                Shader multiShader = Shader.Find(multiTarget);
+                if (multiShader != null) return multiShader;
+            }
+
             // --- Step 3: マテリアルプロパティから判定（最終フォールバック） ---
             // _Cutoff > 0 かつブレンドモードが Opaque 系 → Cutout
-            if (sourceMaterial.HasProperty("_Cutoff"))
+            // lilToon は不透明シェーダーでも _Cutoff の既定値が 0.5 なので、この判定を通すと
+            // 不透明マテリアルがすべて Cutout になり、アルファにゴミのあるテクスチャで穴が開く。
+            // lilToon は名前とキューで描画モードが確定するため、ここは他シェーダー向けに限る。
+            if (!isLilToon && sourceMaterial.HasProperty("_Cutoff"))
             {
                 float cutoff = sourceMaterial.GetFloat("_Cutoff");
                 if (cutoff > 0.001f)
