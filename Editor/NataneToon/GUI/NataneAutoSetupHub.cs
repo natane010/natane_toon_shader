@@ -80,7 +80,7 @@ namespace NataneToon.Editor
                     L("▶ セットアップ実行", "▶ Execute Setup"),
                     GUILayout.Height(30)))
                 {
-                    LastResults[mat.GetInstanceID()] = ExecuteSetup(mat, role, look, quality, applyStyleCallback);
+                    LastResults[NataneToon.Editor.NataneEditorCompat.GetObjectId(mat)] = ExecuteSetup(mat, role, look, quality, applyStyleCallback);
                 }
                 GUI.backgroundColor = oldBg;
             }
@@ -91,7 +91,7 @@ namespace NataneToon.Editor
                 DrawRecordInfo(record);
             }
 
-            if (LastResults.TryGetValue(mat.GetInstanceID(), out AutoSetupResult lastResult))
+            if (LastResults.TryGetValue(NataneToon.Editor.NataneEditorCompat.GetObjectId(mat), out AutoSetupResult lastResult))
                 NataneAutoSetupReport.DrawResultSummary(lastResult);
         }
 

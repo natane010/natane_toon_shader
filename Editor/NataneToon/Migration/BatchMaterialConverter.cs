@@ -325,7 +325,7 @@ namespace NataneToon.Editor
                             sceneObjectIdsByMaterialGuid.Add(materialGuid, ids);
                         }
 
-                        ids.Add(renderer.gameObject.GetInstanceID());
+                        ids.Add(NataneToon.Editor.NataneEditorCompat.GetObjectId(renderer.gameObject));
                     }
                 }
 

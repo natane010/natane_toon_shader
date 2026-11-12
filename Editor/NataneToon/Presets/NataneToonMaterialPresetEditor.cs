@@ -119,7 +119,7 @@ namespace NataneToon.Editor
         private static string GetMaterialKey(Material material)
         {
             // Use material's instance ID for unique identification
-            return $"NataneToon_Material_{material.GetInstanceID()}";
+            return $"NataneToon_Material_{NataneToon.Editor.NataneEditorCompat.GetObjectId(material)}";
         }
 
         /// <summary>

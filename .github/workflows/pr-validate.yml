@@ -44,6 +44,9 @@ jobs:
       - name: Shader variant parity (W3)
         run: python Tests/CI/check_shader_parity.py --repo-root .
 
+      - name: URP SubShaders match the generator
+        run: python Tests/CI/generate_urp_subshaders.py --repo-root . --check
+
       - name: Pre-commit checks — .meta / Documentation~ / version (W8, W9)
         run: python Tests/CI/precommit_check.py --repo-root .
 

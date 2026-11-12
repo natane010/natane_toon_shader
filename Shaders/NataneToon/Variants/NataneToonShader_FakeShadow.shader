@@ -20,6 +20,16 @@ Shader "Natane/Toon Shader FakeShadow"
         _ShadowColor ("Shadow Color (影色)", Color) = (0.55, 0.5, 0.6, 1)
         _ShadowAlpha ("Shadow Alpha (不透明度)", Range(0, 1)) = 0.5
         _ShadowTex ("Shadow Shape (影の形 A)", 2D) = "white" {}
+        // 1 = 乗算。下地の色に影色を掛けるので、肌の色味が残る。
+        [Enum(Alpha, 0, Multiply, 1)] _ShadowBlendMode ("Blend Mode (合成)", Float) = 0
+        [HideInInspector] _SrcBlend ("Src Blend", Float) = 5
+        [HideInInspector] _DstBlend ("Dst Blend", Float) = 10
+
+        [Header(Light Shift)]
+        // 髪の複製メッシュを光の反対側へずらして、顔に落ちる影にする。単位はメートル。
+        _LightShift ("Shift Along Light (ライト方向へずらす量)", Range(0, 0.1)) = 0
+        // ライト方向に足す固定の向き (オブジェクト空間)。長さが効きの強さ。
+        _LightShiftBias ("Shift Direction Bias (ずらす向きの補正)", Vector) = (0, 0, 0, 0)
 
         [Header(Light Response)]
         // 0 = 完全にライト非依存。1 = ライト色をそのまま乗せる。
@@ -72,7 +82,7 @@ Shader "Natane/Toon Shader FakeShadow"
                 WriteMask [_StencilWriteMask]
             }
 
-            Blend SrcAlpha OneMinusSrcAlpha
+            Blend [_SrcBlend] [_DstBlend]
             // ZWrite Off: 他の半透明の並び順を壊さない。落ち影は「上に薄く乗せる」だけ。
             ZWrite Off
             ZTest LEqual
@@ -116,7 +126,25 @@ Shader "Natane/Toon Shader FakeShadow"
                 half _ShadowAlpha;
                 half _LightColorFollow;
                 half _FadeByViewAngle;
+                half _ShadowBlendMode;
+                float _LightShift;
+                float4 _LightShiftBias;
             CBUFFER_END
+
+            // 主光源が無いワールドでも向きが決まるよう、環境光の偏りを足す。
+            float3 FakeShadowLightDir()
+            {
+                float3 mainDir = _WorldSpaceLightPos0.xyz * dot(_LightColor0.rgb, float3(0.299, 0.587, 0.114));
+                float3 shDir = unity_SHAr.xyz * 0.299 + unity_SHAg.xyz * 0.587 + unity_SHAb.xyz * 0.114;
+                float3 dir = normalize(mainDir + shDir + float3(0.0, 0.001, 0.0));
+                float biasLen = length(_LightShiftBias.xyz);
+                if (biasLen > 1e-5)
+                {
+                    float3 biasWS = mul((float3x3)unity_ObjectToWorld, _LightShiftBias.xyz);
+                    dir = normalize(dir + biasLen * normalize(biasWS));
+                }
+                return dir;
+            }
 
             v2f vert(appdata v)
             {
@@ -126,10 +154,14 @@ Shader "Natane/Toon Shader FakeShadow"
                 UNITY_INITIALIZE_OUTPUT(v2f, o);
                 UNITY_INITIALIZE_VERTEX_OUTPUT_STEREO(o);
 
-                o.pos = UnityObjectToClipPos(v.vertex);
+                o.worldPos = mul(unity_ObjectToWorld, float4(v.vertex.xyz, 1.0)).xyz;
+                if (_LightShift > 0.0)
+                {
+                    o.worldPos -= FakeShadowLightDir() * _LightShift;
+                }
+                o.pos = UnityWorldToClipPos(o.worldPos);
                 o.uv = TRANSFORM_TEX(v.uv, _ShadowTex);
                 o.worldNormal = UnityObjectToWorldNormal(v.normal);
-                o.worldPos = mul(unity_ObjectToWorld, v.vertex).xyz;
                 UNITY_TRANSFER_FOG(o, o.pos);
                 return o;
             }
@@ -157,6 +189,14 @@ Shader "Natane/Toon Shader FakeShadow"
                     float3 viewDir = normalize(_WorldSpaceCameraPos - i.worldPos);
                     half facing = saturate(abs(dot(normalize(i.worldNormal), viewDir)));
                     alpha *= lerp(1.0h, facing, _FadeByViewAngle);
+                }
+
+                if (_ShadowBlendMode > 0.5h)
+                {
+                    // 乗算: 影の無い所は白 (= 変化なし)。フォグも白へ寄せて遠くで影を消す。
+                    fixed4 mul = fixed4(lerp(half3(1.0h, 1.0h, 1.0h), color, alpha), 1.0h);
+                    UNITY_APPLY_FOG_COLOR(i.fogCoord, mul, fixed4(1, 1, 1, 1));
+                    return mul;
                 }
 
                 fixed4 result = fixed4(color, alpha);

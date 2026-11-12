@@ -66,7 +66,7 @@ namespace NataneToon.Editor
             if (mat == null) return null;
             string path = UnityEditor.AssetDatabase.GetAssetPath(mat);
             if (string.IsNullOrEmpty(path))
-                return $"NataneAutoSetup_{mat.GetInstanceID()}";
+                return $"NataneAutoSetup_{NataneToon.Editor.NataneEditorCompat.GetObjectId(mat)}";
             return $"NataneAutoSetup_{path}";
         }
 

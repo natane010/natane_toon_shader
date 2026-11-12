@@ -65,7 +65,7 @@ namespace NataneToon.Editor
                     if (material == null || material.shader == null)
                         continue;
 
-                    int id = material.GetInstanceID();
+                    int id = NataneToon.Editor.NataneEditorCompat.GetObjectId(material);
                     if (!processedMaterials.Add(id))
                         continue;
 

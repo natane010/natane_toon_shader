@@ -810,6 +810,7 @@ namespace NataneToon.Editor
 
                 // Store original properties before changing shader
                 var originalProperties = CaptureProperties(sourceMaterial);
+                var lookSource = LilToonLookMatcher.Capture(sourceMaterial);
                 // ソースシェーダー名を保存（MapPropertiesWithReport でアウトラインバリアント検出に使用）
                 originalProperties["__sourceShaderName"] = sourceMaterial.shader != null ? sourceMaterial.shader.name : "";
 
@@ -833,6 +834,14 @@ namespace NataneToon.Editor
                     // 直接置換は Ctrl+Z で lilToon へ戻せるようにする。
                     Undo.RecordObject(targetMaterial, "lilToon → Natane Toon");
                 }
+#if UNITY_2022_1_OR_NEWER
+                // Material Variant のままだとシェーダーを差し替えられない。値を保ったまま親から切り離す。
+                if (targetMaterial.isVariant)
+                {
+                    targetMaterial.parent = null;
+                    report.infos.Add("Material Variant を親から切り離しました。");
+                }
+#endif
                 targetMaterial.shader = nataneToonShader;
                 ApplyLilToonMigrationMetadata(targetMaterial, sourceMaterial, sourceMaterial.shader != null ? sourceMaterial.shader.name : "lilToon");
                 if (targetMaterial.HasProperty("_LilToonExactCompatibility"))
@@ -888,6 +897,9 @@ namespace NataneToon.Editor
                         report.warnings.Add($"Auto-fix failed: {ex.Message}");
                     }
                 }
+
+                // 見た目合わせは最後に行う (ここで決めた値を最終値にする)。
+                LilToonLookMatcher.Apply(lookSource, targetMaterial, report.infos, report.warnings);
 
                 EditorUtility.SetDirty(targetMaterial);
 
@@ -1049,7 +1061,7 @@ namespace NataneToon.Editor
             CaptureFloat(material, "_AlphaToMask", properties);
 
             // === Stencil ===
-            // 命名が lilToon と一致するため素通しで引き継げる。捨てると、
+            // _StencilOp 以外は命名が lilToon と一致する (通過時の操作は LilToonLookMatcher が _StencilPass から移す)。捨てると、
             // See Through Hair 系のセットアップ済みアバターが移行で壊れる。
             CaptureFloat(material, "_StencilRef", properties);
             CaptureFloat(material, "_StencilComp", properties);

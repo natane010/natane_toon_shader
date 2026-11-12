@@ -93,7 +93,7 @@ namespace NataneToon.Editor
                 {
                     if (material == null)
                         continue;
-                    if (!reported.Add(material.GetInstanceID()))
+                    if (!reported.Add(NataneToon.Editor.NataneEditorCompat.GetObjectId(material)))
                         continue;
 
                     if (NataneBuildOptimizationReport.TryGetLiteConversion(

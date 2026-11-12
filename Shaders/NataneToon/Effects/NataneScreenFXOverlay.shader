@@ -51,6 +51,57 @@ Shader "Natane/Screen FX Overlay"
         _GrainSpeed ("Grain Speed", Range(0, 5)) = 1
     }
 
+    // URP 17+ 用の全画面パス。URP に GrabPass は無いので、Renderer Feature がカメラカラーを _BlitTexture として渡す。
+    // メッシュに貼っても描かれない。Natane Screen FX Renderer Feature にマテリアルを割り当てて使う。
+    SubShader
+    {
+        PackageRequirements
+        {
+            "com.unity.render-pipelines.universal": "17.0.0"
+        }
+
+        Tags { "RenderPipeline" = "UniversalPipeline" "RenderType" = "Opaque" "PreviewType" = "Plane" }
+        Cull Off
+        ZWrite Off
+        ZTest Always
+        Blend Off
+
+        Pass
+        {
+            Name "NataneScreenFX"
+            Tags { "LightMode" = "NataneScreenFX" }
+
+            HLSLPROGRAM
+            #pragma target 3.5
+            #pragma vertex Vert
+            #pragma fragment NataneScreenFXFragment
+
+            #include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/Core.hlsl"
+            #include "Packages/com.unity.render-pipelines.core/Runtime/Utilities/Blit.hlsl"
+
+            TEXTURE2D(_GradationTexture);
+            SAMPLER(sampler_GradationTexture);
+
+            // LOD 0 固定: 放射ブラーのループ内でも勾配を使わない。
+            #define NATANE_SCREENFX_SAMPLE_SCREEN(uv) (SAMPLE_TEXTURE2D_X_LOD(_BlitTexture, sampler_LinearClamp, uv, 0).rgb)
+            #define NATANE_SCREENFX_SAMPLE_GRADATION(uv) (SAMPLE_TEXTURE2D_LOD(_GradationTexture, sampler_GradationTexture, uv, 0).rgb)
+            #include "NataneScreenFXCore.hlsl"
+
+            half4 NataneScreenFXFragment(Varyings input) : SV_Target
+            {
+                UNITY_SETUP_STEREO_EYE_INDEX_POST_VERTEX(input);
+
+                float2 screenUV = input.texcoord;
+                half4 baseColor = SAMPLE_TEXTURE2D_X_LOD(_BlitTexture, sampler_LinearClamp, screenUV, 0);
+                half3 fxColor = NataneScreenFXApply(screenUV, _BlitTexture_TexelSize.xy, baseColor.rgb);
+
+                // 全画面を書き直すので _Intensity は自前で混ぜる (BiRP 版はアルファブレンド)。
+                return half4(lerp(baseColor.rgb, fxColor, saturate(_Intensity)), baseColor.a);
+            }
+            ENDHLSL
+        }
+    }
+
     SubShader
     {
         Tags { "Queue" = "Overlay+100" "RenderType" = "Transparent" "IgnoreProjector" = "True" "PreviewType" = "Plane" }
@@ -79,44 +130,17 @@ Shader "Natane/Screen FX Overlay"
             UNITY_DECLARE_SCREENSPACE_TEXTURE(_NataneScreenGrab);
             float4 _NataneScreenGrab_TexelSize;
 
-            half _Intensity;
-            half4 _TintColor;
-            half _Contrast;
-            half _Saturation;
-
-            half _PosterizeStrength;
-            half _PosterizeSteps;
-            half _EdgeStrength;
-            half _EdgeThreshold;
-
-            half _ChromaticAberration;
-            half _AberrationScale;
-            half _AberrationEdgeOnly;
-            half _AberrationEdgeStart;
-
-            half _RadialBlurStrength;
-            float4 _RadialBlurCenter;
-            half _RadialBlurSamples;
-            half _RadialBlurEdgeOnly;
-
             sampler2D _GradationTexture;
-            half4 _GradationColorA;
-            half4 _GradationColorB;
-            half _GradationBlend;
-            half _GradationMode;
-            half _GradationAngle;
 
-            half _MonochromeStrength;
-            half _MonochromeEdgeOnly;
+            inline half3 SampleScreen(float2 screenUV)
+            {
+                return UNITY_SAMPLE_SCREENSPACE_TEXTURE(_NataneScreenGrab, screenUV).rgb;
+            }
 
-            half _Vignette;
-            half _VignetteSoftness;
-            half _ScanlineStrength;
-            half _ScanlineDensity;
-            half _ScanlineSpeed;
-            half _GrainStrength;
-            half _GrainScale;
-            half _GrainSpeed;
+            // 効果の本体は URP の全画面パスと共有する。
+            #define NATANE_SCREENFX_SAMPLE_SCREEN(uv) SampleScreen(uv)
+            #define NATANE_SCREENFX_SAMPLE_GRADATION(uv) tex2D(_GradationTexture, uv).rgb
+            #include "NataneScreenFXCore.hlsl"
 
             struct appdata
             {
@@ -145,22 +169,6 @@ Shader "Natane/Screen FX Overlay"
                 return o;
             }
 
-            inline half NataneLuminance(half3 color)
-            {
-                return dot(color, half3(0.299h, 0.587h, 0.114h));
-            }
-
-            inline half Hash12(float2 p)
-            {
-                half h = dot(p, float2(127.1, 311.7));
-                return frac(sin(h) * 43758.5453);
-            }
-
-            inline half3 SampleScreen(float2 screenUV)
-            {
-                return UNITY_SAMPLE_SCREENSPACE_TEXTURE(_NataneScreenGrab, screenUV).rgb;
-            }
-
             half4 frag(v2f i) : SV_Target
             {
                 UNITY_SETUP_STEREO_EYE_INDEX_POST_VERTEX(i);
@@ -169,118 +177,7 @@ Shader "Natane/Screen FX Overlay"
                 float2 texel = _NataneScreenGrab_TexelSize.xy;
 
                 half3 baseColor = SampleScreen(screenUV);
-                half3 fxColor = baseColor;
-
-                // Radius / edge weight, shared by aberration, radial blur, vignette and
-                // monochrome. Hoisted here so all four agree on what "the edge" means.
-                float2 centeredUV = screenUV * 2.0 - 1.0;
-                half radius = saturate(length(centeredUV));
-                half edgeWeight = smoothstep(_AberrationEdgeStart, 1.0h, radius);
-
-                // Radial blur — pull samples toward the blur center.
-                // Runs before everything else so the rest of the chain operates on the
-                // blurred color rather than compositing over a sharp image.
-                if (_RadialBlurStrength > 0.001h)
-                {
-                    half rbWeight = lerp(1.0h, edgeWeight, _RadialBlurEdgeOnly);
-                    float2 dir = screenUV - _RadialBlurCenter.xy;
-                    half3 acc = fxColor;
-                    int count = (int)min(_RadialBlurSamples, 8.0h);
-
-                    [loop] for (int s = 1; s <= count; ++s)
-                    {
-                        half t = (half)s / (half)count;
-                        acc += SampleScreen(screenUV - dir * t * _RadialBlurStrength * 0.15);
-                    }
-
-                    acc /= (half)(count + 1);
-                    fxColor = lerp(fxColor, acc, rbWeight);
-                }
-
-                // Chromatic Aberration
-                // _AberrationEdgeOnly = 1 confines it to the periphery, which is how
-                // anime compositing uses it: to steer the eye toward the centre.
-                half caAmount = _ChromaticAberration * lerp(1.0h, edgeWeight, _AberrationEdgeOnly);
-                float2 aberrationOffset = texel * (caAmount * _AberrationScale * 2.0);
-                half3 chromaColor;
-                chromaColor.r = SampleScreen(screenUV + aberrationOffset).r;
-                // fxColor.g, not baseColor.g — otherwise the radial blur would be undone
-                // on the green channel.
-                chromaColor.g = fxColor.g;
-                chromaColor.b = SampleScreen(screenUV - aberrationOffset).b;
-                fxColor = lerp(fxColor, chromaColor, saturate(caAmount));
-
-                // Edge darkening for toon-like outlines on top of existing render
-                half centerLum = NataneLuminance(baseColor);
-                half rightLum = NataneLuminance(SampleScreen(screenUV + float2(texel.x, 0.0)));
-                half leftLum = NataneLuminance(SampleScreen(screenUV - float2(texel.x, 0.0)));
-                half upLum = NataneLuminance(SampleScreen(screenUV + float2(0.0, texel.y)));
-                half downLum = NataneLuminance(SampleScreen(screenUV - float2(0.0, texel.y)));
-                half edge = abs(centerLum - rightLum) + abs(centerLum - leftLum) + abs(centerLum - upLum) + abs(centerLum - downLum);
-                edge = saturate((edge - _EdgeThreshold) * 6.0);
-                fxColor *= (1.0h - edge * saturate(_EdgeStrength));
-
-                // Posterize
-                half steps = max(_PosterizeSteps, 2.0h);
-                half scale = steps - 1.0h;
-                half3 posterized = floor(fxColor * scale + 0.5h) / scale;
-                fxColor = lerp(fxColor, posterized, saturate(_PosterizeStrength));
-
-                // Scanline
-                half scanWave = sin((screenUV.y * _ScanlineDensity + _Time.y * _ScanlineSpeed) * 6.2831853h) * 0.5h + 0.5h;
-                fxColor *= (1.0h - _ScanlineStrength * (1.0h - scanWave));
-
-                // Film grain
-                float2 grainUV = floor(screenUV * _GrainScale) + _Time.y * _GrainSpeed;
-                half grain = Hash12(grainUV) - 0.5h;
-                fxColor += grain * _GrainStrength;
-
-                // Vignette
-                half vignetteStart = saturate(1.0h - _VignetteSoftness);
-                half vignette = smoothstep(vignetteStart, 1.0h, radius);
-                fxColor *= (1.0h - vignette * _Vignette);
-
-                // Gradation — the compositing pass anime uses to lay a colour ramp over
-                // the frame (warm above, cool below, and so on).
-                if (_GradationBlend > 0.001h)
-                {
-                    float a = radians(_GradationAngle);
-                    float s, c;
-                    sincos(a, s, c);
-                    half g = saturate(dot(centeredUV, float2(s, c)) * 0.5 + 0.5);
-
-                    half3 grad = lerp(_GradationColorB.rgb, _GradationColorA.rgb, g);
-                    // テクスチャ未指定なら "white" なので、2色補間がそのまま残る。
-                    grad *= tex2D(_GradationTexture, float2(g, 0.5)).rgb;
-
-                    int mode = (int)(_GradationMode + 0.5h);
-                    half3 blended =
-                        (mode == 0) ? fxColor * grad :
-                        (mode == 1) ? 1.0h - (1.0h - fxColor) * (1.0h - grad) :
-                        (mode == 2) ? lerp(2.0h * fxColor * grad,
-                                           1.0h - 2.0h * (1.0h - fxColor) * (1.0h - grad),
-                                           step(0.5h, NataneLuminance(fxColor)))
-                                    : fxColor + grad;
-
-                    fxColor = lerp(fxColor, blended, _GradationBlend);
-                }
-
-                // Color grading
-                fxColor = (fxColor - 0.5h) * _Contrast + 0.5h;
-                half gray = NataneLuminance(fxColor);
-                fxColor = lerp(gray.xxx, fxColor, _Saturation);
-                fxColor *= _TintColor.rgb;
-
-                // Partial monochrome — the "black and white" step of anime compositing.
-                // Kept separate from _Saturation so it can be radius-weighted: the centre
-                // stays in colour while the periphery drains, which _Saturation cannot do.
-                if (_MonochromeStrength > 0.001h)
-                {
-                    half mWeight = _MonochromeStrength * lerp(1.0h, edgeWeight, _MonochromeEdgeOnly);
-                    fxColor = lerp(fxColor, NataneLuminance(fxColor).xxx, mWeight);
-                }
-
-                fxColor = saturate(fxColor);
+                half3 fxColor = NataneScreenFXApply(screenUV, texel, baseColor);
 
                 return half4(fxColor, saturate(_Intensity));
             }

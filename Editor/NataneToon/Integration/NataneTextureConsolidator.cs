@@ -120,7 +120,7 @@ namespace NataneToon.Editor
                     continue;
                 if (!NataneShaderCatalog.IsNataneShader(m.shader.name))
                     continue;
-                if (!seenMat.Add(m.GetInstanceID()))
+                if (!seenMat.Add(NataneToon.Editor.NataneEditorCompat.GetObjectId(m)))
                     continue;
                 matList.Add(m);
             }
