@@ -1,14 +1,10 @@
 #ifndef NATANE_TOON_URP_DEPTH_PASSES_INCLUDED
 #define NATANE_TOON_URP_DEPTH_PASSES_INCLUDED
 
-// ===== NataneToon URP ShadowCaster / DepthOnly / DepthNormalsOnly =====
-// URP 同梱の ShadowCasterPass.hlsl などは Lit の入力 (_BaseMap / SurfaceInput.hlsl) を前提にしていて、
-// Cutout バリアントのアルファ抜きを通せない。ここに最小限の実装を持つ。
-// NataneToonURPInput.hlsl を先に include しておくこと。
-//
-// パス側で定義するスイッチ:
-//   _ALPHATEST_ON 1      Cutout バリアント (影・深度もアルファで抜く)
-//   NATANE_URP_UNITY6    Unity 6.1+ 用 SubShader (Rendering Layers の書き出し)
+// URP 用 ShadowCaster / DepthOnly / DepthNormalsOnly。
+// URP 同梱のパスは Lit の入力 (_BaseMap) 前提で Cutout のアルファ抜きを通せないので、自前で持つ。
+// NataneToonURPInput.hlsl を先に include すること。
+// パス側のスイッチ: _ALPHATEST_ON (Cutout) / NATANE_URP_UNITY6 (Rendering Layers を書き出す)
 
 #include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/Shadows.hlsl"
 #if defined(LOD_FADE_CROSSFADE)
@@ -42,9 +38,9 @@ void NataneDepthAlphaAndLod(NataneDepthVaryings input)
 #endif
 }
 
-// ---------------------------------------------------------------- ShadowCaster
+// ===== ShadowCaster =====
 
-// ライトの向き / 位置は URP がシャドウ描画時にセットする。
+// URP がシャドウ描画時にセットする。
 float3 _LightDirection;
 float3 _LightPosition;
 
@@ -66,7 +62,7 @@ NataneDepthVaryings NataneShadowCasterVertex(NataneDepthAttributes input)
 
     float4 positionCS = TransformWorldToHClip(ApplyShadowBias(positionWS, normalWS, lightDirectionWS));
 
-    // ニアクリップより手前に出た影をニア面に押し戻す (シャドウパンケーキング)。
+    // ニアクリップより手前の影をニア面に押し戻す (シャドウパンケーキング)。
 #if UNITY_REVERSED_Z
     positionCS.z = min(positionCS.z, UNITY_NEAR_CLIP_VALUE);
 #else
@@ -85,7 +81,7 @@ half4 NataneShadowCasterFragment(NataneDepthVaryings input) : SV_Target
     return 0;
 }
 
-// ---------------------------------------------------------------- DepthOnly
+// ===== DepthOnly =====
 
 NataneDepthVaryings NataneDepthOnlyVertex(NataneDepthAttributes input)
 {
@@ -107,7 +103,7 @@ half NataneDepthOnlyFragment(NataneDepthVaryings input) : SV_Target
     return input.positionCS.z;
 }
 
-// ---------------------------------------------------------------- DepthNormalsOnly
+// ===== DepthNormalsOnly =====
 
 NataneDepthVaryings NataneDepthNormalsVertex(NataneDepthAttributes input)
 {

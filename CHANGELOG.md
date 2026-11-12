@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added — ステッカー風の縁取り
+- **Sticker バリアント** (`Natane/Toon Shader (Sticker)`): シルエットの外側だけに均一な幅のフチを描き、シールのように見せる。
+  白フチに加えて、外枠の線や落ち影になる「台紙」を重ねられる。ポストプロセス不要で MSAA が効く。
+  Built-in RP 専用。詳細は `Documentation~/STICKER.md`。
+
 ### Added — Unity 6 の URP 対応
 - **URP で使えるシェーダーを 6 つに拡大**: `Natane/Toon Shader` に加えて Cutout / Transparent と、それぞれの Lite が URP で描ける
   (これまではメインの Opaque のみ)。マテリアルは Built-in RP と共通。

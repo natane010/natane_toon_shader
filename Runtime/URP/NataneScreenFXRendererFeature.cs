@@ -1,5 +1,4 @@
-// URP 17 (Unity 6) 以降でのみコンパイルされる (NataneToon.Runtime.URP.asmdef の defineConstraints)。
-// Built-in RP / VRChat のプロジェクトにはこのアセンブリ自体が存在しない。
+// URP 17 以降でのみコンパイルされる (NataneToon.Runtime.URP.asmdef の defineConstraints)。
 using UnityEngine;
 using UnityEngine.Rendering;
 using UnityEngine.Rendering.RenderGraphModule;
@@ -7,11 +6,7 @@ using UnityEngine.Rendering.Universal;
 
 namespace NataneToon
 {
-    /// <summary>
-    /// Natane Screen FX を URP の RenderGraph で描く Renderer Feature。
-    /// Built-in RP 版は GrabPass で画面を取り込むが、URP に GrabPass は無いので、
-    /// カメラカラーを読んで全画面パスを 1 回かける。
-    /// </summary>
+    /// <summary>Natane Screen FX を URP で描く。GrabPass の代わりにカメラカラーを読んで全画面パスをかける。</summary>
     [Tooltip("Natane Screen FX (画面全体の撮影効果) を URP で描きます。Natane/Screen FX Overlay のマテリアルを割り当ててください。")]
     public sealed class NataneScreenFXRendererFeature : ScriptableRendererFeature
     {
@@ -49,11 +44,11 @@ namespace NataneToon
             if (cameraType == CameraType.Preview || cameraType == CameraType.Reflection) return;
             if (cameraType == CameraType.SceneView && !applyToSceneView) return;
 
-            // URP 用のパスを持たないマテリアル (別のシェーダー) が割り当てられていたら何もしない。
+            // URP 用のパスを持たないシェーダーなら何もしない。
             int passIndex = material.FindPass(ScreenFXPass.ShaderPassName);
             if (passIndex < 0) return;
 
-            // ブレンド 0 なら結果は元の画面と同じ。全画面パスごと省く。
+            // ブレンド 0 なら元の画面と同じなので、パスごと省く。
             if (material.HasProperty(s_IntensityId) && material.GetFloat(s_IntensityId) <= 0f) return;
 
             m_Pass.Setup(material, passIndex, (RenderPassEvent)injectionPoint);
@@ -81,7 +76,7 @@ namespace NataneToon
             public ScreenFXPass()
             {
                 profilingSampler = new ProfilingSampler(k_PassName);
-                // カメラカラーをテクスチャとして読む。バックバッファは読めないので中間テクスチャを要求する。
+                // バックバッファは読めないので中間テクスチャを要求する。
                 requiresIntermediateTexture = true;
             }
 
@@ -115,7 +110,7 @@ namespace NataneToon
                     passData.passIndex = m_PassIndex;
 
                     builder.UseTexture(source, AccessFlags.Read);
-                    // 全ピクセルを書き直すので、前の内容は読み込まない (タイルベース GPU でロードを省ける)。
+                    // 全ピクセルを書き直すので前の内容は読まない (タイルベース GPU でロードを省ける)。
                     builder.SetRenderAttachment(destination, 0, AccessFlags.WriteAll);
                     builder.SetRenderFunc(static (PassData data, RasterGraphContext context) =>
                     {
@@ -123,8 +118,7 @@ namespace NataneToon
                     });
                 }
 
-                // スタックしていない単独のカメラなら、書き込んだテクスチャをそのままカメラカラーとして
-                // 差し替える。元のターゲットへ書き戻すブリットが 1 回減る。
+                // 単独のカメラなら、書き込んだテクスチャをカメラカラーに差し替えて書き戻しを省く。
                 // カメラスタック中はカラーターゲットがカメラ間で持ち越されるので、差し替えずに書き戻す。
                 bool canSwap = cameraData.renderType == CameraRenderType.Base && cameraData.resolveFinalTarget;
                 if (canSwap)

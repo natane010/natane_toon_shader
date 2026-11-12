@@ -1,26 +1,17 @@
 #ifndef NATANE_TOON_URP_FORWARD_PASS_INCLUDED
 #define NATANE_TOON_URP_FORWARD_PASS_INCLUDED
 
-// ===== NataneToon URP Forward Pass =====
-// トゥーンシェーディングのコア機能を URP に移植したパス。SubShader が 2 つこのファイルを使う。
-//
-//   NATANE_URP_UNITY6 定義あり : Unity 6.1 (URP 17.1) 以降用の SubShader。
-//       Forward / Forward+ / Deferred / Deferred+ (LightMode = UniversalForwardOnly)、
-//       Adaptive Probe Volumes、ライトレイヤー、ライトクッキー、シャドウマスク、
-//       Rendering Layers の書き出し、LOD クロスフェード、ピクセル単位のフォグ。
-//   NATANE_URP_UNITY6 定義なし : URP 14 〜 17.0 用の互換 SubShader (従来の挙動のまま)。
-//
-// パス側で定義するスイッチ:
-//   _ALPHATEST_ON 1          Cutout バリアント (アルファでクリップ)
-//   NATANE_URP_TRANSPARENT   Transparent バリアント (アルファを出力)
+// URP 用フォワードパス。2 つの SubShader が共有する。
+//   NATANE_URP_UNITY6 あり: URP 17.1+ (APV / ライトレイヤー / クッキー / シャドウマスク / Rendering Layers)
+//   NATANE_URP_UNITY6 なし: URP 14 〜 17.0 の互換パス
+// パス側のスイッチ: _ALPHATEST_ON (Cutout) / NATANE_URP_TRANSPARENT (アルファを出力)
 
 #include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/Lighting.hlsl"
 #if defined(LOD_FADE_CROSSFADE)
     #include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/LODCrossFade.hlsl"
 #endif
 
-// Forward+ のクラスターライトループは Unity 6.1 で _FORWARD_PLUS から _CLUSTER_LIGHT_LOOP に改名された。
-// どちらの URP でも同じコードで回せるように名前を吸収する。
+// Forward+ のキーワードは URP 17.1 で _FORWARD_PLUS から _CLUSTER_LIGHT_LOOP に改名された。名前の差を吸収する。
 #if defined(USE_CLUSTER_LIGHT_LOOP)
     #define NATANE_URP_CLUSTER_LOOP USE_CLUSTER_LIGHT_LOOP
     #define NATANE_URP_SUBTRACTIVE_LIGHT_CHECK CLUSTER_LIGHT_LOOP_SUBTRACTIVE_LIGHT_CHECK
@@ -91,8 +82,7 @@ Varyings NataneToonPassVertex(Attributes input)
 #endif
 
 #if defined(NATANE_URP_UNITY6)
-    // SH の評価位置 (頂点 / ピクセル / 混合) は URP の設定 (EVALUATE_SH_*) に従う。
-    // APV 使用時はここでプローブオクルージョンも受け取る。
+    // SH の評価位置は URP の設定 (EVALUATE_SH_*) に従う。APV 時はプローブオクルージョンも受け取る。
     OUTPUT_SH4(vertexInput.positionWS, output.normalWS.xyz, GetWorldSpaceNormalizeViewDir(vertexInput.positionWS), output.vertexSH, output.probeOcclusion);
 #endif
 
@@ -132,7 +122,6 @@ half4 NataneToonPassFragment(Varyings input) : SV_Target
     LODFadeCrossFade(input.positionCS);
 #endif
 
-    // ===== Normal =====
     half3 normalWS = normalize(input.normalWS);
 #if defined(_NORMALMAP)
     {
@@ -146,7 +135,6 @@ half4 NataneToonPassFragment(Varyings input) : SV_Target
 
     float3 positionWS = input.positionWS;
 
-    // ===== Main Light + Shadows =====
     float4 shadowCoord = float4(0.0, 0.0, 0.0, 0.0);
 #if defined(REQUIRES_VERTEX_SHADOW_COORD_INTERPOLATOR)
     shadowCoord = input.shadowCoord;
@@ -154,7 +142,7 @@ half4 NataneToonPassFragment(Varyings input) : SV_Target
     shadowCoord = TransformWorldToShadowCoord(positionWS);
 #endif
 
-    // LIGHT_LOOP_BEGIN (Forward+) は inputData.normalizedScreenSpaceUV / positionWS を参照する。
+    // Forward+ の LIGHT_LOOP_BEGIN が normalizedScreenSpaceUV / positionWS を読む。
     InputData inputData = (InputData)0;
     inputData.positionWS = positionWS;
     inputData.normalWS = normalWS;
@@ -167,7 +155,6 @@ half4 NataneToonPassFragment(Varyings input) : SV_Target
     inputData.fogCoord = InitializeInputDataFog(float4(positionWS, 1.0), input.fogFactor);
     inputData.shadowMask = half4(1.0, 1.0, 1.0, 1.0);
 
-    // ===== Ambient: Adaptive Probe Volumes または SH =====
     #if defined(PROBE_VOLUMES_L1) || defined(PROBE_VOLUMES_L2)
         inputData.bakedGI = SAMPLE_GI(input.vertexSH,
             GetAbsolutePositionWS(positionWS),
@@ -181,13 +168,13 @@ half4 NataneToonPassFragment(Varyings input) : SV_Target
         inputData.shadowMask = SAMPLE_SHADOWMASK(float2(0.0, 0.0));
     #endif
 
-    // SSAO はあえて受けない (顔や肌のトゥーン面が汚れるため)。係数 1 で素通しにする。
+    // SSAO は受けない (顔や肌のトゥーン面が汚れる)。係数 1 で素通しにする。
     AmbientOcclusionFactor aoFactor;
     aoFactor.indirectAmbientOcclusion = 1.0;
     aoFactor.directAmbientOcclusion = 1.0;
 
     half4 shadowMask = CalculateShadowMask(inputData);
-    // クッキーとシャドウマスクはこのオーバーロードの中で適用される。
+    // クッキーとシャドウマスクはこのオーバーロード内で適用される。
     Light mainLight = GetMainLight(inputData, shadowMask, aoFactor);
 
     #ifdef _LIGHT_LAYERS
@@ -204,13 +191,11 @@ half4 NataneToonPassFragment(Varyings input) : SV_Target
     half atten = mainLight.shadowAttenuation * mainLight.distanceAttenuation;
     half ndotl = dot(normalWS, mainLight.direction);
 
-    // Lit Area Softness (BiRP: _LitSoftness smoothstep)
     half lightTerm = lerp(ndotl, smoothstep(0.0, 1.0, ndotl), _LitSoftness);
 
-    // 段の境界の AA 幅。追加ライトのループ内では fwidth を呼べないので、ここで求めた値を使い回す。
+    // fwidth は追加ライトのループ内で呼べないので、AA 幅をここで求めて使い回す。
     float aaFloor = NataneToonStepAAFloorURP(lightTerm, _ShadowSteps);
 
-    // ===== Toon / Ramp Shading =====
     half3 lighting;
 #if defined(_USE_RAMP)
     half rampInput = lightTerm * atten;
@@ -224,12 +209,11 @@ half4 NataneToonPassFragment(Varyings input) : SV_Target
 
     half3 lightAccum = lighting * mainLight.color;
 
-    // ===== Additional Lights =====
 #if defined(_ADDITIONAL_LIGHTS) || defined(_ADDITIONAL_LIGHTS_VERTEX)
     {
         uint pixelLightCount = GetAdditionalLightsCount();
 
-        // Forward+ / Deferred+ では、追加のディレクショナルライトはクラスターに入らず別枠で回す。
+        // Forward+ / Deferred+ では追加のディレクショナルライトがクラスター外なので、別ループで回す。
         #if NATANE_URP_CLUSTER_LOOP
         [loop] for (uint dirLightIndex = 0; dirLightIndex < min(URP_FP_DIRECTIONAL_LIGHTS_COUNT, MAX_VISIBLE_LIGHTS); dirLightIndex++)
         {
@@ -266,7 +250,6 @@ half4 NataneToonPassFragment(Varyings input) : SV_Target
     }
 #endif
 
-    // ===== Ambient =====
 #if defined(NATANE_URP_UNITY6)
     lightAccum += inputData.bakedGI;
 #else
@@ -275,7 +258,6 @@ half4 NataneToonPassFragment(Varyings input) : SV_Target
 
     half3 color = albedo.rgb * lightAccum;
 
-    // ===== MatCap =====
 #if defined(_MATCAP)
     {
         half3 normalVS = normalize(TransformWorldToViewDir(normalWS));
@@ -298,7 +280,6 @@ half4 NataneToonPassFragment(Varyings input) : SV_Target
     }
 #endif
 
-    // ===== Rim Light =====
 #if defined(_RIM_LIGHT)
     {
         half3 viewDirWS = GetWorldSpaceNormalizeViewDir(positionWS);
@@ -308,12 +289,10 @@ half4 NataneToonPassFragment(Varyings input) : SV_Target
     }
 #endif
 
-    // ===== Emission =====
 #if defined(_EMISSION)
     color += SAMPLE_TEXTURE2D(_EmissionMap, sampler_MainTex, uv).rgb * _EmissionColor.rgb;
 #endif
 
-    // ===== Fog =====
 #if defined(NATANE_URP_UNITY6)
     color = MixFog(color, inputData.fogCoord);
 #else
@@ -323,7 +302,7 @@ half4 NataneToonPassFragment(Varyings input) : SV_Target
 #if defined(NATANE_URP_TRANSPARENT)
     half outAlpha = albedo.a;
 #else
-    // 不透明 / カットアウトはアルファ 1 を書く (カメラのアルファ出力や合成で透けないように)。
+    // 不透明 / Cutout はアルファ 1 (カメラのアルファ出力や合成で透けないように)。
     half outAlpha = 1.0;
 #endif
 

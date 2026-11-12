@@ -1,4 +1,4 @@
-// URP 17 (Unity 6) 以降でのみコンパイルされる (NataneToon.Editor.URP.asmdef の defineConstraints)。
+// URP 17 以降でのみコンパイルされる (NataneToon.Editor.URP.asmdef の defineConstraints)。
 using System.Collections.Generic;
 using System.Text;
 using UnityEditor;
@@ -8,11 +8,7 @@ using UnityEngine.Rendering.Universal;
 
 namespace NataneToon.Editor
 {
-    /// <summary>
-    /// URP プロジェクト向けのセットアップ補助。
-    /// ・Screen FX の Renderer Feature を、いま使われている Renderer に追加する
-    /// ・シーン内のマテリアルが URP で描けるバリアントかどうかを確認する
-    /// </summary>
+    /// <summary>URP 向けのセットアップ補助 (Screen FX の Renderer Feature 追加 / シーンの URP 対応確認)。</summary>
     public static class NataneURPSetupTool
     {
         const string MenuRoot = "Tools/Natane/URP/";
@@ -28,7 +24,7 @@ namespace NataneToon.Editor
             get { return L("Natane Toon - URP", "Natane Toon - URP"); }
         }
 
-        // ------------------------------------------------------------ Screen FX
+        // ===== Screen FX =====
 
         [MenuItem(MenuRoot + "Screen FX を Renderer に追加 Add Screen FX Renderer Feature", false, 80)]
         static void AddScreenFXFeature()
@@ -80,8 +76,7 @@ namespace NataneToon.Editor
             Undo.RegisterCreatedObjectUndo(feature, "Add Natane Screen FX");
             AssetDatabase.AddObjectToAsset(feature, rendererData);
 
-            // Renderer Feature の一覧は、参照のリストとローカル ID のリストの 2 本で持たれている
-            // (URP の Renderer インスペクターと同じ手順で両方に足す)。
+            // Renderer Feature は参照のリストとローカル ID のリストの両方に足す (URP のインスペクターと同じ)。
             AssetDatabase.TryGetGUIDAndLocalFileIdentifier(feature, out string _, out long localId);
             var serialized = new SerializedObject(rendererData);
             SerializedProperty features = serialized.FindProperty("m_RendererFeatures");
@@ -176,7 +171,7 @@ namespace NataneToon.Editor
             return data;
         }
 
-        // ------------------------------------------------------------ 対応状況の確認
+        // ===== 対応状況の確認 =====
 
         [MenuItem(MenuRoot + "シーンの URP 対応を確認 Check Scene for URP Support", false, 81)]
         static void CheckScene()
@@ -187,7 +182,7 @@ namespace NataneToon.Editor
                 ? L("レンダーパイプライン: URP (" + asset.name + ")", "Render pipeline: URP (" + asset.name + ")")
                 : L("レンダーパイプライン: URP ではありません", "Render pipeline: not URP"));
 
-            // URP の SubShader を持たない Natane シェーダー (Built-in RP 専用バリアント) を使うマテリアルを集める。
+            // URP の SubShader を持たない Natane シェーダーのマテリアルを集める。
             var unsupported = new SortedDictionary<string, List<Object>>(System.StringComparer.Ordinal);
             var supportCache = new Dictionary<Shader, bool>();
             var seen = new HashSet<Material>();

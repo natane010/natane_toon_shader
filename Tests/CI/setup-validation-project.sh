@@ -81,16 +81,39 @@ mkdir -p "${OUT_DIR}/ProjectSettings"
 
 # A file: dependency must be relative to the project's Packages folder, otherwise Unity
 # resolves it against the wrong root on some platforms.
-REL_REPO="$(python3 -c "import os,sys; print(os.path.relpath(sys.argv[1], sys.argv[2]).replace(os.sep,'/'))" \
+# Windows の "python3" は実行できない Store スタブのことがある。
+PYTHON_BIN=""
+for candidate in python3 python; do
+  if "${candidate}" -c "import json" >/dev/null 2>&1; then PYTHON_BIN="${candidate}"; break; fi
+done
+if [[ -z "${PYTHON_BIN}" ]]; then
+  echo "ERROR: python is required." >&2
+  exit 3
+fi
+REL_REPO="$("${PYTHON_BIN}" -c "import os,sys; print(os.path.relpath(sys.argv[1], sys.argv[2]).replace(os.sep,'/'))" \
   "${REPO_DIR}" "${OUT_DIR}/Packages")"
 
-cat > "${OUT_DIR}/Packages/manifest.json" <<EOF
-{
-  "dependencies": {
-    "${PACKAGE_NAME}": "file:${REL_REPO}"
-  }
-}
-EOF
+# パッケージの C# はビルトインモジュール (Physics / ParticleSystem など) を使う。
+# エディターごとに有無が違うので、存在するものだけ足す。
+BUILTIN_DIR=""
+for candidate in \
+  "$(dirname "${UNITY_BIN}")/Data/Resources/PackageManager/BuiltInPackages" \
+  "$(dirname "${UNITY_BIN}")/../Resources/PackageManager/BuiltInPackages"; do
+  if [[ -d "${candidate}" ]]; then BUILTIN_DIR="${candidate}"; break; fi
+done
+"${PYTHON_BIN}" - "${OUT_DIR}/Packages/manifest.json" "${PACKAGE_NAME}" "file:${REL_REPO}" "${BUILTIN_DIR}" <<'PY'
+import json, os, sys
+manifest, name, source, builtin_dir = sys.argv[1:5]
+deps = {name: source}
+modules = ("animation assetbundle audio cloth director imageconversion imgui jsonserialize "
+           "particlesystem physics physics2d screencapture terrain terrainphysics tilemap ui "
+           "uielements unitywebrequest unitywebrequesttexture video vr wind xr")
+for module in modules.split():
+    if builtin_dir and os.path.isdir(os.path.join(builtin_dir, "com.unity.modules." + module)):
+        deps["com.unity.modules." + module] = "1.0.0"
+with open(manifest, "w", encoding="utf-8") as handle:
+    json.dump({"dependencies": deps}, handle, indent=2)
+PY
 
 # Stored as .txt so Unity does not compile it inside the package itself (it would land in
 # Assembly-CSharp and break player builds). Rename on the way in.

@@ -61,6 +61,8 @@ namespace NataneToon.Tests.Editor
         [TestCase("レンチキュラー", "Lenticular")]
         [TestCase("x-ray", "XRay")]
         [TestCase("透視", "XRay")]
+        [TestCase("sticker", "Sticker")]
+        [TestCase("白フチ", "Sticker")]
         public void Search_FindsExpectedSection(string query, string expectedKey)
         {
             string[] resultKeys = NataneToonInspectorSectionRegistry.Search(query)

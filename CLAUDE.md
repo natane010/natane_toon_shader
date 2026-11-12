@@ -93,7 +93,7 @@ When adding a new shader effect (e.g., a new lighting model or visual effect):
    }
    ```
 
-6. **Update ALL 12 full shader variants** (`NataneToonShader.shader` + the 11 `Variants/NataneToonShader_*.shader` files that carry the full Properties block; Particle and FakeShadow are separate): each carries its own copy of the `Properties` block and per-pass `#pragma shader_feature_local` lists. Keep them in sync — drift here has caused real compile bugs.
+6. **Update ALL 13 full shader variants** (`NataneToonShader.shader` + the 12 `Variants/NataneToonShader_*.shader` files that carry the full Properties block; Particle and FakeShadow are separate): each carries its own copy of the `Properties` block and per-pass `#pragma shader_feature_local` lists. Keep them in sync — drift here has caused real compile bugs.
 
 ### Shared pass includes (do NOT re-inline)
 

@@ -51,11 +51,8 @@ Shader "Natane/Screen FX Overlay"
         _GrainSpeed ("Grain Speed", Range(0, 5)) = 1
     }
 
-    // ===== URP (Unity 6 / URP 17+) : 全画面パス =====
-    // URP には GrabPass が無いので、Natane Screen FX Renderer Feature (RenderGraph) が
-    // カメラカラーを _BlitTexture として渡し、このパスで 1 回のブリットとして描く。
-    // メッシュに貼っても描かれない (LightMode が URP の描画対象外)。Renderer Feature にマテリアルを割り当てて使う。
-    // URP の入っていないプロジェクト (Built-in RP / VRChat) では読み飛ばされる。
+    // URP 17+ 用の全画面パス。URP に GrabPass は無いので、Renderer Feature がカメラカラーを _BlitTexture として渡す。
+    // メッシュに貼っても描かれない。Natane Screen FX Renderer Feature にマテリアルを割り当てて使う。
     SubShader
     {
         PackageRequirements
@@ -85,7 +82,7 @@ Shader "Natane/Screen FX Overlay"
             TEXTURE2D(_GradationTexture);
             SAMPLER(sampler_GradationTexture);
 
-            // LOD 0 固定で読む: 放射ブラーのループ内でも勾配を使わない。
+            // LOD 0 固定: 放射ブラーのループ内でも勾配を使わない。
             #define NATANE_SCREENFX_SAMPLE_SCREEN(uv) (SAMPLE_TEXTURE2D_X_LOD(_BlitTexture, sampler_LinearClamp, uv, 0).rgb)
             #define NATANE_SCREENFX_SAMPLE_GRADATION(uv) (SAMPLE_TEXTURE2D_LOD(_GradationTexture, sampler_GradationTexture, uv, 0).rgb)
             #include "NataneScreenFXCore.hlsl"
@@ -98,7 +95,7 @@ Shader "Natane/Screen FX Overlay"
                 half4 baseColor = SAMPLE_TEXTURE2D_X_LOD(_BlitTexture, sampler_LinearClamp, screenUV, 0);
                 half3 fxColor = NataneScreenFXApply(screenUV, _BlitTexture_TexelSize.xy, baseColor.rgb);
 
-                // BiRP 版はアルファブレンドで重ねる。こちらは全画面を書き直すので自前で混ぜる。
+                // 全画面を書き直すので _Intensity は自前で混ぜる (BiRP 版はアルファブレンド)。
                 return half4(lerp(baseColor.rgb, fxColor, saturate(_Intensity)), baseColor.a);
             }
             ENDHLSL
@@ -140,7 +137,7 @@ Shader "Natane/Screen FX Overlay"
                 return UNITY_SAMPLE_SCREENSPACE_TEXTURE(_NataneScreenGrab, screenUV).rgb;
             }
 
-            // 効果の本体は URP の全画面パスと共有している (NataneScreenFXCore.hlsl)。
+            // 効果の本体は URP の全画面パスと共有する。
             #define NATANE_SCREENFX_SAMPLE_SCREEN(uv) SampleScreen(uv)
             #define NATANE_SCREENFX_SAMPLE_GRADATION(uv) tex2D(_GradationTexture, uv).rgb
             #include "NataneScreenFXCore.hlsl"

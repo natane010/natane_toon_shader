@@ -1,11 +1,6 @@
-// Copied to Assets/Editor/ValidateURP.cs by Tests/CI/setup-urp-validation-project.sh.
-// Kept as .txt so Unity does not compile it inside the package (it needs URP, which a
-// Built-in RP / VRChat project does not have).
-//
-// Activates a URP asset, then force-compiles every pass of every URP SubShader in the
-// package across material x pipeline keyword sets. In batch mode with -nographics the
-// active SubShader stays on Built-in RP even with a URP asset assigned, so the passes are
-// compiled explicitly per SubShader rather than through the active one.
+// setup-urp-validation-project.sh が Assets/Editor/ValidateURP.cs としてコピーする。
+// URP が必要なので、パッケージ内でコンパイルされないよう .txt にしている。
+// -nographics ではアクティブな SubShader が Built-in RP のままなので、URP SubShader の全パスを明示的にコンパイルする。
 using System;
 using System.Collections.Generic;
 using System.IO;
@@ -23,7 +18,7 @@ namespace NataneToonCI
     {
         const string PackageMarker = "com.natane.toonshader";
 
-        // Material keywords. Add a set for every new keyword-gated URP code path.
+        // マテリアルキーワード。キーワードで分岐する URP のコードを足したら、ここにセットを足す。
         static readonly string[][] MaterialSets =
         {
             new string[0],
@@ -31,8 +26,8 @@ namespace NataneToonCI
             new[] { "_OUTLINE", "_OUTLINE_TEXTURE_COLOR", "_OUTLINE_MULTI_COLOR", "_NORMALMAP" },
         };
 
-        // Pipeline keywords. A keyword a pass does not declare is ignored by the compiler.
-        // CLUSTER is replaced by the Forward+ keyword of the URP version under test.
+        // パイプラインキーワード (パスが宣言していないものは無視される)。
+        // Cluster は URP のバージョンに合った Forward+ キーワードに置き換わる。
         const string Cluster = "<cluster>";
         static readonly string[][] PipelineSets =
         {
@@ -80,8 +75,7 @@ namespace NataneToonCI
         {
             EnsureURP();
             Version urp = UrpVersion();
-            // _FORWARD_PLUS was renamed to _CLUSTER_LIGHT_LOOP in URP 17.1; the old name only
-            // survives there as a shim that reports a deprecation warning.
+            // _FORWARD_PLUS は URP 17.1 で _CLUSTER_LIGHT_LOOP に改名された (旧名は非推奨の警告が出る)。
             string cluster = urp >= new Version(17, 1) ? "_CLUSTER_LIGHT_LOOP" : "_FORWARD_PLUS";
             Debug.Log("URP_VERSION=" + urp + " cluster=" + cluster);
             Debug.Log("URP_PIPELINE=" + (GraphicsSettings.defaultRenderPipeline != null ? GraphicsSettings.defaultRenderPipeline.GetType().Name : "none"));
@@ -93,7 +87,7 @@ namespace NataneToonCI
                 .OrderBy(s => s.name, StringComparer.Ordinal).ToList();
 
             int urpShaders = 0, urpSubshaders = 0, variants = 0;
-            // message -> number of variants that reported it (the same line fails in many variants)
+            // メッセージ -> それを報告したバリアント数
             var errors = new SortedDictionary<string, int>(StringComparer.Ordinal);
             var warnings = new SortedDictionary<string, int>(StringComparer.Ordinal);
             var urpTag = new ShaderTagId("RenderPipeline");

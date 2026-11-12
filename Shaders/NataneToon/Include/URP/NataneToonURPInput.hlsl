@@ -1,20 +1,12 @@
 #ifndef NATANE_TOON_URP_INPUT_INCLUDED
 #define NATANE_TOON_URP_INPUT_INCLUDED
 
-// ===== NataneToon URP Shared Input =====
-// URP (Universal Render Pipeline) 用の共有マテリアル入力定義。
-// SRP Batcher 互換のため、全パスでこのファイルを include して
-// UnityPerMaterial CBUFFER のレイアウトを完全に一致させること。
-//
-// GPU Resident Drawer (Unity 6) / BatchRendererGroup 対応:
-// DOTS_INSTANCING_ON 時は主要プロパティを DOTS instanced プロパティとして
-// 読み出す (URP Lit.shader / LitInput.hlsl と同じパターン)。
+// URP 用の共有マテリアル入力。全パスがこのファイルを include する。
 
 #include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/Core.hlsl"
 #include "Packages/com.unity.render-pipelines.core/ShaderLibrary/CommonMaterial.hlsl"
 
-// NOTE: SRP Batcher は全パスで同一の UnityPerMaterial レイアウトを要求する。
-// ここに宣言するプロパティは ifdef で囲まないこと。
+// SRP Batcher は全パスで同じ UnityPerMaterial レイアウトを要求する。ifdef で囲まないこと。
 CBUFFER_START(UnityPerMaterial)
 float4 _MainTex_ST;
 float4 _OutlineMask_ST;
@@ -59,16 +51,14 @@ TEXTURE2D(_SmoothNormalTex);
 TEXTURE2D(_OutlineMask);
 TEXTURE2D(_OutlineWidthMap);
 
-// Inline sampler (ramp / matcap 用クランプサンプラー)
+// ramp / matcap 用。
 SAMPLER(sampler_linear_clamp);
-// 補助テクスチャ (輪郭線マスク / 幅マップ / ベイク法線) 用。
-// sampler_MainTex を流用すると、そのパスが _MainTex を読まないバリアントで
-// サンプラーごと最適化で消え、"Unrecognized sampler 'sampler_maintex'" になる (Unity 6 で確認)。
+// 補助テクスチャ (輪郭線マスク / 幅マップ / ベイク法線) 用。sampler_MainTex を流用すると、
+// _MainTex を読まないバリアントでサンプラーが最適化で消えてエラーになる (Unity 6)。
 SAMPLER(sampler_linear_repeat);
 
-// ===== DOTS Instancing (GPU Resident Drawer / BatchRendererGroup) =====
-// NOTE: DOTS instanced プロパティも ifdef で囲まないこと
-// (バリアントごとに constant-buffer オフセットが変わると CPU 側が壊れる)。
+// DOTS Instancing (GPU Resident Drawer)。
+// バリアントごとにオフセットが変わると CPU 側が壊れるので、ここも ifdef で囲まないこと。
 #ifdef UNITY_DOTS_INSTANCING_ENABLED
 
 UNITY_DOTS_INSTANCING_START(MaterialPropertyMetadata)
@@ -78,8 +68,7 @@ UNITY_DOTS_INSTANCING_START(MaterialPropertyMetadata)
     UNITY_DOTS_INSTANCED_PROP(float , _OutlineWidth)
 UNITY_DOTS_INSTANCING_END(MaterialPropertyMetadata)
 
-// URP Lit.shader と同じ static キャッシュパターン
-// (プロパティ参照ごとのロードコード再生成を防ぐ)
+// 参照のたびにロードコードが生成されないよう static にキャッシュする (URP Lit と同じ)。
 static float4 unity_DOTS_Sampled_Color;
 static float4 unity_DOTS_Sampled_EmissionColor;
 static float4 unity_DOTS_Sampled_OutlineColor;
@@ -103,9 +92,8 @@ void SetupDOTSNataneToonMaterialPropertyCaches()
 
 #endif // UNITY_DOTS_INSTANCING_ENABLED
 
-// ===== URP 標準パスとの互換マクロ =====
-// ObjectMotionVectors.hlsl など URP 同梱のパスは Lit の命名 (_BaseMap / _BaseColor) を前提にしている。
-// プロパティ名は BiRP と共通 (_MainTex / _Color) のままにしたいので、名前だけ読み替える。
+// URP 同梱のパス (ObjectMotionVectors.hlsl など) は Lit の命名 (_BaseMap / _BaseColor) 前提。
+// プロパティ名は BiRP と共通のままにしたいので、名前だけ読み替える。
 #define _BaseMap        _MainTex
 #define sampler_BaseMap sampler_MainTex
 #define _BaseMap_ST     _MainTex_ST
@@ -116,7 +104,7 @@ half4 SampleAlbedoAlpha(float2 uv, TEXTURE2D_PARAM(albedoAlphaMap, sampler_albed
     return half4(SAMPLE_TEXTURE2D(albedoAlphaMap, sampler_albedoAlphaMap, uv));
 }
 
-// Cutout バリアントはパス側で `#define _ALPHATEST_ON 1` する (キーワードではないのでバリアントは増えない)。
+// Cutout はパス側で _ALPHATEST_ON を #define する (キーワードではないのでバリアントは増えない)。
 half Alpha(half albedoAlpha, half4 color, half cutoff)
 {
     half alpha = albedoAlpha * color.a;
@@ -126,17 +114,14 @@ half Alpha(half albedoAlpha, half4 color, half cutoff)
     return alpha;
 }
 
-// メインテクスチャのアルファを読み、Cutout ならクリップする (深度系パス共通)。
+// メインテクスチャのアルファで Cutout をクリップする。
 half NataneURPAlphaClip(float2 uv)
 {
     return Alpha(SAMPLE_TEXTURE2D(_MainTex, sampler_MainTex, uv).a, _Color, _Cutoff);
 }
 
-// ===== Shared toon shading helper =====
-// BiRP 版 ToonShading (Include/Lighting/NataneToonLighting.hlsl) のコア移植。
-// fwidth ベースの AA フロアを追加してピクセル化を防止。
-// aaFloor: 段の境界に最低限かけるアンチエイリアス幅。fwidth はライトループの中で呼べない
-// (可変回数ループ内の勾配は未定義になる) ので、ループの外で求めた値を渡す。
+// BiRP 版 ToonShading のコア移植。aaFloor は段の境界にかける最小の AA 幅。
+// fwidth はライトループ内で呼べない (勾配が未定義になる) ので、ループの外で求めて渡す。
 float NataneToonStepURP(float ndotl, float steps, float sharpness, float aaFloor)
 {
     ndotl = saturate(ndotl + clamp(_ShadowOffset, -1.0, 1.0));
@@ -151,7 +136,6 @@ float NataneToonStepURP(float ndotl, float steps, float sharpness, float aaFloor
     float currentStep = floor(scaled);
     float stepPosition = frac(scaled);
 
-    // BiRP と同じ smoothstep 幅 + fwidth ベースの最小 AA 幅
     float smoothRange = saturate(sharpness + _StepBorderSmooth) * 0.5;
     smoothRange = max(smoothRange, aaFloor);
     float smoothedStep = smoothstep(0.5 - smoothRange, 0.5 + smoothRange, stepPosition);

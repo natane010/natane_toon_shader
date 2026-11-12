@@ -3,10 +3,7 @@ using UnityEngine;
 
 namespace NataneToon.Editor
 {
-    /// <summary>
-    /// Version-bridging wrappers for editor APIs that were deprecated in
-    /// Unity 2022.2+ (CS0618 on Unity 6) while keeping 2019.4 compatibility.
-    /// </summary>
+    /// <summary>Unity のバージョン差を吸収するエディター API のラッパー (2019.4 〜 Unity 6.5)。</summary>
     public static class NataneEditorCompat
     {
         public static T[] FindObjectsOfTypeCompat<T>() where T : Object
@@ -39,21 +36,15 @@ namespace NataneToon.Editor
         }
 
         /// <summary>
-        /// Session-stable identity key for a UnityEngine.Object (dictionary / HashSet keys,
-        /// SessionState key suffixes). Replaces Object.GetInstanceID(), which no longer
-        /// compiles on Unity 6.5 (it was replaced by EntityId). Object.GetHashCode() is the instance id on
-        /// every older editor and the EntityId hash on newer ones, so it needs no #if.
-        /// Not valid as an argument to APIs that take a real instance id.
+        /// Object.GetInstanceID() の代わり (Unity 6.5 ではコンパイルできない)。辞書や SessionState のキー用。
+        /// 本物の instance id を取る API には渡せない。
         /// </summary>
         public static int GetObjectId(Object obj)
         {
             return obj != null ? obj.GetHashCode() : 0;
         }
 
-        /// <summary>
-        /// True when an object-reference property stores a reference (even one whose target
-        /// is missing). objectReferenceInstanceIDValue no longer compiles on Unity 6.5.
-        /// </summary>
+        /// <summary>参照が保存されていれば true (参照先が Missing でも)。Unity 6.5 では objectReferenceInstanceIDValue が使えない。</summary>
         public static bool HasStoredObjectReference(SerializedProperty property)
         {
             if (property == null || property.propertyType != SerializedPropertyType.ObjectReference) return false;

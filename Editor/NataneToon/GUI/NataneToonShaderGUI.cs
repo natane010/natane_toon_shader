@@ -559,6 +559,7 @@ public class NataneToonShaderGUI : ShaderGUI
             { "ShadowBokeh", "ShowShadowBokeh" },
             { "Lenticular", "ShowLenticular" },
             { "XRay", "ShowXRay" },
+            { "Sticker", "ShowSticker" },
     };
 
     // Default values: keys listed here default to true; all others default to false
@@ -8690,6 +8691,50 @@ public class NataneToonShaderGUI : ShaderGUI
         EndBoxedSection(GetFoldout("XRay"));
     }
 
+    private void DrawStickerSection()
+    {
+        if (targetMaterial == null || !targetMaterial.HasProperty("_StickerWidth")) return; // Sticker variant only
+        SetFoldout("Sticker", DrawBoxedSection(L("ステッカー", "Sticker"), GetFoldout("Sticker"), SectionCategory.Advanced, null, sectionKey: "Sticker"));
+        if (GetFoldout("Sticker"))
+        {
+            DrawProperty("_Sticker", L("縁取りを描く", "Draw Border"));
+            if (GetPropFloat("_Sticker") > 0.5f)
+            {
+                DrawColorProperty("_StickerColor", L("フチの色", "Border Color"));
+                DrawProperty("_StickerWidth", L("フチの幅 (cm)", "Border Width (cm)"));
+                DrawProperty("_StickerScreenSpace", L("画面上の太さを一定に", "Constant Screen Width"),
+                    "0 = 実寸 (離れると細く見える) / 1 = 離れても同じ太さ", "0 = real size (thinner with distance) / 1 = same thickness at any distance");
+                DrawProperty("_StickerLightInfluence", L("明るさをライトに合わせる", "Follow Scene Lighting"),
+                    "暗いワールドでフチだけ光って見えるのを防ぎます", "Keeps the border from glowing in dark worlds");
+
+                EditorGUILayout.Space(SECTION_SPACING);
+                EditorGUILayout.LabelField(L("台紙 (外枠の線・落ち影)", "Backing (outer line / drop shadow)"), EditorStyles.boldLabel);
+                DrawProperty("_StickerBack", L("台紙を描く", "Draw Backing"));
+                if (GetPropFloat("_StickerBack") > 0.5f)
+                {
+                    DrawColorProperty("_StickerBackColor", L("台紙の色", "Backing Color"));
+                    DrawProperty("_StickerBackWidth", L("フチからのはみ出し (cm)", "Extra Width (cm)"),
+                        "フチの外側に見える線の太さ", "Thickness of the line visible outside the border");
+                    DrawProperty("_StickerBackOffset", L("ずらし XY (cm)", "Offset XY (cm)"),
+                        "右下などへずらすと落ち影になります", "Shift it (e.g. down-right) for a drop shadow");
+                }
+
+                EditorGUILayout.Space(SECTION_SPACING);
+                EditorGUILayout.LabelField(L("詳細", "Advanced"), EditorStyles.boldLabel);
+                DrawProperty("_StickerDepthOffset", L("奥へ逃がす距離 (m)", "Depth Offset (m)"),
+                    "フチを置く面を、オブジェクト原点からどれだけ奥にするか。体の内側にフチが出るなら上げ、すぐ後ろの壁に埋まるなら下げる", "How far behind the object origin the border sits. Raise if it shows inside the body; lower if it sinks into a wall right behind");
+                DrawProperty("_StickerStencilRef", L("ステンシルのビット", "Stencil Bit"),
+                    "他のステンシル演出とぶつかるときだけ変更", "Change only if it clashes with another stencil effect");
+            }
+
+            DrawHelpToggle("Sticker",
+                L("🏷 ステッカー:\nシルエットの外側だけに均一な幅のフチを描きます。ポストプロセスは不要で、MSAA がそのまま効きます。\n\n• 角ばったメッシュはフチが割れます。アウトラインの「スムース法線」か「コーナー補正」を使ってください。\n• アルファで抜いた部分はポリゴンの形でフチが付きます。\n• 1 つのアバターで使うマテリアルは、すべてこのバリアントにすると内側にフチが出ません。\n• 汎用のステンシル設定はこのバリアントでは使われません。",
+                  "🏷 Sticker:\nDraws an even border only outside the silhouette. No post-processing needed, and MSAA applies as-is.\n\n• Hard-edged meshes split the border: use the outline's Smooth Normal or Corner Smooth.\n• Alpha-cut areas get a border along the polygon shape.\n• Use this variant on every material of an avatar to keep the border out of the interior.\n• The generic stencil settings are not used by this variant."),
+                MessageType.Info);
+        }
+        EndBoxedSection(GetFoldout("Sticker"));
+    }
+
     private void DrawCurrentStateSection()
     {
         SetFoldout("CurrentState", DrawBoxedSection(L("マテリアルとシェーダー", "Material & Shader"), GetFoldout("CurrentState"), SectionCategory.Basic, sectionKey: "CurrentState"));
@@ -9745,6 +9790,7 @@ public class NataneToonShaderGUI : ShaderGUI
         if (section == null || targetMaterial == null) return false;
         if (section.Key == "Ghost") return targetMaterial.HasProperty("_GhostFresnelAlpha");
         if (section.Key == "XRay") return targetMaterial.HasProperty("_XRayMode");
+        if (section.Key == "Sticker") return targetMaterial.HasProperty("_StickerWidth");
         if (section.Key == "BackgroundLightmap" || section.Key == "PBR")
             return GetCurrentRenderingMode() == RenderingMode.Background;
         if (section.Key == "Fur")
@@ -10187,6 +10233,7 @@ public class NataneToonShaderGUI : ShaderGUI
             case "ShadowBokeh": return DrawShadowBokehSection;
             case "Lenticular": return DrawLenticularSection;
             case "XRay": return DrawXRaySection;
+            case "Sticker": return DrawStickerSection;
             default: return null;
         }
     }

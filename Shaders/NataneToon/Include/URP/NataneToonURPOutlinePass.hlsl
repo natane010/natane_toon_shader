@@ -1,19 +1,15 @@
 #ifndef NATANE_TOON_URP_OUTLINE_PASS_INCLUDED
 #define NATANE_TOON_URP_OUTLINE_PASS_INCLUDED
 
-// ===== NataneToon URP Outline Pass =====
-// BiRP 版アウトラインパス (NataneToonShader.shader OUTLINE Pass) のコア移植。
-// LightMode "SRPDefaultUnlit" で Renderer Feature なしに描画される。
-// 対応機能: 反転ハル / バックフェイス方式、距離補正、スムーズノーマル
-// (頂点カラーOS / 頂点カラーTS / ベイク法線テクスチャ)、コーナースムーズ、
-// エッジ幅補正、マスク、幅マップ、テクスチャ連動カラー、マルチカラー。
+// URP 用アウトラインパス (BiRP 版のコア移植)。
+// LightMode "SRPDefaultUnlit" なので Renderer Feature なしで描かれる。
 
 #include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/Core.hlsl"
 #if defined(LOD_FADE_CROSSFADE)
     #include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/LODCrossFade.hlsl"
 #endif
 
-// Inline HSV functions (BiRP アウトラインパスと同一のアルゴリズム)
+// BiRP のアウトラインパスと同じ HSV 変換。
 #if defined(_OUTLINE_TEXTURE_COLOR)
 float3 NataneOutlineRGBtoHSV(float3 rgb)
 {
@@ -62,12 +58,11 @@ OutlineVaryings NataneToonOutlineVertex(OutlineAttributes input)
     output.uv = input.texcoord;
 
 #if defined(_OUTLINE)
-    // Distance compensation for consistent outline width
+    // 距離が離れても線幅を保つための補正。
     float3 positionWS = TransformObjectToWorld(input.positionOS.xyz);
     float distanceToCamera = distance(positionWS, _WorldSpaceCameraPos);
     float distanceFactor = min(distanceToCamera * 0.1, _OutlineDistCompMax);
 
-    // Get outline width from map / mask if enabled
     float widthMultiplier = 1.0;
     #if defined(_OUTLINE_WIDTH_MAP)
         widthMultiplier = SAMPLE_TEXTURE2D_LOD(_OutlineWidthMap, sampler_linear_repeat, input.texcoord, 0).r;
@@ -76,17 +71,16 @@ OutlineVaryings NataneToonOutlineVertex(OutlineAttributes input)
         widthMultiplier *= SAMPLE_TEXTURE2D_LOD(_OutlineMask, sampler_linear_repeat, TRANSFORM_TEX(input.texcoord, _OutlineMask), 0).r;
     #endif
 
-    // Resolve outline normal (smooth normal or original)
     float3 outlineNormal = input.normalOS;
     #if defined(_SMOOTH_NORMAL)
         if (_SmoothNormalMode < 0.5)
         {
-            // Mode 0: Vertex Color Object Space
+            // 0: 頂点カラー (オブジェクト空間)
             outlineNormal = input.color.rgb * 2.0 - 1.0;
         }
         else if (_SmoothNormalMode < 1.5)
         {
-            // Mode 1: Vertex Color Tangent Space (lilToon compatible)
+            // 1: 頂点カラー (タンジェント空間、lilToon 互換)
             float3 smoothTS = input.color.rgb * 2.0 - 1.0;
             float3 binormal = cross(input.normalOS, input.tangentOS.xyz) * input.tangentOS.w;
             float3x3 tbnOS = float3x3(input.tangentOS.xyz, binormal, input.normalOS);
@@ -94,7 +88,7 @@ OutlineVaryings NataneToonOutlineVertex(OutlineAttributes input)
         }
         else
         {
-            // Mode 2: Baked Normal Texture
+            // 2: ベイク法線テクスチャ
             float3 bakedNormal = SAMPLE_TEXTURE2D_LOD(_SmoothNormalTex, sampler_linear_repeat, input.texcoord, 0).rgb * 2.0 - 1.0;
             float3 binormal = cross(input.normalOS, input.tangentOS.xyz) * input.tangentOS.w;
             float3x3 tbnOS = float3x3(input.tangentOS.xyz, binormal, input.normalOS);
@@ -102,7 +96,7 @@ OutlineVaryings NataneToonOutlineVertex(OutlineAttributes input)
         }
         outlineNormal = normalize(outlineNormal);
     #else
-        // Fallback: blend vertex normal toward vertex position direction
+        // スムーズノーマルなし: 法線を頂点位置の方向へ寄せて角を丸める。
         if (_OutlineCornerSmooth > 0.001)
         {
             float3 posNormal = normalize(input.positionOS.xyz);
@@ -112,16 +106,14 @@ OutlineVaryings NataneToonOutlineVertex(OutlineAttributes input)
 
     if (_OutlineMode < 0.5)
     {
-        // Mode 0: Inverted Hull - Extrusion along normals in view space
+        // 0: 反転ハル (ビュー空間で法線方向に押し出す)
         float3 normalVS = normalize(TransformWorldToViewDir(TransformObjectToWorldNormal(outlineNormal)));
         float2 offset = mul((float2x2)UNITY_MATRIX_P, normalVS.xy);
 
         output.positionCS = TransformObjectToHClip(input.positionOS.xyz);
 
-        // Apply distance compensation for consistent outline width
         float outlineWidth = _OutlineWidth * 0.1 * (1.0 + distanceFactor) * widthMultiplier;
 
-        // Edge width compensation
         if (_OutlineEdgeCompensation > 0.001)
         {
             float normalConsistency = saturate(dot(normalize(input.normalOS), outlineNormal));
@@ -133,10 +125,9 @@ OutlineVaryings NataneToonOutlineVertex(OutlineAttributes input)
     }
     else
     {
-        // Mode 1: Back Face - Scale up vertices along normals in object space
+        // 1: バックフェイス (オブジェクト空間で法線方向に膨らませる)
         float outlineWidth = _OutlineWidth * 0.1 * (1.0 + distanceFactor * 0.5) * widthMultiplier;
 
-        // Edge width compensation
         if (_OutlineEdgeCompensation > 0.001)
         {
             float normalConsistency = saturate(dot(normalize(input.normalOS), outlineNormal));
@@ -164,7 +155,7 @@ half4 NataneToonOutlineFragment(OutlineVaryings input) : SV_Target
 #if defined(_OUTLINE)
     half4 col = _OutlineColor;
 
-    // Cutout: 本体が抜けている部分には輪郭線も出さない (BiRP の輪郭線パスと同じ)。
+    // Cutout: 本体が抜けた部分には輪郭線も出さない。
     #if defined(_ALPHATEST_ON)
         NataneURPAlphaClip(TRANSFORM_TEX(input.uv, _MainTex));
     #endif
@@ -172,7 +163,6 @@ half4 NataneToonOutlineFragment(OutlineVaryings input) : SV_Target
         LODFadeCrossFade(input.positionCS);
     #endif
 
-    // Apply texture-linked outline color
     #if defined(_OUTLINE_TEXTURE_COLOR)
     {
         half4 texColor = SAMPLE_TEXTURE2D(_MainTex, sampler_MainTex, TRANSFORM_TEX(input.uv, _MainTex));
@@ -185,15 +175,13 @@ half4 NataneToonOutlineFragment(OutlineVaryings input) : SV_Target
     }
     #endif
 
-    // Apply multi-color outline
     #if defined(_OUTLINE_MULTI_COLOR)
     {
-        float mixFactor = frac(input.uv.y * 5.0 + _Time.y * 0.5); // Animated gradient
+        float mixFactor = frac(input.uv.y * 5.0 + _Time.y * 0.5); // 時間で流れるグラデーション
         col.rgb = lerp(_OutlineColor.rgb, _OutlineColor2.rgb, mixFactor * _OutlineColorMix);
     }
     #endif
 
-    // Apply outline mask
     #if defined(_OUTLINE_MASK)
     {
         half outlineMask = SAMPLE_TEXTURE2D(_OutlineMask, sampler_linear_repeat, TRANSFORM_TEX(input.uv, _OutlineMask)).r;
