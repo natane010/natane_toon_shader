@@ -282,7 +282,7 @@ namespace NataneToon.Editor
             DrawTrialBar(narrow);
             DrawFilterRow(narrow);
 
-            List<NataneInspectorSectionDescriptor> features = CollectFeatures();
+            List<NataneInspectorSectionDescriptor> features = GetFeatures();
             _scroll = EditorGUILayout.BeginScrollView(_scroll);
             if (features.Count == 0)
             {
@@ -346,6 +346,33 @@ namespace NataneToon.Editor
                 : EditorGUILayout.Popup(_difficultyFilter, difficultyNames, GUILayout.Width(110f));
             if (narrow) EditorGUILayout.EndVertical(); else EditorGUILayout.EndHorizontal();
             EditorGUILayout.Space(2f);
+        }
+
+        // 一覧の絞り込みと並べ替えは OnGUI のたび（Layout / Repaint / マウス移動）にやり直す必要がない。
+        // 対象・シェーダー・検索語・絞り込み・表示言語が変わったときだけ作り直す。
+        private List<NataneInspectorSectionDescriptor> _featureCache;
+        private Material _featureCacheTarget;
+        private Shader _featureCacheShader;
+        private string _featureCacheSearch;
+        private int _featureCacheDifficulty = -1;
+        private bool _featureCacheJapanese;
+
+        private List<NataneInspectorSectionDescriptor> GetFeatures()
+        {
+            Shader shader = _target != null ? _target.shader : null;
+            bool japanese = NataneToonLocalization.IsJapanese;
+            if (_featureCache == null || _featureCacheTarget != _target || _featureCacheShader != shader ||
+                _featureCacheDifficulty != _difficultyFilter || _featureCacheJapanese != japanese ||
+                !string.Equals(_featureCacheSearch, _search, System.StringComparison.Ordinal))
+            {
+                _featureCache = CollectFeatures();
+                _featureCacheTarget = _target;
+                _featureCacheShader = shader;
+                _featureCacheSearch = _search;
+                _featureCacheDifficulty = _difficultyFilter;
+                _featureCacheJapanese = japanese;
+            }
+            return _featureCache;
         }
 
         private List<NataneInspectorSectionDescriptor> CollectFeatures()

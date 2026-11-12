@@ -22,6 +22,11 @@ namespace NataneToon.Editor
         private static GUIStyle _subtitleStyle;
         private static GUIStyle _chipStyle;
         private static GUIStyle _groupStyle;
+        private static GUIStyle _groupIndexStyle;
+        private static GUIStyle _groupSummaryStyle;
+        private static GUIStyle _groupLabelStyle;
+        // 計測用の使い回し GUIContent（OnGUI ごとの確保を避ける）
+        private static readonly GUIContent _measureContent = new GUIContent();
         private static GUIStyle _inlineMessageStyle;
         private static GUIStyle _captionStyle;
         private static GUIStyle _hintStyle;
@@ -68,6 +73,12 @@ namespace NataneToon.Editor
             };
             // Pages のセクション見出しはメインテキスト色（--text）で強調する
             _groupStyle.normal.textColor = NataneToonEditorTheme.Text;
+            // 見出しは 1 回の OnGUI で何度も描くので、派生スタイルは毎回 new せずここで作っておく。
+            _groupIndexStyle = new GUIStyle(_groupStyle) { fontStyle = FontStyle.Bold };
+            Color groupBrand = NataneToonColorPalette.BrandPrimary;
+            _groupIndexStyle.normal.textColor = new Color(groupBrand.r, groupBrand.g, groupBrand.b, dark ? 0.85f : 1f);
+            _groupSummaryStyle = new GUIStyle(_groupStyle) { alignment = TextAnchor.MiddleRight, clipping = TextClipping.Clip };
+            _groupLabelStyle = new GUIStyle(_groupStyle) { clipping = TextClipping.Clip };
 
             _inlineMessageStyle = new GUIStyle(EditorStyles.wordWrappedMiniLabel)
             {
@@ -563,11 +574,9 @@ namespace NataneToon.Editor
             if (index >= 0)
             {
                 string indexText = (index + 1).ToString("00") + " /";
-                GUIStyle indexStyle = new GUIStyle(_groupStyle) { fontStyle = FontStyle.Bold };
-                Color brand = NataneToonColorPalette.BrandPrimary;
-                indexStyle.normal.textColor = new Color(brand.r, brand.g, brand.b,
-                    NataneToonEditorTheme.IsDark ? 0.85f : 1f);
-                Vector2 indexSize = indexStyle.CalcSize(new GUIContent(indexText));
+                GUIStyle indexStyle = _groupIndexStyle;
+                _measureContent.text = indexText;
+                Vector2 indexSize = indexStyle.CalcSize(_measureContent);
                 GUI.Label(new Rect(rect.x, rect.y, indexSize.x, rect.height), indexText, indexStyle);
                 labelX = rect.x + indexSize.x + 4f;
             }
@@ -577,16 +586,18 @@ namespace NataneToon.Editor
             float summaryWidth = 0f;
             if (!string.IsNullOrEmpty(summary))
             {
-                GUIStyle right = new GUIStyle(_groupStyle) { alignment = TextAnchor.MiddleRight, clipping = TextClipping.Clip };
-                float labelNeeded = _groupStyle.CalcSize(new GUIContent(label)).x + 6f;
-                summaryWidth = Mathf.Min(right.CalcSize(new GUIContent(summary)).x + 4f,
+                GUIStyle right = _groupSummaryStyle;
+                _measureContent.text = label;
+                float labelNeeded = _groupStyle.CalcSize(_measureContent).x + 6f;
+                _measureContent.text = summary;
+                summaryWidth = Mathf.Min(right.CalcSize(_measureContent).x + 4f,
                     Mathf.Max(0f, rect.xMax - labelX - labelNeeded));
                 if (summaryWidth >= 24f)
                     GUI.Label(new Rect(rect.xMax - summaryWidth, rect.y, summaryWidth, rect.height), new GUIContent(summary, summary), right);
                 else
                     summaryWidth = 0f;
             }
-            GUIStyle labelStyle = new GUIStyle(_groupStyle) { clipping = TextClipping.Clip };
+            GUIStyle labelStyle = _groupLabelStyle;
             GUI.Label(new Rect(labelX, rect.y, Mathf.Max(0f, rect.xMax - summaryWidth - labelX), rect.height), new GUIContent(label, label), labelStyle);
             EditorGUILayout.Space(2f);
         }
@@ -627,7 +638,8 @@ namespace NataneToon.Editor
                 float estimatedTabWidth = (EditorGUIUtility.currentViewWidth - 28f) / count;
                 for (int i = 0; i < count; i++)
                 {
-                    if (_tabStyleActive.CalcSize(new GUIContent(labels[i])).x + 8f > estimatedTabWidth)
+                    _measureContent.text = labels[i];
+                    if (_tabStyleActive.CalcSize(_measureContent).x + 8f > estimatedTabWidth)
                     {
                         visibleLabels = compactLabels;
                         break;

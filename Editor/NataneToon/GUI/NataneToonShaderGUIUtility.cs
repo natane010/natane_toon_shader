@@ -775,6 +775,8 @@ namespace NataneToon.Editor
             return string.Join(" / ", parts);
         }
 
+        private static GUIStyle _toolHeaderTitleStyle;
+
         /// <summary>
         /// Draw unified tool header with help button
         /// </summary>
@@ -785,7 +787,9 @@ namespace NataneToon.Editor
 
             // GUILayout.Label + MinWidth(0) で、狭いウィンドウではタイトル側が縮む。
             // （LabelField は最小幅を要求するため、言語切替とヘルプが右へ押し出されていた）
-            GUIStyle titleStyle = new GUIStyle(EditorStyles.boldLabel) { fontSize = 14, clipping = TextClipping.Clip, alignment = TextAnchor.MiddleLeft };
+            if (_toolHeaderTitleStyle == null)
+                _toolHeaderTitleStyle = new GUIStyle(EditorStyles.boldLabel) { fontSize = 14, clipping = TextClipping.Clip, alignment = TextAnchor.MiddleLeft };
+            GUIStyle titleStyle = _toolHeaderTitleStyle;
             string toolTitle = L(titleJP, titleEN);
             GUILayout.Label(new GUIContent(toolTitle, toolTitle), titleStyle, GUILayout.MinWidth(0f), GUILayout.Height(25f));
 

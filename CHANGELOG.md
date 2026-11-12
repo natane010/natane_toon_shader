@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.8.0] - 2026-11-12
+
 ### Added — lilToon からの移行と「効果を試す」
 - **lilToon からワンクリック変換**: Hierarchy のアバター右クリック（`Natane > lilToon から変換 (アバター全体)`）、
   Project のマテリアル / フォルダ右クリック（`Natane > lilToon から変換`）、マテリアルの ⋮ メニュー
@@ -34,6 +36,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Auto Setup のプロファイルが存在しないキーワード名（`_MAT_CAP` / `_USE_NORMAL_MAP` / `_DITHERING`）を指定していて、
   MatCap・ノーマルマップ・ディザリングが有効にならなかった。
 - 「再最適化」ボタンが、セットアップ以外のタブでは何も起きないように見えた。
+
+### Performance — エディター
+- インスペクターのセクション見出しが、描画のたびに GUIStyle を 2〜3 個ずつ作り直していた。テーマ切り替え時に 1 回だけ作るようにした。
+- 「効果を試す」ウィンドウが、マウス移動や再描画のたびに効果一覧の絞り込みと並べ替えをやり直していた。対象・検索語・絞り込みが変わったときだけ作り直す。
+
+### Fixed — ビルド最適化の検証
+- Background バリアントの Properties の並びが正準カタログとずれていて、「全検証をまとめて実行」の Properties 生成ドライランが不合格になっていた（並び順のみ。プロパティの内容は同じ）。
 
 ### Changed — インスペクターの文言
 - 「影の鋭さ」→「影の境界のぼかし」（値が大きいほどぼける。名前と動きが逆だった）、「影の最大暗さ」→「影の明るさの下限」。
