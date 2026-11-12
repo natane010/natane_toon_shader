@@ -177,11 +177,11 @@ half3 NataneEONDiffuseRatio(half NdotL, half NdotV, half LdotV, half r, half3 rh
 
 // Toon Shading with adjustable steps and sharpness
 // Creates cel-shaded stepped lighting effect
-float ToonShading(float ndotl, float steps, float sharpness)
+// ToonShadingAA takes the already offset + saturated NdotL and its screen-space width in
+// step units (fwidth(ndotl * steps)). Derivatives cannot be taken inside a branch, so the
+// fragment shader computes the width once and then runs only the shading mode in use.
+float ToonShadingAA(float ndotl, float aaSteps, float steps, float sharpness)
 {
-    // Apply shadow offset to adjust shadow threshold (clamped to prevent extreme values)
-    ndotl = saturate(ndotl + clamp(_ShadowOffset, -1.0, 1.0));
-
     // Apply shadow blend (softness) if enabled
     #ifdef _SOFT_LIGHTING_MODE
         sharpness = lerp(sharpness, sharpness * 2.0, _SoftLightingIntensity);
@@ -209,7 +209,7 @@ float ToonShading(float ndotl, float steps, float sharpness)
     float smoothRange = saturate(sharpness + NataneShadowNaturalStepBorder()) * 0.5;
     // Floor the band by the screen-space derivative so the cel boundary stays
     // ~1px anti-aliased at any distance/angle (prevents shimmering, esp. in VR).
-    smoothRange = min(max(smoothRange, fwidth(ndotl * steps) * 0.5), 0.5);
+    smoothRange = min(max(smoothRange, aaSteps * 0.5), 0.5);
     float smoothedStep = smoothstep(0.5 - smoothRange, 0.5 + smoothRange, stepPosition);
 
     // Combine for final toon value with better precision
@@ -218,13 +218,18 @@ float ToonShading(float ndotl, float steps, float sharpness)
     return saturate(toon);
 }
 
-// Gradient Shading
-// Creates smooth gradient lighting effect for softer appearance
-float GradientShading(float ndotl, float gradientWidth)
+float ToonShading(float ndotl, float steps, float sharpness)
 {
     // Apply shadow offset to adjust shadow threshold (clamped to prevent extreme values)
     ndotl = saturate(ndotl + clamp(_ShadowOffset, -1.0, 1.0));
+    return ToonShadingAA(ndotl, fwidth(ndotl * steps), steps, sharpness);
+}
 
+// Gradient Shading
+// Creates smooth gradient lighting effect for softer appearance
+// GradientShadingAA: ndotl is already offset + saturated, aa = fwidth(ndotl). See ToonShadingAA.
+float GradientShadingAA(float ndotl, float aa, float gradientWidth)
+{
     // Apply soft lighting mode to make gradient even softer
     #ifdef _SOFT_LIGHTING_MODE
         gradientWidth = lerp(gradientWidth, gradientWidth * 1.5, _SoftLightingIntensity);
@@ -243,10 +248,17 @@ float GradientShading(float ndotl, float gradientWidth)
     // gradientWidth controls the softness of the transition
     float halfWidth = gradientWidth * 0.5;
     // Keep the boundary at least ~1px wide in screen space to avoid aliasing.
-    halfWidth = max(halfWidth, fwidth(ndotl) * 0.5);
+    halfWidth = max(halfWidth, aa * 0.5);
     float gradient = smoothstep(shadowBoundary - halfWidth, shadowBoundary + halfWidth, ndotl);
 
     return saturate(gradient);
+}
+
+float GradientShading(float ndotl, float gradientWidth)
+{
+    // Apply shadow offset to adjust shadow threshold (clamped to prevent extreme values)
+    ndotl = saturate(ndotl + clamp(_ShadowOffset, -1.0, 1.0));
+    return GradientShadingAA(ndotl, fwidth(ndotl), gradientWidth);
 }
 
 // Toon-style vertex light calculation at pixel precision

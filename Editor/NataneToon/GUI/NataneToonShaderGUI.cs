@@ -1028,9 +1028,14 @@ public class NataneToonShaderGUI : ShaderGUI
         {
             if (_boxedHeaderFoldout == null)
             {
-                _boxedHeaderFoldout = new GUIStyle(EditorStyles.foldoutHeader);
+                // EditorStyles.foldoutHeader は不透明な背景を持ち、見出しの色帯と左のアクセントバーを
+                // 途中まで塗りつぶしてしまう。背景を持たない foldout を土台にする。
+                _boxedHeaderFoldout = new GUIStyle(EditorStyles.foldout);
                 _boxedHeaderFoldout.fontStyle = FontStyle.Bold;
                 _boxedHeaderFoldout.fontSize = 12;
+                _boxedHeaderFoldout.alignment = TextAnchor.MiddleLeft;
+                _boxedHeaderFoldout.fixedHeight = 0f;
+                _boxedHeaderFoldout.stretchHeight = true;
             }
             return _boxedHeaderFoldout;
         }
@@ -1146,7 +1151,8 @@ public class NataneToonShaderGUI : ShaderGUI
             Event.current.Use();
         }
 
-        Rect foldoutRect = new Rect(headerRect.x + 7f, headerRect.y + 3f, headerRect.width - (hasToggle ? 58f : 22f), headerRect.height - 6f);
+        // 矢印が左のアクセントバーに重ならないよう、バーの右に余白を取る。
+        Rect foldoutRect = new Rect(headerRect.x + 20f, headerRect.y + 3f, headerRect.width - (hasToggle ? 71f : 35f), headerRect.height - 6f);
         EditorGUI.Foldout(foldoutRect, foldout, title, true, BoxedHeaderFoldout);
 
         // 難易度ドット + ヘッダーのツールチップ（初心者向け説明）
@@ -7080,6 +7086,81 @@ public class NataneToonShaderGUI : ShaderGUI
         EndBoxedSection(GetFoldout("Ghost"));
     }
 
+    private void DrawExtrasOffSection()
+    {
+        const string key = "ExtrasOff";
+        SetFoldout(key, DrawBoxedSection(L("軽量化（使っていない追加表現を省く）", "Optimize (Skip Unused Extras)"), GetFoldout(key), SectionCategory.Advanced, sectionKey: key));
+        if (GetFoldout(key))
+        {
+            MaterialProperty property = FindProperty(NataneExtrasOptimizer.Property, properties, false);
+            if (property == null)
+            {
+                EditorGUILayout.HelpBox(L("このシェーダーでは使えません。", "Not available on this shader."), MessageType.Info);
+            }
+            else
+            {
+                bool stripped = property.floatValue >= 0.5f;
+                EditorGUI.BeginChangeCheck();
+                EditorGUI.showMixedValue = property.hasMixedValue;
+                bool newStripped = EditorGUILayout.ToggleLeft(
+                    new GUIContent(
+                        L("使っていない追加表現を省いて軽くする", "Skip unused extras to render faster"),
+                        L("追加表現 = 濡れ・ストッキング・クリアコート・顔の陰影補正など、強さ 0 のときは何もしない仕上げ機能です。使っていなければ省いても見た目は変わりません。",
+                          "Extras are finishing features such as wetness, stockings, clear coat and face shading fixes that do nothing at strength 0. If unused, skipping them does not change the look.")),
+                    stripped);
+                EditorGUI.showMixedValue = false;
+                if (EditorGUI.EndChangeCheck())
+                {
+                    foreach (Material mat in GetAllTargetMaterials())
+                        NataneExtrasOptimizer.SetStripped(mat, newStripped);
+                    property.floatValue = newStripped ? 1f : 0f;
+                    stripped = newStripped;
+                }
+
+                List<string> inUse = NataneExtrasOptimizer.GetExtrasInUse(targetMaterial);
+                if (stripped && inUse.Count > 0)
+                {
+                    EditorGUILayout.HelpBox(
+                        L("⚠ 次の追加表現に値が入っていますが、省く設定なので表示されません:\n", "⚠ These extras have values but are skipped, so they do not show:\n") +
+                        "• " + string.Join("\n• ", inUse),
+                        MessageType.Warning);
+                    if (GUILayout.Button(L("オフに戻して表示する", "Turn off and show them")))
+                    {
+                        foreach (Material mat in GetAllTargetMaterials())
+                            NataneExtrasOptimizer.SetStripped(mat, false);
+                        property.floatValue = 0f;
+                    }
+                }
+                else if (stripped)
+                {
+                    EditorGUILayout.HelpBox(
+                        L("✓ 軽量化中です。見た目はそのままで、このマテリアルの描画が約 4 割軽くなっています。\n" +
+                          "濡れ・クリアコートなどの追加表現を使いたくなったら（アニメーションで動かす場合も）、オフに戻してください。",
+                          "✓ Optimized. The look is unchanged and this material renders about 40% faster.\n" +
+                          "Turn this off when you want to use extras such as wetness or clear coat, including from an animation."),
+                        MessageType.Info);
+                }
+                else if (inUse.Count > 0)
+                {
+                    EditorGUILayout.HelpBox(
+                        L("このマテリアルは次の追加表現を使っているので、オフのままがおすすめです（オンにすると表示されなくなります）:\n", "This material uses these extras, so leaving this off is recommended (turning it on hides them):\n") +
+                        "• " + string.Join("\n• ", inUse),
+                        MessageType.None);
+                }
+                else
+                {
+                    EditorGUILayout.HelpBox(
+                        L("おすすめ: このマテリアルは追加表現を使っていません。オンにすると、見た目はそのままで描画が約 4 割軽くなります。\n" +
+                          "追加表現をアニメーションで動かす予定があるときだけ、オフのままにしてください。",
+                          "Recommended: this material uses no extras. Turning this on renders about 40% faster with the same look.\n" +
+                          "Leave it off only if you plan to animate any of the extras."),
+                        MessageType.Info);
+                }
+            }
+        }
+        EndBoxedSection(GetFoldout(key));
+    }
+
     private void DrawQuestLiteSection()
     {
         SetFoldout("QuestLite", DrawBoxedSection(L("Quest軽量パス", "Quest Lite"), GetFoldout("QuestLite"), SectionCategory.Advanced, "_QUEST_LITE", sectionKey: "QuestLite"));
@@ -7365,7 +7446,7 @@ public class NataneToonShaderGUI : ShaderGUI
         if (property != null)
         {
             EditorGUI.BeginChangeCheck();
-            materialEditor.ShaderProperty(property, label);
+            NataneToonShaderGUIUtility.ShaderPropertyNoHeader(materialEditor, property, label);
             // Feature 4: Cross-variant sync — propagate changes to non-primary targets
             if (EditorGUI.EndChangeCheck())
             {
@@ -7384,7 +7465,7 @@ public class NataneToonShaderGUI : ShaderGUI
         if (property == null) return;
 
         EditorGUI.BeginChangeCheck();
-        materialEditor.ShaderProperty(property, label);
+        NataneToonShaderGUIUtility.ShaderPropertyNoHeader(materialEditor, property, label);
         if (EditorGUI.EndChangeCheck())
         {
             PropagatePropertyToOtherTargets(property);
@@ -9346,7 +9427,7 @@ public class NataneToonShaderGUI : ShaderGUI
             ? targetMaterial.shader.name.Replace("Natane/", string.Empty)
             : L("シェーダー未設定", "No Shader");
         string subtitle = $"{shaderName}  ·  {GetRenderingModeLabel(GetCurrentRenderingMode())}";
-        string sampler = $"Tex {budget.EstimatedSamplers}/{budget.Limit}";
+        string sampler = L($"テクスチャ {budget.EstimatedSamplers}/{budget.Limit}", $"Tex {budget.EstimatedSamplers}/{budget.Limit}");
 
         FeaturePerformanceRating rating = GetFeaturePerformanceRating();
         string ratingText = L($"負荷 {rating.Grade}", $"Perf {rating.Grade}");
@@ -9357,7 +9438,7 @@ public class NataneToonShaderGUI : ShaderGUI
         NataneToonInspectorComponents.DrawInspectorHeader(
             "Natane Toon Shader",
             subtitle,
-            GetCurrentLookModeLabel(),
+            L("見た目: ", "Look: ") + GetCurrentLookModeLabel(),
             sampler,
             status,
             () =>
@@ -10102,6 +10183,7 @@ public class NataneToonShaderGUI : ShaderGUI
         FilteredDrawSection(DrawMirrorTextureSection, L("鏡・カメラ写り分けテクスチャ", "Mirror/Camera Alt Texture"), "MirrorTexture");
         FilteredDrawSection(DrawGhostSection, L("ゴースト(幽霊)", "Ghost"), "Ghost");
         FilteredDrawSection(DrawQuestLiteSection, L("Quest軽量パス", "Quest Lite"), "QuestLite");
+        FilteredDrawSection(DrawExtrasOffSection, L("軽量化（使っていない追加表現を省く）", "Optimize (Skip Unused Extras)"), "ExtrasOff");
 
         // ─── レンダリング ───
         NataneToonShaderGUIUtility.DrawCategoryDivider(L("レンダリング", "Rendering"));
@@ -10215,6 +10297,7 @@ public class NataneToonShaderGUI : ShaderGUI
             case "MirrorTexture": return DrawMirrorTextureSection;
             case "Ghost": return DrawGhostSection;
             case "QuestLite": return DrawQuestLiteSection;
+            case "ExtrasOff": return DrawExtrasOffSection;
             case "HalftoneShadow": return DrawHalftoneShadowSection;
             case "ShadowEdgeNoise": return DrawShadowEdgeNoiseSection;
             case "CastShadowColor": return DrawCastShadowColorSection;
@@ -11523,7 +11606,7 @@ public class NataneToonShaderGUI : ShaderGUI
         if (property == null) return;
 
         // Draw main property
-        materialEditor.ShaderProperty(property, label);
+        NataneToonShaderGUIUtility.ShaderPropertyNoHeader(materialEditor, property, label);
 
         // Show recommended range
         if (recommendedRange != null)

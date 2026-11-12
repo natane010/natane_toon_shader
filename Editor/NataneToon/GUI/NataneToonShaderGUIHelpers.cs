@@ -51,7 +51,15 @@ namespace NataneToon.Editor
             EditorGUILayout.Space(5);
             DrawShadingModeControls(properties, drawToggle, drawProperty, drawHelpToggle, findProperty);
 
+            // マスクや SDF で影の形を作り込む項目は、ふだんの色・影の調整には要らない。
+            // 使っていないマテリアルでは折りたたんで、基本の項目に目が行くようにする。
             EditorGUILayout.Space(10);
+            if (!DrawShadowMaskToolsFoldout(material, properties, findProperty))
+            {
+                return;
+            }
+
+            EditorGUILayout.Space(4);
             DrawShadowReceiveMaskControls(drawToggle, drawProperty, drawHelpToggle);
 
             EditorGUILayout.Space(10);
@@ -393,6 +401,52 @@ namespace NataneToon.Editor
                 MessageType.Info);
         }
 
+        private static readonly string[] ShadowMaskToolToggles =
+        {
+            "_UseShadowReceiveMask", "_UseSDFMap", "_FaceSDFRotation",
+            "_ShadowShapeRig", "_UseGradeMap", "_UseShadowColorTex",
+        };
+
+        // マテリアルごとの開閉状態（エディターを閉じるまで）。初回は「どれかを使っていれば開く」。
+        private static readonly System.Collections.Generic.Dictionary<int, bool> ShadowMaskToolsOpen =
+            new System.Collections.Generic.Dictionary<int, bool>();
+
+        private static bool DrawShadowMaskToolsFoldout(
+            Material material,
+            MaterialProperty[] properties,
+            FindPropertyDelegate findProperty)
+        {
+            int inUse = 0;
+            foreach (string toggle in ShadowMaskToolToggles)
+            {
+                MaterialProperty property = findProperty(toggle, properties, false);
+                if (property != null && property.floatValue > 0.5f) inUse++;
+            }
+
+            int id = material != null ? NataneEditorCompat.GetObjectId(material) : 0;
+            if (!ShadowMaskToolsOpen.TryGetValue(id, out bool open))
+            {
+                open = inUse > 0;
+            }
+
+            string label = L("影の形をマスクで作り込む（上級者向け）", "Shape Shadows with Masks (Advanced)");
+            if (inUse > 0)
+            {
+                label += L($"  ・ {inUse} 個を使用中", $"  · {inUse} in use");
+            }
+
+            bool newOpen = EditorGUILayout.Foldout(open, label, true, EditorStyles.foldout);
+            ShadowMaskToolsOpen[id] = newOpen;
+            if (!newOpen)
+            {
+                EditorGUILayout.LabelField(
+                    L("顔の影の形や、影を落とさない範囲を絵で指定します。ふだんは開かなくて大丈夫です。",
+                      "Paint where shadows fall on the face and where they are held back. Usually you can leave this closed."),
+                    EditorStyles.wordWrappedMiniLabel);
+            }
+            return newOpen;
+        }
+
         public static void DrawShadowReceiveMaskControls(
             DrawToggleDelegate drawToggle,
             DrawPropertyDelegate drawProperty,
@@ -574,9 +628,8 @@ namespace NataneToon.Editor
             }
 
             EditorGUILayout.HelpBox(
-                L("Shadow Receive Mask を優先し、なければ Main Texture の alpha / グレースケールから" +
-                  "「マスクの符号付き距離場」を生成します。ライト角の情報は含まれないため、" +
-                  "Face SDF Rotation と組み合わせても影の遷移順序は正しくなりません。",
+                L("影の境界をなめらかにするためのマップを、影受けマスク（なければメインテクスチャ）から作ります。\n" +
+                  "顔の向きに合わせて影が動く「顔 SDF 回転追従」には使えません。その場合は Map Generator で作ってください。",
                   "Generates the signed distance field of a mask, using Shadow Receive Mask first and " +
                   "falling back to Main Texture alpha or grayscale. It carries no light-angle information, " +
                   "so it cannot drive Face SDF Rotation correctly."),

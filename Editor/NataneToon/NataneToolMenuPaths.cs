@@ -36,12 +36,17 @@ namespace NataneToon.Editor
         public const string ShadowRigFitter = "Tools/Natane/エフェクト Effects/影シェイプリグのフィット Shadow Rig Fitter";
         public const string RimLightDirectionVisualizer = "Tools/Natane/エフェクト Effects/リムライト方向ビジュアライザー Rim Light Direction Visualizer";
         public const string ScreenFXSetup = "Tools/Natane/エフェクト Effects/スクリーンエフェクト設定 Screen FX Setup";
+        public const string PostFXSetup = "Tools/Natane/エフェクト Effects/ポストエフェクトをカメラに追加 Add Post FX to Camera";
+        public const string PostFXWorld = "Tools/Natane/エフェクト Effects/ワールド用ポストエフェクトを作成 Create World Post FX";
+        public const string BlenderImport = "Tools/Natane/Blender/Blender から取り込む Import from Blender";
+        public const string BlenderAutoImport = "Tools/Natane/Blender/書き出しファイルを自動で反映 Auto Apply Exports";
 
         public const string PerformanceBudgetTool = "Tools/Natane/最適化 Optimization/パフォーマンスバジェット Performance Budget Tool";
         public const string TextureOptimizer = "Tools/Natane/最適化 Optimization/テクスチャ最適化 Texture Optimizer";
         public const string OutlineOptimizer = "Tools/Natane/最適化 Optimization/アウトライン最適化 Outline Optimizer";
         public const string RefractionQualityBalancer = "Tools/Natane/最適化 Optimization/屈折品質バランサー Refraction Quality Balancer";
         public const string AssetReferenceChecker = "Tools/Natane/最適化 Optimization/アセット参照チェッカー Asset Reference Checker";
+        public const string StripUnusedExtras = "Tools/Natane/最適化 Optimization/未使用の追加表現を省く Strip Unused Extras";
 
         public const string LilToonMigration = "Tools/Natane/移行 Migration/lilToon Migration Tool";
         public const string BatchMaterialConverter = "Tools/Natane/移行 Migration/一括マテリアル変換 Batch Material Converter";
@@ -271,6 +276,7 @@ namespace NataneToon.Editor
                 // Consolidated Windows
                 MaterialAnalysis, EffectStudio, OptimizationHub, ShaderBuildManager,
                 MigrationHub, PresetManager, VRChatIntegration,
+                StripUnusedExtras,
             };
             return paths;
         }

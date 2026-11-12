@@ -219,6 +219,9 @@ namespace NataneToon.Editor
             new[] { "_FACE_ORTHO", "_FACE_ORTHO_MASK" },                  // _FaceOrthoMaskTex（スムース法線 OFF）
             new[] { "_NORMALMAP" },                                       // ノーマルマップ境界の補正
             new[] { "_NORMALMAP", "_SPECULAR", "_PBR_LIKE" },             // GGX の幾何 AA / スペキュラ影マスク
+            new[] { "_EXTRAS_OFF" },                                      // 未使用の追加表現を省いた経路
+            new[] { "_EXTRAS_OFF", "_NORMALMAP", "_SPECULAR", "_PBR_LIKE" }, // 省いた状態で幾何 AA の受け側が残る経路
+            new[] { "_EXTRAS_OFF", "_OUTLINE", "_RIM_LIGHT", "_MATCAP", "_SSS", "_REFLECTION" },
             new[] { "_USE_LIGHT_VOLUME" },                                // Light Volume SH モード
             new[] { "_AUDIOLINK", "_EMISSION" },
             new[] { "_REFLECTION", "_ENV_RIM", "_FAKE_REFLECTION" },
