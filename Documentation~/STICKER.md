@@ -7,6 +7,11 @@ Built-in RP 専用です (URP の SubShader はまだありません)。
 
 ![左: 通常のアウトライン / 中央: 白フチ + 外枠 / 右: 白フチ + 落ち影](images/sticker_overview.png)
 
+![実際のアバターでの例。左: 通常 / 右: Sticker バリアント](images/sticker_avatar.png)
+
+アバター: Rokona (Caramel_Macchiato 作)。lilToon から移行したマテリアルのシェーダーを Sticker バリアントに差し替えただけの状態。
+髪の房のように細く分かれたメッシュでは、房のすき間にもフチが入ります。
+
 ## 使い方
 
 1. マテリアルのシェーダーを `Natane/Toon Shader (Sticker)` にする

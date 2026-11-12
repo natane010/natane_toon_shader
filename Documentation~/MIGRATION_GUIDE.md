@@ -87,6 +87,59 @@ lilToon専用の移行ツールです。プロパティを適切にマッピン�
 - 色が適切か
 - エフェクト（リムライト、アウトラインなど）が有効になっているか
 
+## lilToon の見た目に合わせる仕組み
+
+移行ツールは、lilToon の式を Natane に持ち込むのではなく、**Natane の既存パラメーターを lilToon と同じ結果になる値に設定**します
+(`Editor/NataneToon/Migration/LilToonLookMatcher.cs`)。変換後に手で調整する必要はありません。
+
+![左: lilToon / 中央: 移行後 (無調整) / 右: 差の 4 倍](images/liltoon_match_face.png)
+
+![全身。左: lilToon / 中央: 移行後 / 右: 差の 4 倍](images/liltoon_match_full.png)
+
+確認に使ったアバター: Rokona (Caramel_Macchiato 作)。マテリアル 15 個を一括変換し、調整なしで撮影。
+
+### 対応づけ
+
+| lilToon | Natane | 式 |
+|---|---|---|
+| ハーフランバート | `_WrapAmount = 1` | 固定 |
+| `_ShadowBorder` | `_ShadowOffset` | `0.5 - border` |
+| `_ShadowBlur` | `_ShadowSharpness` | `blur` |
+| `_ShadowBorderRange` / `_ShadowBorderColor` | 上の 2 つ | 境界を陰側へ広げたぼかしとして換算 |
+| `_ShadowColor` × `_ShadowStrength` | `_ShadowColor` | `lerp(1, 影色, strength)` |
+| 2 影・3 影 | `_ShadowColor` | 陰側の面積で重み付けした 1 色にまとめる |
+| `_LightMinLimit` / `_LightMaxLimit` | `_LightColorMin` / `_LightColorMax` | そのまま |
+| `_ShadowEnvStrength` | `_ShadowEnvStrength` | そのまま |
+| MatCap・リム・発光・スペキュラ | 各 Intensity / Blend | 色のアルファと合成モードから強さを逆算 |
+| `_StencilPass` | `_StencilOp` | そのまま (名前だけ違う) |
+| FakeShadow の `_FakeShadowVector` | `_LightShift` / `_LightShiftBias` | そのまま。乗算合成も引き継ぐ |
+
+Natane 独自の補正 (影の自動色、質感、彩度など) は、lilToon に無いため移行時にすべて無効にします。
+
+### どこまで一致するか (実測)
+
+1 ピクセルあたりの平均差 (0〜255)。数字が小さいほど近い。落ち影を受けない条件で計測。
+
+| 条件 | 全身 | 顔 | 背面 |
+|---|---|---|---|
+| 平行光 + 環境光 | 5.1 | 8.2 | 3.7 |
+| 横からの光 | 5.5 | 8.5 | 4.5 |
+| 色つきの光 | 4.9 | 7.7 | 3.4 |
+| 環境光のみ | 7.1 | 10.6 | 6.9 |
+| 弱い光 + 強い環境光 | 12.0 | 16.3 | 15.2 |
+| ほぼ真っ暗 | 11.7 | 16.1 | 12.0 |
+
+### 値だけでは合わせられないところ
+
+陰影の組み立てそのものが違うため、次の差は残ります。
+
+- **環境光の足し方**: lilToon は環境光をそのまま主光源に足す。Natane は主光源があると控えめに、無いと強めに効く。
+  弱い光と強い環境光が混ざるワールドでは Natane が少し暗く、環境光だけのワールドでは少し明るくなる
+- **暗いワールド**: Natane には「真っ暗にしない」下限があり、lilToon より明るく出る
+- **2 影・3 影**: 1 色にまとめるので、影の中の段は出ない
+- **リムシェード、乗算のリムライト、バックライト、MatCap の色味、UV1 基準の MatCap**: 相当する機能が無いため移行しない (変換レポートに表示)
+- **落ち影 (リアルタイムシャドウ) の受け方**: 未計測
+
 ## プロパティマッピング
 
 lilToonとNatane Toon Shaderのプロパティ対応表です。

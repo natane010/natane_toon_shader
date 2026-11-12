@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed — lilToon からの移行を無調整で近づける
+- 移行ツールが、Natane の既存パラメーターを lilToon と同じ結果になる値に設定するようになった (`LilToonLookMatcher`)。
+  陰影の境界・ぼかし・影色・ライトの上下限・MatCap / リム / 発光 / スペキュラの強さを式から求める。
+  実アバターでの平均差は 1 ピクセルあたり 5〜8 / 255 (通常のライティング)。残る差は `Documentation~/MIGRATION_GUIDE.md`。
+- FakeShadow に「ライト方向へずらす量」(`_LightShift` / `_LightShiftBias`) と乗算合成 (`_ShadowBlendMode`) を追加。
+  髪の複製メッシュを使う lilToon の FakeShadow がそのまま移る。
+
+### Fixed
+- lilToon の `_StencilPass` が Natane の `_StencilOp` に移されず、移行後に前髪の落ち影や透け眉が出なかった。
+- Material Variant を変換するとシェーダーが切り替わらなかった (親から切り離して変換する)。
+- lilToon 側でオフの MatCap / 発光が、テクスチャが残っているだけで有効になっていた。
+
 ### Added — ステッカー風の縁取り
 - **Sticker バリアント** (`Natane/Toon Shader (Sticker)`): シルエットの外側だけに均一な幅のフチを描き、シールのように見せる。
   白フチに加えて、外枠の線や落ち影になる「台紙」を重ねられる。ポストプロセス不要で MSAA が効く。

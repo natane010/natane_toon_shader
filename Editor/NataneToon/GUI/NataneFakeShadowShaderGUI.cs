@@ -44,6 +44,16 @@ namespace NataneToon.Editor
             Draw(materialEditor, properties, "_ShadowColor", L("影色", "Shadow Color"));
             Draw(materialEditor, properties, "_ShadowAlpha", L("不透明度", "Shadow Alpha"));
             Draw(materialEditor, properties, "_ShadowTex", L("影の形（アルファ）", "Shadow Shape (alpha)"));
+            DrawBlendMode(materialEditor, properties);
+
+            EditorGUILayout.Space(6);
+            EditorGUILayout.LabelField(L("ライト方向へずらす", "Light Shift"), EditorStyles.boldLabel);
+            Draw(materialEditor, properties, "_LightShift", L("ずらす量 (m)", "Shift Amount (m)"));
+            Draw(materialEditor, properties, "_LightShiftBias", L("向きの補正 (オブジェクト空間)", "Direction Bias (object space)"));
+            EditorGUILayout.HelpBox(
+                L("髪の複製メッシュに使うと、光の反対側へずれて顔に落ち影が出ます。板ポリなら 0 のままで構いません。",
+                  "On a duplicated hair mesh this shifts it away from the light so it lands on the face. Leave at 0 for a quad."),
+                MessageType.None);
 
             EditorGUILayout.Space(6);
             EditorGUILayout.LabelField(L("ライトへの追従", "Light Response"), EditorStyles.boldLabel);
@@ -103,6 +113,35 @@ namespace NataneToon.Editor
             materialEditor.RenderQueueField();
             materialEditor.DoubleSidedGIField();
             materialEditor.EnableInstancingField();
+        }
+
+        /// <summary>合成モードに合わせて Blend ステートも書き換える。</summary>
+        private static void DrawBlendMode(MaterialEditor editor, MaterialProperty[] properties)
+        {
+            MaterialProperty mode = FindProperty("_ShadowBlendMode", properties, false);
+            if (mode == null) return;
+
+            EditorGUI.BeginChangeCheck();
+            editor.ShaderProperty(mode, L("合成", "Blend Mode"));
+            if (!EditorGUI.EndChangeCheck()) return;
+
+            foreach (Object target in editor.targets)
+            {
+                var material = target as Material;
+                if (material == null) continue;
+                ApplyBlendMode(material, material.GetFloat("_ShadowBlendMode") > 0.5f);
+            }
+        }
+
+        /// <summary>乗算は DstColor * Zero、通常はアルファ合成。</summary>
+        public static void ApplyBlendMode(Material material, bool multiply)
+        {
+            if (material == null) return;
+            if (material.HasProperty("_ShadowBlendMode")) material.SetFloat("_ShadowBlendMode", multiply ? 1f : 0f);
+            if (material.HasProperty("_SrcBlend"))
+                material.SetFloat("_SrcBlend", (float)(multiply ? UnityEngine.Rendering.BlendMode.DstColor : UnityEngine.Rendering.BlendMode.SrcAlpha));
+            if (material.HasProperty("_DstBlend"))
+                material.SetFloat("_DstBlend", (float)(multiply ? UnityEngine.Rendering.BlendMode.Zero : UnityEngine.Rendering.BlendMode.OneMinusSrcAlpha));
         }
 
         /// <summary>
