@@ -1,6 +1,18 @@
 #ifndef NATANE_TOON_FRAGMENT_INCLUDED
 #define NATANE_TOON_FRAGMENT_INCLUDED
 
+// ===== Optional extras (_EXTRAS_OFF) =====
+// The expression / light-shaping extras below are driven by a strength value and skipped with
+// a runtime branch when it is 0. Measured with RenderDoc, the ~25 tests and the code kept alive
+// for them still cost about 40% of the forward pass on a material that uses none of them.
+// A material that declares it uses none (_EXTRAS_OFF) compiles them out entirely.
+// Wrap the strength test of such a block in NATANE_FX(); never use it for anything else.
+#if defined(_EXTRAS_OFF)
+    #define NATANE_FX(c) (false)
+#else
+    #define NATANE_FX(c) (c)
+#endif
+
 // ===== Fragment Shader Constants =====
 #define DIST_FADE_BLUR_SCALE     0.5   // 距離フェードぼかしスケール
 #define PCF_TEXEL_SCALE          3.0   // PCF シャドウマップテクセルスケール
@@ -407,7 +419,7 @@ half4 frag(v2f i) : SV_Target
 
     // Geometric specular AA kernel for the GGX lobes (see NataneToonPBR.hlsl).
     // Derivatives are taken here, outside any branch; strength 0 (default) keeps it at 0.
-    nataneGSAAKernel = NataneComputeGSAAKernel(normalize(i.worldNormal)) * saturate(_SpecularAAGeometric);
+    nataneGSAAKernel = NATANE_FX(true) ? NataneComputeGSAAKernel(normalize(i.worldNormal)) * saturate(_SpecularAAGeometric) : 0.0;
 
     // ===== Detail Map (Secondary UV) =====
     #ifdef _DETAIL_MAP
@@ -427,7 +439,7 @@ half4 frag(v2f i) : SV_Target
     #endif
 
     // ===== Micro Normal Detail =====
-    if (_MicroNormalStrength > 0.001)
+    if (NATANE_FX(_MicroNormalStrength > 0.001))
     {
         float2 microNormalUV = uv * max(_MicroNormalTiling, 1.0);
         half3 microNormalTS = UnpackScaleNormal(
@@ -734,7 +746,7 @@ half4 frag(v2f i) : SV_Target
     // A sphere placed in object space (e.g. the head, set on the body material) casts a
     // soft shadow along the light. On a skinned mesh "object space" is the renderer's
     // root, like _FaceForwardDirection: it follows the avatar, not an individual bone.
-    if (_SphereOccluderStrength > 0.001)
+    if (NATANE_FX(_SphereOccluderStrength > 0.001))
     {
         float3 sphCenterWS = mul(unity_ObjectToWorld, float4(_SphereOccluder.xyz, 1.0)).xyz;
         float sphScale = length(mul((float3x3)unity_ObjectToWorld, float3(0.0, 1.0, 0.0)));
@@ -749,7 +761,7 @@ half4 frag(v2f i) : SV_Target
     // provide _CameraDepthTexture; skipped in mirrors and for orthographic cameras,
     // where that texture is not usable. Anything in front casts it, not only hair.
     #if defined(UNITY_PASS_FORWARDBASE) && !defined(_QUEST_LITE)
-    if (_DepthHairShadow > 0.001 && !NataneIsMirror() && !NataneIsOrthoCamera())
+    if (NATANE_FX(_DepthHairShadow > 0.001) && !NataneIsMirror() && !NataneIsOrthoCamera())
     {
         float4 dhsClip = UnityWorldToClipPos(i.worldPos + lightDir * _DepthHairShadowOffset);
         float4 dhsScreen = ComputeScreenPos(dhsClip);
@@ -775,7 +787,7 @@ half4 frag(v2f i) : SV_Target
     half3 exprUpWS = normalize(mul((float3x3)unity_ObjectToWorld, float3(0.0, 1.0, 0.0)));
 
     // Nose line that fades in profile, where the silhouette already draws the nose.
-    if (_NoseLineStrength > 0.001)
+    if (NATANE_FX(_NoseLineStrength > 0.001))
     {
         half noseMask = NATANE_SAMPLE_SHARED_R(_NoseLineMask, _MainTex, uv);
         half noseFront = saturate(dot(viewDir, exprFaceForwardWS));
@@ -786,7 +798,7 @@ half4 frag(v2f i) : SV_Target
 
     // Sheer stockings: the cloth colour builds up towards grazing angles, where the
     // view passes through more fibre.
-    if (_Stocking > 0.001)
+    if (NATANE_FX(_Stocking > 0.001))
     {
         half stockingMask = NATANE_SAMPLE_SHARED_R(_StockingMask, _MainTex, uv);
         half stockingDensity = pow(max(1.0 - exprNdotV, 1e-4), max(_StockingPower, 0.5));
@@ -797,7 +809,7 @@ half4 frag(v2f i) : SV_Target
     // Wetness (after Lagarde, "Water drop 3b", 2013): the diffuse albedo darkens, and a
     // sharp water lobe is added with the direct light further down.
     half exprWet = 0.0;
-    if (_Wetness > 0.001)
+    if (NATANE_FX(_Wetness > 0.001))
     {
         exprWet = saturate(_Wetness) * NATANE_SAMPLE_SHARED_R(_WetnessMask, _MainTex, uv);
         col.rgb *= lerp(1.0, 0.75, exprWet);
@@ -818,7 +830,7 @@ half4 frag(v2f i) : SV_Target
 
     // Bent normal: the least occluded direction, used for ambient / SH lookups only.
     half3 ambientNormal = worldNormal;
-    if (_BentNormalStrength > 0.001)
+    if (NATANE_FX(_BentNormalStrength > 0.001))
     {
         half3 bentTS = UnpackNormal(NATANE_SAMPLE_REPEAT(_BentNormalMap, uv));
         half3 bentWS = normalize(i.worldTangent * bentTS.x + i.worldBinormal * bentTS.y + i.worldNormal * bentTS.z);
@@ -852,13 +864,13 @@ half4 frag(v2f i) : SV_Target
     // character shaders). Normal-map detail, specular and rim keep the real normal.
     // Proxy normal: shade the face as a sphere (or, with the cylinder blend, a vertical
     // cylinder) around an object-space centre, the classic clean-terminator trick.
-    if (_FaceProxyNormal > 0.001)
+    if (NATANE_FX(_FaceProxyNormal > 0.001))
     {
         float3 proxyDir = i.worldPos - mul(unity_ObjectToWorld, float4(_FaceProxyCenter.xyz, 1.0)).xyz;
         proxyDir -= exprUpWS * (dot(proxyDir, exprUpWS) * saturate(_FaceProxyCylinder));
         shadingNormal = normalize(lerp(shadingNormal, normalize(proxyDir + float3(0, 0, 1e-5)), saturate(_FaceProxyNormal)));
     }
-    if (_FaceFlatten > 0.001)
+    if (NATANE_FX(_FaceFlatten > 0.001))
     {
         half faceFlattenAmount = saturate(_FaceFlatten) * NATANE_SAMPLE_SHARED_R(_FaceFlattenMask, _MainTex, uv);
         shadingNormal = normalize(lerp(shadingNormal, exprFaceForwardWS, faceFlattenAmount * 0.98) + float3(0, 0.0001, 0));
@@ -866,7 +878,7 @@ half4 frag(v2f i) : SV_Target
     // Vertical light limit: removes the up / down part of the light direction (relative
     // to the avatar's up axis) so light from below or straight above cannot distort the
     // face. Cast shadows still come from the real light, so the two can disagree.
-    if (_FaceLightVerticalLimit > 0.001)
+    if (NATANE_FX(_FaceLightVerticalLimit > 0.001))
     {
         lightDir = normalize(lightDir - exprUpWS * (dot(lightDir, exprUpWS) * saturate(_FaceLightVerticalLimit) * 0.95)
                              + exprFaceForwardWS * 1e-4);
@@ -875,7 +887,7 @@ half4 frag(v2f i) : SV_Target
 
     // Light source size: an area (sphere) light keeps lighting past the geometric
     // horizon, which widens the terminator. Quadratic horizon fit; own approximation.
-    if (_LightSourceSize > 0.001)
+    if (NATANE_FX(_LightSourceSize > 0.001))
     {
         half lightSinA = saturate(_LightSourceSize) * 0.5;
         if (ndotl < lightSinA)
@@ -888,7 +900,7 @@ half4 frag(v2f i) : SV_Target
     // Directional shadow offset map (after Todo et al., "Locally Controllable Stylized
     // Shading", 2007): painted offsets for the terminator, one channel per light side.
     // R = light from the character's right, G = left, B = front, A = back; 0.5 = none.
-    if (_ShadowOffsetMapStrength > 0.001)
+    if (NATANE_FX(_ShadowOffsetMapStrength > 0.001))
     {
         half4 offsetTex = NATANE_SAMPLE_SHARED(_ShadowOffsetMap, _MainTex, uv);
         half3 offsetRightWS = normalize(mul((float3x3)unity_ObjectToWorld, _FaceRightDirection.xyz) + float3(1e-4, 0, 0));
@@ -916,7 +928,7 @@ half4 frag(v2f i) : SV_Target
     // albedo-dependent part as a tint for the lit colour. Placed before the SDF / shape
     // rig so art-directed face shadows still have the last word.
     half3 matteDiffuseTint = half3(1.0, 1.0, 1.0);
-    if (_MatteDiffuse > 0.001 && ndotl > 0.0)
+    if (NATANE_FX(_MatteDiffuse > 0.001) && ndotl > 0.0)
     {
         half matteNdotV = max(dot(shadingNormal, viewDir), 1e-3);
         half3 matteRatio = NataneEONDiffuseRatio(ndotl, matteNdotV, dot(lightDir, viewDir),
@@ -1065,7 +1077,7 @@ half4 frag(v2f i) : SV_Target
     #endif
 
     half cavityEffect = 1.0;
-    if (_CavityStrength > 0.001)
+    if (NATANE_FX(_CavityStrength > 0.001))
     {
         half cavity = NATANE_SAMPLE_SHARED_R(_CavityMap, _MainTex, uv);
         cavity = ApplySoftMask(cavity);
@@ -1206,14 +1218,14 @@ half4 frag(v2f i) : SV_Target
     // ===== Automatic shadow colour (OKLab) =====
     // Derives the shade from the albedo in a perceptual space: darker, more saturated
     // and hue-rotated, instead of a hand-picked multiply colour. Not used by Ramp mode.
-    if (_ShadowAutoColor > 0.001)
+    if (NATANE_FX(_ShadowAutoColor > 0.001))
     {
         half3 autoShadow = NataneOKLabShadowMultiplier(col.rgb, _ShadowAutoHue, _ShadowAutoChroma, _ShadowAutoLightness);
         shadowColor = lerp(shadowColor, autoShadow, saturate(_ShadowAutoColor));
     }
 
     // ===== Shadow Color HSV Shift =====
-    if (abs(_ShadowHueShift) > 0.001 || abs(_ShadowSaturation - 1.0) > 0.001)
+    if (NATANE_FX(abs(_ShadowHueShift) > 0.001 || abs(_ShadowSaturation - 1.0) > 0.001))
     {
         float3 shadowHSV = RGBtoHSV(shadowColor);
         shadowHSV.x = frac(shadowHSV.x + _ShadowHueShift);
@@ -1302,7 +1314,7 @@ half4 frag(v2f i) : SV_Target
         // Exposure occlusion (as in Filamented): probe reflections are faded where the
         // light actually reaching the surface is dark, so a bright reflection probe does not
         // make skin, eyes and metal glow inside a dark room.
-        if (_ReflectionExposureOcclusion > 0.001)
+        if (NATANE_FX(_ReflectionExposureOcclusion > 0.001))
         {
             exposureOcclusion = saturate(length(indirectResult + effectiveLightColor) / _ReflectionExposureOcclusion);
         }
@@ -1347,7 +1359,7 @@ half4 frag(v2f i) : SV_Target
         // cloth read as lit volumes rather than two flat tones. "borderEdge" follows
         // whatever transition the shading mode produced (toon step, gradient, ramp, cast
         // shadow edge); "borderHalo" widens it around the N.L terminator by _ShadowBorderWidth.
-        if (_ShadowBorderStrength > 0.001)
+        if (NATANE_FX(_ShadowBorderStrength > 0.001))
         {
             half borderEdge = 4.0 * shadingValue * (1.0 - shadingValue);
             half borderHalo = saturate(1.0 - abs(continuousShadingLit * atten - 0.5) / max(_ShadowBorderWidth * 0.5, 0.001));
@@ -1364,7 +1376,7 @@ half4 frag(v2f i) : SV_Target
         // Lit-sphere in light space (after Todo, Anjyo & Yokoyama, "Lit-Sphere Extension",
         // 2013): a painted sphere whose "up" is the light, so the painted shading turns
         // with the light instead of the camera.
-        if (_LitSphereStrength > 0.001)
+        if (NATANE_FX(_LitSphereStrength > 0.001))
         {
             half3 lsRef = (abs(lightDir.y) > 0.95) ? half3(0.0, 0.0, 1.0) : half3(0.0, 1.0, 0.0);
             half3 lsRight = normalize(cross(lsRef, lightDir));
@@ -1375,7 +1387,7 @@ half4 frag(v2f i) : SV_Target
         }
         // Skin: red bleed around the terminator (the look of pre-integrated skin without
         // its LUT; a band fit, not the published curve).
-        if (_SkinTerminatorScatter > 0.001)
+        if (NATANE_FX(_SkinTerminatorScatter > 0.001))
         {
             half scatterBand = saturate(1.0 - abs(exprRawNdotL) / max(_SkinScatterWidth, 0.02));
             scatterBand *= scatterBand;
@@ -1392,7 +1404,7 @@ half4 frag(v2f i) : SV_Target
         #endif
         // Subsurface flatten (the Hanrahan-Krueger term of the Disney BRDF): lifts grazing
         // angles and flattens the centre, for a soft waxy volume.
-        if (_SubsurfaceFlatten > 0.001)
+        if (NATANE_FX(_SubsurfaceFlatten > 0.001))
         {
             half ssNL = saturate(exprRawNdotL);
             half3 ssH = normalize(lightDir + viewDir);
@@ -1406,7 +1418,7 @@ half4 frag(v2f i) : SV_Target
         }
         // Cloth subsurface colour (Filament cloth model): the shade of thick cloth takes
         // the colour of the light scattered inside it.
-        if (_ClothSubsurface > 0.001)
+        if (NATANE_FX(_ClothSubsurface > 0.001))
         {
             half clothWrap = saturate((exprRawNdotL + 0.5) / 1.5);
             half3 clothLit = saturate(directResult + _ClothSubsurfaceColor.rgb * clothWrap * (1.0 - saturate(directResult)));
@@ -1425,7 +1437,7 @@ half4 frag(v2f i) : SV_Target
         half directLum = CALC_LUMINANCE(directResult);
         half directLumClamped = clamp(directLum, _LightMinInfluence, _LightMaxInfluence);
         // Soft knee: approach the upper limit along a curve instead of a hard clip.
-        if (_LightMaxSoftKnee > 0.001)
+        if (NATANE_FX(_LightMaxSoftKnee > 0.001))
         {
             half kneeRange = max(_LightMaxInfluence * saturate(_LightMaxSoftKnee) * 0.9, 1e-3);
             half kneeStart = _LightMaxInfluence - kneeRange;
@@ -1460,7 +1472,7 @@ half4 frag(v2f i) : SV_Target
         // Ambient rim (Mitchell et al., "Illustrative Rendering in Team Fortress 2", 2007):
         // an upward-facing fresnel rim lit by the ambient light, so the silhouette
         // separates from the background even without a realtime light.
-        if (_AmbientRimIntensity > 0.001)
+        if (NATANE_FX(_AmbientRimIntensity > 0.001))
         {
             half ambientRim = pow(max(1.0 - exprNdotV, 1e-4), max(_AmbientRimPower, 0.5)) * saturate(dot(worldNormal, float3(0.0, 1.0, 0.0)));
             additionalResult += max(indirectResult, ambient) * (ambientRim * _AmbientRimIntensity);
@@ -2537,7 +2549,7 @@ half4 frag(v2f i) : SV_Target
 
     // ===== Clear Coat / Wetness Layer (ForwardBase only) =====
     #if defined(UNITY_PASS_FORWARDBASE)
-    if (_ClearCoatIntensity > 0.001)
+    if (NATANE_FX(_ClearCoatIntensity > 0.001))
     {
         half coatMask = NATANE_SAMPLE_SHARED_R(_ClearCoatMask, _MainTex, uv);
         coatMask = ApplySoftMask(coatMask);
@@ -2638,7 +2650,7 @@ half4 frag(v2f i) : SV_Target
     // Rolls off over-bright lit colour without clipping a channel or shifting the hue.
     // Placed before emission / glitter so their HDR output still drives world bloom.
     #ifdef UNITY_PASS_FORWARDBASE
-    if (_HighlightCompress > 0.001)
+    if (NATANE_FX(_HighlightCompress > 0.001))
     {
         col.rgb = lerp(col.rgb, NataneNeutralHighlightCompress(max(col.rgb, 0.0)), saturate(_HighlightCompress));
     }

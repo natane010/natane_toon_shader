@@ -1106,6 +1106,7 @@ Shader "Natane/Toon Shader (Fur Lite)"
         // ===== Mirror / Camera Control (ミラー・カメラ制御) =====
         [Header(Mirror Camera Control VRChat)]
         [Toggle(_MIRROR_CONTROL)] _MirrorControl ("Enable Mirror Camera Control", Float) = 0
+        [Toggle(_EXTRAS_OFF)] _ExtrasOff ("Strip Unused Extras (optimization)", Float) = 0
         [Enum(Both,0,Mirror Only,1,Non Mirror Only,2)] _MirrorMode ("Mirror Mode", Float) = 0
         [Enum(Both,0,Camera Only,1,Non Camera Only,2)] _CameraMode ("Camera Mode", Float) = 0
         _MirrorEmissionMultiplier ("Mirror Emission Multiplier", Range(0, 2)) = 1
@@ -1331,6 +1332,7 @@ CGPROGRAM
             #pragma shader_feature_local _MIRROR_TEXTURE
             #pragma shader_feature_local _DEPTH_COLOR_FADE
             #pragma shader_feature_local _MIRROR_CONTROL
+            #pragma shader_feature_local _EXTRAS_OFF
             #pragma skip_variants LIGHTMAP_ON DYNAMICLIGHTMAP_ON DIRLIGHTMAP_COMBINED LIGHTMAP_SHADOW_MIXING SHADOWS_SHADOWMASK
 
             #include "../Include/Core/NataneToonCore.hlsl"
@@ -1408,6 +1410,7 @@ CGPROGRAM
             #pragma shader_feature_local _SMOOTH_NORMAL
             #pragma shader_feature_local _VERTEX_COLOR_SHADOW
             #pragma shader_feature_local _MIRROR_CONTROL
+            #pragma shader_feature_local _EXTRAS_OFF
             #pragma skip_variants LIGHTMAP_ON DYNAMICLIGHTMAP_ON DIRLIGHTMAP_COMBINED LIGHTMAP_SHADOW_MIXING SHADOWS_SHADOWMASK
 
             #include "../Include/Core/NataneToonCore.hlsl"

@@ -205,6 +205,9 @@ namespace NataneToon.Editor
             // Mirror / Camera Control
             ("_MirrorControl", "_MIRROR_CONTROL"),
 
+            // Strip unused extras (optimization; not a feature)
+            ("_ExtrasOff", "_EXTRAS_OFF"),
+
             // Angel Ring
             ("_AngelRing", "_ANGEL_RING"),
 

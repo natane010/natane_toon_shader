@@ -7080,6 +7080,81 @@ public class NataneToonShaderGUI : ShaderGUI
         EndBoxedSection(GetFoldout("Ghost"));
     }
 
+    private void DrawExtrasOffSection()
+    {
+        const string key = "ExtrasOff";
+        SetFoldout(key, DrawBoxedSection(L("未使用の追加表現を省く", "Strip Unused Extras"), GetFoldout(key), SectionCategory.Advanced, sectionKey: key));
+        if (GetFoldout(key))
+        {
+            MaterialProperty property = FindProperty(NataneExtrasOptimizer.Property, properties, false);
+            if (property == null)
+            {
+                EditorGUILayout.HelpBox(L("このシェーダーでは使えません。", "Not available on this shader."), MessageType.Info);
+            }
+            else
+            {
+                bool stripped = property.floatValue >= 0.5f;
+                EditorGUI.BeginChangeCheck();
+                EditorGUI.showMixedValue = property.hasMixedValue;
+                bool newStripped = EditorGUILayout.ToggleLeft(
+                    new GUIContent(
+                        L("未使用の追加表現をシェーダーから省く", "Strip unused extras from the shader"),
+                        L("強さ 0 のあいだは何もしない追加表現（肌・顔・布・影の仕上げなど）を、命令ごと取り除きます。",
+                          "Removes the optional extras (skin, face, cloth and shadow finishing) that do nothing at strength 0, instructions and all.")),
+                    stripped);
+                EditorGUI.showMixedValue = false;
+                if (EditorGUI.EndChangeCheck())
+                {
+                    foreach (Material mat in GetAllTargetMaterials())
+                        NataneExtrasOptimizer.SetStripped(mat, newStripped);
+                    property.floatValue = newStripped ? 1f : 0f;
+                    stripped = newStripped;
+                }
+
+                List<string> inUse = NataneExtrasOptimizer.GetExtrasInUse(targetMaterial);
+                if (stripped && inUse.Count > 0)
+                {
+                    EditorGUILayout.HelpBox(
+                        L("⚠ 次の追加表現に値が入っていますが、省く設定なので描画されません:\n", "⚠ These extras have values but are stripped, so they are not rendered:\n") +
+                        "• " + string.Join("\n• ", inUse),
+                        MessageType.Warning);
+                    if (GUILayout.Button(L("省く設定をオフに戻す", "Turn stripping off")))
+                    {
+                        foreach (Material mat in GetAllTargetMaterials())
+                            NataneExtrasOptimizer.SetStripped(mat, false);
+                        property.floatValue = 0f;
+                    }
+                }
+                else if (stripped)
+                {
+                    EditorGUILayout.HelpBox(
+                        L("追加表現を省いています。描画は変わらず、ピクセルシェーダーが約 4 割軽くなります（4K 全画面で 0.34 → 0.19 ms、RTX 5090 実測）。\n" +
+                          "アニメーションで追加表現の値を動かす場合は、オフに戻してください。",
+                          "Extras are stripped. Rendering is unchanged and the pixel shader is about 40% lighter (0.34 → 0.19 ms full screen at 4K, measured on an RTX 5090).\n" +
+                          "Turn this off if an animation drives any of the extras."),
+                        MessageType.Info);
+                }
+                else if (inUse.Count > 0)
+                {
+                    EditorGUILayout.HelpBox(
+                        L("このマテリアルは次の追加表現を使っています。省くとこれらが描画されなくなります:\n", "This material uses these extras. Stripping would stop them from rendering:\n") +
+                        "• " + string.Join("\n• ", inUse),
+                        MessageType.None);
+                }
+                else
+                {
+                    EditorGUILayout.HelpBox(
+                        L("このマテリアルは追加表現を使っていません。オンにすると、描画を変えずにピクセルシェーダーを約 4 割軽くできます。\n" +
+                          "アニメーションで追加表現の値を動かす場合は、オフのままにしてください。",
+                          "This material uses no extras. Turning this on makes the pixel shader about 40% lighter without changing the image.\n" +
+                          "Leave it off if an animation drives any of the extras."),
+                        MessageType.Info);
+                }
+            }
+        }
+        EndBoxedSection(GetFoldout(key));
+    }
+
     private void DrawQuestLiteSection()
     {
         SetFoldout("QuestLite", DrawBoxedSection(L("Quest軽量パス", "Quest Lite"), GetFoldout("QuestLite"), SectionCategory.Advanced, "_QUEST_LITE", sectionKey: "QuestLite"));
@@ -10102,6 +10177,7 @@ public class NataneToonShaderGUI : ShaderGUI
         FilteredDrawSection(DrawMirrorTextureSection, L("鏡・カメラ写り分けテクスチャ", "Mirror/Camera Alt Texture"), "MirrorTexture");
         FilteredDrawSection(DrawGhostSection, L("ゴースト(幽霊)", "Ghost"), "Ghost");
         FilteredDrawSection(DrawQuestLiteSection, L("Quest軽量パス", "Quest Lite"), "QuestLite");
+        FilteredDrawSection(DrawExtrasOffSection, L("未使用の追加表現を省く", "Strip Unused Extras"), "ExtrasOff");
 
         // ─── レンダリング ───
         NataneToonShaderGUIUtility.DrawCategoryDivider(L("レンダリング", "Rendering"));
@@ -10215,6 +10291,7 @@ public class NataneToonShaderGUI : ShaderGUI
             case "MirrorTexture": return DrawMirrorTextureSection;
             case "Ghost": return DrawGhostSection;
             case "QuestLite": return DrawQuestLiteSection;
+            case "ExtrasOff": return DrawExtrasOffSection;
             case "HalftoneShadow": return DrawHalftoneShadowSection;
             case "ShadowEdgeNoise": return DrawShadowEdgeNoiseSection;
             case "CastShadowColor": return DrawCastShadowColorSection;

@@ -46,6 +46,7 @@ namespace NataneToon.Editor
         public const string OutlineOptimizer = "Tools/Natane/最適化 Optimization/アウトライン最適化 Outline Optimizer";
         public const string RefractionQualityBalancer = "Tools/Natane/最適化 Optimization/屈折品質バランサー Refraction Quality Balancer";
         public const string AssetReferenceChecker = "Tools/Natane/最適化 Optimization/アセット参照チェッカー Asset Reference Checker";
+        public const string StripUnusedExtras = "Tools/Natane/最適化 Optimization/未使用の追加表現を省く Strip Unused Extras";
 
         public const string LilToonMigration = "Tools/Natane/移行 Migration/lilToon Migration Tool";
         public const string BatchMaterialConverter = "Tools/Natane/移行 Migration/一括マテリアル変換 Batch Material Converter";
@@ -275,6 +276,7 @@ namespace NataneToon.Editor
                 // Consolidated Windows
                 MaterialAnalysis, EffectStudio, OptimizationHub, ShaderBuildManager,
                 MigrationHub, PresetManager, VRChatIntegration,
+                StripUnusedExtras,
             };
             return paths;
         }
