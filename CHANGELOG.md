@@ -44,6 +44,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - 日本語表示のとき、項目の上に英語の見出し (`Main Texture` / `Color Preservation` / `Final Color Blending` / `Surface Finish` など) が
   日本語の小見出しと重複して出ていたのをやめた (シェーダーの `[Header]` を専用インスペクターでは描かない)。
 - 「軽量化（使っていない追加表現を省く）」の説明を、専門用語を使わない文面にした。
+- トゥーンシェーディングの下半分に並んでいたマスク・SDF 系の項目 (影受けマスク / SDF シャドウマップ / 顔 SDF 回転追従 /
+  影シェイプリグ / シェーディンググレードマップ / 影色テクスチャ) を「影の形をマスクで作り込む（上級者向け）」にまとめた。
+  どれかを使っているマテリアルでは最初から開き、使用中の数を見出しに出す。
+- Mask SDF 生成の説明文を平易にした。ヘッダーのチップを「見た目: 自動判定」「テクスチャ 4/16」と読んでわかる表記にした。
 
 ### Added — Blender 連携
 - **Blender アドオン** `Blender~/natane_toon_preview` (Blender 4.2 LTS / 5.0、EEVEE): Natane Toon の基本的な陰影・スペキュラ・リム・

@@ -9427,7 +9427,7 @@ public class NataneToonShaderGUI : ShaderGUI
             ? targetMaterial.shader.name.Replace("Natane/", string.Empty)
             : L("シェーダー未設定", "No Shader");
         string subtitle = $"{shaderName}  ·  {GetRenderingModeLabel(GetCurrentRenderingMode())}";
-        string sampler = $"Tex {budget.EstimatedSamplers}/{budget.Limit}";
+        string sampler = L($"テクスチャ {budget.EstimatedSamplers}/{budget.Limit}", $"Tex {budget.EstimatedSamplers}/{budget.Limit}");
 
         FeaturePerformanceRating rating = GetFeaturePerformanceRating();
         string ratingText = L($"負荷 {rating.Grade}", $"Perf {rating.Grade}");
@@ -9438,7 +9438,7 @@ public class NataneToonShaderGUI : ShaderGUI
         NataneToonInspectorComponents.DrawInspectorHeader(
             "Natane Toon Shader",
             subtitle,
-            GetCurrentLookModeLabel(),
+            L("見た目: ", "Look: ") + GetCurrentLookModeLabel(),
             sampler,
             status,
             () =>
