@@ -77,7 +77,7 @@ namespace NataneToon.Editor
                         continue;
                     if (!NataneShaderCatalog.IsNataneShader(material.shader.name))
                         continue;
-                    if (seen.Add(material.GetInstanceID()))
+                    if (seen.Add(NataneToon.Editor.NataneEditorCompat.GetObjectId(material)))
                         avatarMaterials.Add(material);
                 }
             }

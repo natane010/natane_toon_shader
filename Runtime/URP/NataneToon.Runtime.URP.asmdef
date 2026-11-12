@@ -1,0 +1,25 @@
+{
+    "name": "NataneToon.Runtime.URP",
+    "rootNamespace": "",
+    "references": [
+        "Unity.RenderPipelines.Core.Runtime",
+        "Unity.RenderPipelines.Universal.Runtime"
+    ],
+    "includePlatforms": [],
+    "excludePlatforms": [],
+    "allowUnsafeCode": false,
+    "overrideReferences": false,
+    "precompiledReferences": [],
+    "autoReferenced": true,
+    "defineConstraints": [
+        "NATANE_URP_17"
+    ],
+    "versionDefines": [
+        {
+            "name": "com.unity.render-pipelines.universal",
+            "expression": "17.0.0",
+            "define": "NATANE_URP_17"
+        }
+    ],
+    "noEngineReferences": false
+}

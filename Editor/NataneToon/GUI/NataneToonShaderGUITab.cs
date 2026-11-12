@@ -76,7 +76,7 @@ namespace NataneToon.Editor
             this.properties = properties;
             this.targetMaterial = targetMaterial;
 
-            int materialInstanceId = targetMaterial != null ? targetMaterial.GetInstanceID() : 0;
+            int materialInstanceId = targetMaterial != null ? NataneToon.Editor.NataneEditorCompat.GetObjectId(targetMaterial) : 0;
             if (materialInstanceId != cachedMaterialInstanceId)
             {
                 toggleEvaluationCache.Clear();

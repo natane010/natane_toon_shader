@@ -47,6 +47,7 @@ float _OutlineTexColorDarken;
 float _OutlineTexColorHueShift;
 float _OutlineTexColorSaturation;
 float _SmoothNormalMode;
+float _Cutoff;
 CBUFFER_END
 
 TEXTURE2D(_MainTex);            SAMPLER(sampler_MainTex);
@@ -60,6 +61,10 @@ TEXTURE2D(_OutlineWidthMap);
 
 // Inline sampler (ramp / matcap 用クランプサンプラー)
 SAMPLER(sampler_linear_clamp);
+// 補助テクスチャ (輪郭線マスク / 幅マップ / ベイク法線) 用。
+// sampler_MainTex を流用すると、そのパスが _MainTex を読まないバリアントで
+// サンプラーごと最適化で消え、"Unrecognized sampler 'sampler_maintex'" になる (Unity 6 で確認)。
+SAMPLER(sampler_linear_repeat);
 
 // ===== DOTS Instancing (GPU Resident Drawer / BatchRendererGroup) =====
 // NOTE: DOTS instanced プロパティも ifdef で囲まないこと
@@ -98,10 +103,41 @@ void SetupDOTSNataneToonMaterialPropertyCaches()
 
 #endif // UNITY_DOTS_INSTANCING_ENABLED
 
+// ===== URP 標準パスとの互換マクロ =====
+// ObjectMotionVectors.hlsl など URP 同梱のパスは Lit の命名 (_BaseMap / _BaseColor) を前提にしている。
+// プロパティ名は BiRP と共通 (_MainTex / _Color) のままにしたいので、名前だけ読み替える。
+#define _BaseMap        _MainTex
+#define sampler_BaseMap sampler_MainTex
+#define _BaseMap_ST     _MainTex_ST
+#define _BaseColor      _Color
+
+half4 SampleAlbedoAlpha(float2 uv, TEXTURE2D_PARAM(albedoAlphaMap, sampler_albedoAlphaMap))
+{
+    return half4(SAMPLE_TEXTURE2D(albedoAlphaMap, sampler_albedoAlphaMap, uv));
+}
+
+// Cutout バリアントはパス側で `#define _ALPHATEST_ON 1` する (キーワードではないのでバリアントは増えない)。
+half Alpha(half albedoAlpha, half4 color, half cutoff)
+{
+    half alpha = albedoAlpha * color.a;
+#if defined(_ALPHATEST_ON)
+    clip(alpha - cutoff);
+#endif
+    return alpha;
+}
+
+// メインテクスチャのアルファを読み、Cutout ならクリップする (深度系パス共通)。
+half NataneURPAlphaClip(float2 uv)
+{
+    return Alpha(SAMPLE_TEXTURE2D(_MainTex, sampler_MainTex, uv).a, _Color, _Cutoff);
+}
+
 // ===== Shared toon shading helper =====
 // BiRP 版 ToonShading (Include/Lighting/NataneToonLighting.hlsl) のコア移植。
 // fwidth ベースの AA フロアを追加してピクセル化を防止。
-float NataneToonStepURP(float ndotl, float steps, float sharpness)
+// aaFloor: 段の境界に最低限かけるアンチエイリアス幅。fwidth はライトループの中で呼べない
+// (可変回数ループ内の勾配は未定義になる) ので、ループの外で求めた値を渡す。
+float NataneToonStepURP(float ndotl, float steps, float sharpness, float aaFloor)
 {
     ndotl = saturate(ndotl + clamp(_ShadowOffset, -1.0, 1.0));
 
@@ -117,10 +153,20 @@ float NataneToonStepURP(float ndotl, float steps, float sharpness)
 
     // BiRP と同じ smoothstep 幅 + fwidth ベースの最小 AA 幅
     float smoothRange = saturate(sharpness + _StepBorderSmooth) * 0.5;
-    smoothRange = max(smoothRange, min(fwidth(scaled) * 0.5, 0.25));
+    smoothRange = max(smoothRange, aaFloor);
     float smoothedStep = smoothstep(0.5 - smoothRange, 0.5 + smoothRange, stepPosition);
 
     return saturate((currentStep + smoothedStep) * stepValue);
+}
+
+float NataneToonStepAAFloorURP(float ndotl, float steps)
+{
+    return min(fwidth(saturate(ndotl + clamp(_ShadowOffset, -1.0, 1.0)) * steps) * 0.5, 0.25);
+}
+
+float NataneToonStepURP(float ndotl, float steps, float sharpness)
+{
+    return NataneToonStepURP(ndotl, steps, sharpness, NataneToonStepAAFloorURP(ndotl, steps));
 }
 
 #endif // NATANE_TOON_URP_INPUT_INCLUDED

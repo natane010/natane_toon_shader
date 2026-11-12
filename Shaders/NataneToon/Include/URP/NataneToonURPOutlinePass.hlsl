@@ -9,6 +9,9 @@
 // エッジ幅補正、マスク、幅マップ、テクスチャ連動カラー、マルチカラー。
 
 #include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/Core.hlsl"
+#if defined(LOD_FADE_CROSSFADE)
+    #include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/LODCrossFade.hlsl"
+#endif
 
 // Inline HSV functions (BiRP アウトラインパスと同一のアルゴリズム)
 #if defined(_OUTLINE_TEXTURE_COLOR)
@@ -67,10 +70,10 @@ OutlineVaryings NataneToonOutlineVertex(OutlineAttributes input)
     // Get outline width from map / mask if enabled
     float widthMultiplier = 1.0;
     #if defined(_OUTLINE_WIDTH_MAP)
-        widthMultiplier = SAMPLE_TEXTURE2D_LOD(_OutlineWidthMap, sampler_MainTex, input.texcoord, 0).r;
+        widthMultiplier = SAMPLE_TEXTURE2D_LOD(_OutlineWidthMap, sampler_linear_repeat, input.texcoord, 0).r;
     #endif
     #if defined(_OUTLINE_MASK)
-        widthMultiplier *= SAMPLE_TEXTURE2D_LOD(_OutlineMask, sampler_MainTex, TRANSFORM_TEX(input.texcoord, _OutlineMask), 0).r;
+        widthMultiplier *= SAMPLE_TEXTURE2D_LOD(_OutlineMask, sampler_linear_repeat, TRANSFORM_TEX(input.texcoord, _OutlineMask), 0).r;
     #endif
 
     // Resolve outline normal (smooth normal or original)
@@ -92,7 +95,7 @@ OutlineVaryings NataneToonOutlineVertex(OutlineAttributes input)
         else
         {
             // Mode 2: Baked Normal Texture
-            float3 bakedNormal = SAMPLE_TEXTURE2D_LOD(_SmoothNormalTex, sampler_MainTex, input.texcoord, 0).rgb * 2.0 - 1.0;
+            float3 bakedNormal = SAMPLE_TEXTURE2D_LOD(_SmoothNormalTex, sampler_linear_repeat, input.texcoord, 0).rgb * 2.0 - 1.0;
             float3 binormal = cross(input.normalOS, input.tangentOS.xyz) * input.tangentOS.w;
             float3x3 tbnOS = float3x3(input.tangentOS.xyz, binormal, input.normalOS);
             outlineNormal = mul(bakedNormal, tbnOS);
@@ -161,6 +164,14 @@ half4 NataneToonOutlineFragment(OutlineVaryings input) : SV_Target
 #if defined(_OUTLINE)
     half4 col = _OutlineColor;
 
+    // Cutout: 本体が抜けている部分には輪郭線も出さない (BiRP の輪郭線パスと同じ)。
+    #if defined(_ALPHATEST_ON)
+        NataneURPAlphaClip(TRANSFORM_TEX(input.uv, _MainTex));
+    #endif
+    #if defined(LOD_FADE_CROSSFADE)
+        LODFadeCrossFade(input.positionCS);
+    #endif
+
     // Apply texture-linked outline color
     #if defined(_OUTLINE_TEXTURE_COLOR)
     {
@@ -185,7 +196,7 @@ half4 NataneToonOutlineFragment(OutlineVaryings input) : SV_Target
     // Apply outline mask
     #if defined(_OUTLINE_MASK)
     {
-        half outlineMask = SAMPLE_TEXTURE2D(_OutlineMask, sampler_MainTex, TRANSFORM_TEX(input.uv, _OutlineMask)).r;
+        half outlineMask = SAMPLE_TEXTURE2D(_OutlineMask, sampler_linear_repeat, TRANSFORM_TEX(input.uv, _OutlineMask)).r;
         clip(outlineMask - 0.01);
         col.a *= outlineMask;
     }

@@ -529,7 +529,7 @@ namespace NataneToon.Editor
                 {
                     if (sp.propertyType == SerializedPropertyType.ObjectReference)
                     {
-                        if (sp.objectReferenceInstanceIDValue != 0 && sp.objectReferenceValue == null)
+                        if (NataneEditorCompat.HasStoredObjectReference(sp) && sp.objectReferenceValue == null)
                         {
                             TryAddIssue(new ReferenceIssue
                             {

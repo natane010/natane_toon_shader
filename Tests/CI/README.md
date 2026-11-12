@@ -72,6 +72,37 @@ Tests/CI/setup-validation-project.sh --unity "$UNITY_2022" --out /tmp/val-2022
 Tests/CI/setup-validation-project.sh --unity "$UNITY_6000" --out /tmp/val-6000
 ```
 
+### URP の SubShader（Unity 必要）
+
+上の検証は Built-in RP のプロジェクトで走るので、URP の SubShader（`PackageRequirements` で
+URP 導入時だけ有効）は**一切コンパイルされない**。URP 側は別のスクリプトで検証する。
+
+```bash
+Tests/CI/setup-urp-validation-project.sh --unity "/path/to/Unity"
+```
+
+URP を入れたミニプロジェクトを作り、`RenderPipeline=UniversalPipeline` の SubShader の全パスを、
+マテリアル × パイプラインのキーワード組み合わせでコンパイルする（`ValidateURP.cs.txt`）。
+URP はエディタ同梱の版を使うので、確認したいエディタごとに `--out` を分けて実行する。
+オプションと終了コードは上と同じ（`--keep` は無い。既定の出力先は `../NataneToonValidationURP`）。
+
+| 用途 | 検証したバージョン |
+|---|---|
+| Unity 6 用 SubShader | `6000.3.11f1`（URP 17.3）、`6000.5.7f1`（URP 17.5） |
+| 互換 SubShader（URP 14 〜 17.0） | `2022.3.33f1`（URP 14.0.11） |
+
+キーワードで切り替わる URP のコードを足したら、`ValidateURP.cs.txt` の `MaterialSets` /
+`PipelineSets` に組み合わせを足すこと。
+
+### URP SubShader の生成（Unity 不要）
+
+URP の SubShader は 6 つの `.shader` に同じ構成で入っている。手で揃えるとずれるので生成する。
+
+```bash
+python Tests/CI/generate_urp_subshaders.py --repo-root .          # 生成
+python Tests/CI/generate_urp_subshaders.py --repo-root . --check  # 差分があれば exit 1
+```
+
 ## 3. コミット前チェック（Unity 不要）
 
 `.meta` の欠落・孤児 `.meta`、`Documentation~/` の未追跡ファイル、

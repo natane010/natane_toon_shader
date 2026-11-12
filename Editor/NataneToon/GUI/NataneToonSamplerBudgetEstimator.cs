@@ -252,8 +252,8 @@ namespace NataneToon.Editor
                 return Estimate(material, null, false);
             }
 
-            int materialId = material.GetInstanceID();
-            int shaderId = material.shader != null ? material.shader.GetInstanceID() : 0;
+            int materialId = NataneToon.Editor.NataneEditorCompat.GetObjectId(material);
+            int shaderId = material.shader != null ? NataneToon.Editor.NataneEditorCompat.GetObjectId(material.shader) : 0;
             ulong fingerprint = ComputeFingerprint(material);
 
             CachedEstimate cached;

@@ -623,7 +623,7 @@ public class NataneToonShaderGUI : ShaderGUI
             }
 
             // Clear foldout cache on material change so GetFoldout re-reads EditorPrefs
-            int currentMaterialId = this.targetMaterial.GetInstanceID();
+            int currentMaterialId = NataneToon.Editor.NataneEditorCompat.GetObjectId(this.targetMaterial);
             if (_lastLoadedMaterialInstanceId != currentMaterialId)
             {
                 foldoutStates.Clear();
@@ -821,7 +821,7 @@ public class NataneToonShaderGUI : ShaderGUI
             return;
         }
 
-        int materialId = targetMaterial.GetInstanceID();
+        int materialId = NataneToon.Editor.NataneEditorCompat.GetObjectId(targetMaterial);
         if (!_keywordValidationRequested && _lastValidatedMaterialInstanceId == materialId)
         {
             return;
@@ -836,7 +836,7 @@ public class NataneToonShaderGUI : ShaderGUI
     internal void SynchronizeKeywordsAndRefreshInspectorCaches()
     {
         ValidateAndFixKeywords();
-        _lastValidatedMaterialInstanceId = targetMaterial != null ? targetMaterial.GetInstanceID() : -1;
+        _lastValidatedMaterialInstanceId = targetMaterial != null ? NataneToon.Editor.NataneEditorCompat.GetObjectId(targetMaterial) : -1;
         _keywordValidationRequested = false;
         InvalidateInspectorCaches();
     }

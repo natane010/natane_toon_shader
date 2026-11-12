@@ -1,0 +1,173 @@
+// Copied to Assets/Editor/ValidateURP.cs by Tests/CI/setup-urp-validation-project.sh.
+// Kept as .txt so Unity does not compile it inside the package (it needs URP, which a
+// Built-in RP / VRChat project does not have).
+//
+// Activates a URP asset, then force-compiles every pass of every URP SubShader in the
+// package across material x pipeline keyword sets. In batch mode with -nographics the
+// active SubShader stays on Built-in RP even with a URP asset assigned, so the passes are
+// compiled explicitly per SubShader rather than through the active one.
+using System;
+using System.Collections.Generic;
+using System.IO;
+using System.Linq;
+using System.Text;
+using UnityEditor;
+using UnityEditor.Rendering;
+using UnityEngine;
+using UnityEngine.Rendering;
+using UnityEngine.Rendering.Universal;
+
+namespace NataneToonCI
+{
+    public static class ValidateURP
+    {
+        const string PackageMarker = "com.natane.toonshader";
+
+        // Material keywords. Add a set for every new keyword-gated URP code path.
+        static readonly string[][] MaterialSets =
+        {
+            new string[0],
+            new[] { "_USE_RAMP", "_NORMALMAP", "_RIM_LIGHT", "_MATCAP", "_EMISSION", "_OUTLINE", "_OUTLINE_MASK", "_OUTLINE_WIDTH_MAP", "_SMOOTH_NORMAL" },
+            new[] { "_OUTLINE", "_OUTLINE_TEXTURE_COLOR", "_OUTLINE_MULTI_COLOR", "_NORMALMAP" },
+        };
+
+        // Pipeline keywords. A keyword a pass does not declare is ignored by the compiler.
+        // CLUSTER is replaced by the Forward+ keyword of the URP version under test.
+        const string Cluster = "<cluster>";
+        static readonly string[][] PipelineSets =
+        {
+            new string[0],
+            new[] { "_MAIN_LIGHT_SHADOWS_CASCADE", "_ADDITIONAL_LIGHTS", "_ADDITIONAL_LIGHT_SHADOWS", "_SHADOWS_SOFT", Cluster, "FOG_EXP2", "_LIGHT_COOKIES", "_LIGHT_LAYERS", "PROBE_VOLUMES_L1", "LOD_FADE_CROSSFADE", "_WRITE_RENDERING_LAYERS", "SHADOWS_SHADOWMASK" },
+            new[] { "DOTS_INSTANCING_ON", "_MAIN_LIGHT_SHADOWS", "_ADDITIONAL_LIGHTS", Cluster, "PROBE_VOLUMES_L2", "FOG_LINEAR", "_CASTING_PUNCTUAL_LIGHT_SHADOW", "EVALUATE_SH_VERTEX", "_GBUFFER_NORMALS_OCT", "_WRITE_RENDERING_LAYERS" },
+            new[] { "STEREO_INSTANCING_ON", "_MAIN_LIGHT_SHADOWS_SCREEN", "_ADDITIONAL_LIGHTS_VERTEX", "INSTANCING_ON", "EVALUATE_SH_MIXED", "FOG_EXP", "_LIGHT_LAYERS" },
+            new[] { "_ADDITIONAL_LIGHTS", "_ADDITIONAL_LIGHT_SHADOWS", "_SHADOWS_SOFT_HIGH", "_LIGHT_COOKIES", "LOD_FADE_CROSSFADE", "SHADOWS_SHADOWMASK" },
+        };
+
+        public static void RunFromBatch()
+        {
+            int code;
+            try { code = Run(); }
+            catch (Exception e) { Debug.LogError("URP_RESULT=EXCEPTION " + e); code = 2; }
+            EditorApplication.Exit(code);
+        }
+
+        static void EnsureURP()
+        {
+            if (GraphicsSettings.defaultRenderPipeline is UniversalRenderPipelineAsset) return;
+            Directory.CreateDirectory("Assets/Settings");
+            var data = ScriptableObject.CreateInstance<UniversalRendererData>();
+            AssetDatabase.CreateAsset(data, "Assets/Settings/Renderer.asset");
+            var asset = UniversalRenderPipelineAsset.Create(data);
+            AssetDatabase.CreateAsset(asset, "Assets/Settings/URP.asset");
+            GraphicsSettings.defaultRenderPipeline = asset;
+            QualitySettings.renderPipeline = asset;
+            AssetDatabase.SaveAssets();
+            AssetDatabase.Refresh();
+        }
+
+        static Version UrpVersion()
+        {
+            var info = UnityEditor.PackageManager.PackageInfo.FindForAssetPath("Packages/com.unity.render-pipelines.universal");
+            if (info == null) return new Version(0, 0);
+            string v = info.version;
+            int dash = v.IndexOf('-');
+            if (dash >= 0) v = v.Substring(0, dash);
+            Version parsed;
+            return Version.TryParse(v, out parsed) ? parsed : new Version(0, 0);
+        }
+
+        public static int Run()
+        {
+            EnsureURP();
+            Version urp = UrpVersion();
+            // _FORWARD_PLUS was renamed to _CLUSTER_LIGHT_LOOP in URP 17.1; the old name only
+            // survives there as a shim that reports a deprecation warning.
+            string cluster = urp >= new Version(17, 1) ? "_CLUSTER_LIGHT_LOOP" : "_FORWARD_PLUS";
+            Debug.Log("URP_VERSION=" + urp + " cluster=" + cluster);
+            Debug.Log("URP_PIPELINE=" + (GraphicsSettings.defaultRenderPipeline != null ? GraphicsSettings.defaultRenderPipeline.GetType().Name : "none"));
+
+            var shaders = AssetDatabase.FindAssets("t:Shader")
+                .Select(AssetDatabase.GUIDToAssetPath)
+                .Where(p => p.IndexOf(PackageMarker, StringComparison.OrdinalIgnoreCase) >= 0)
+                .Select(AssetDatabase.LoadAssetAtPath<Shader>).Where(s => s != null)
+                .OrderBy(s => s.name, StringComparer.Ordinal).ToList();
+
+            int urpShaders = 0, urpSubshaders = 0, variants = 0;
+            // message -> number of variants that reported it (the same line fails in many variants)
+            var errors = new SortedDictionary<string, int>(StringComparer.Ordinal);
+            var warnings = new SortedDictionary<string, int>(StringComparer.Ordinal);
+            var urpTag = new ShaderTagId("RenderPipeline");
+
+            foreach (Shader shader in shaders)
+            {
+                ShaderUtil.ClearShaderMessages(shader);
+                ShaderData sd = ShaderUtil.GetShaderData(shader);
+                bool counted = false;
+                for (int si = 0; si < sd.SubshaderCount; si++)
+                {
+                    ShaderData.Subshader sub = sd.GetSubshader(si);
+                    if (sub.FindTagValue(urpTag).name != "UniversalPipeline") continue;
+                    if (!counted) { urpShaders++; counted = true; }
+                    urpSubshaders++;
+
+                    var passNames = new List<string>();
+                    for (int pi = 0; pi < sub.PassCount; pi++) passNames.Add(sub.GetPass(pi).Name);
+                    Debug.Log("URP_SUBSHADER shader=" + shader.name + " index=" + si + " passes=[" + string.Join(",", passNames) + "]");
+
+                    for (int pi = 0; pi < sub.PassCount; pi++)
+                    {
+                        ShaderData.Pass pass = sub.GetPass(pi);
+                        foreach (string[] materialSet in MaterialSets)
+                        foreach (string[] pipelineSet in PipelineSets)
+                        foreach (ShaderType stage in new[] { ShaderType.Vertex, ShaderType.Fragment })
+                        {
+                            string[] set = materialSet.Concat(pipelineSet).Select(k => k == Cluster ? cluster : k).ToArray();
+                            ShaderData.VariantCompileInfo info = pass.CompileVariant(stage, set, ShaderCompilerPlatform.D3D, BuildTarget.StandaloneWindows64);
+                            variants++;
+                            string where = shader.name + " sub" + si + " pass=" + pass.Name + " " + stage;
+                            foreach (ShaderMessage m in info.Messages)
+                            {
+                                var bucket = m.severity == ShaderCompilerMessageSeverity.Error ? errors : warnings;
+                                Count(bucket, where + ": " + m.message + " @ " + m.file + ":" + m.line);
+                            }
+                            if (!info.Success && info.Messages.Length == 0) Count(errors, where + ": compile failed without a message");
+                        }
+                    }
+                }
+
+                foreach (ShaderMessage m in ShaderUtil.GetShaderMessages(shader))
+                {
+                    var bucket = m.severity == ShaderCompilerMessageSeverity.Error ? errors : warnings;
+                    Count(bucket, shader.name + ": " + m.message + " @ " + m.file + ":" + m.line + " (" + m.platform + ")");
+                }
+            }
+
+            Debug.Log("URP_SHADER_TOTAL=" + shaders.Count);
+            Debug.Log("URP_SHADERS_WITH_URP_SUBSHADER=" + urpShaders);
+            Debug.Log("URP_SUBSHADERS=" + urpSubshaders);
+            Debug.Log("URP_VARIANTS_COMPILED=" + variants);
+            Debug.Log("URP_ERROR_COUNT=" + errors.Count);
+            Debug.Log("URP_WARNING_COUNT=" + warnings.Count);
+
+            if (errors.Count + warnings.Count > 0)
+            {
+                var report = new StringBuilder("URP_REPORT_BEGIN\n");
+                foreach (var e in errors) report.Append("  [ERROR x").Append(e.Value).Append("] ").Append(e.Key).Append('\n');
+                foreach (var w in warnings) report.Append("  [WARNING x").Append(w.Value).Append("] ").Append(w.Key).Append('\n');
+                report.Append("URP_REPORT_END");
+                Debug.LogError(report.ToString());
+            }
+
+            bool pass0 = errors.Count == 0 && warnings.Count == 0 && urpSubshaders > 0;
+            Debug.Log("URP_RESULT=" + (pass0 ? "PASS" : "FAIL"));
+            return pass0 ? 0 : 1;
+        }
+
+        static void Count(SortedDictionary<string, int> bucket, string key)
+        {
+            int n;
+            bucket.TryGetValue(key, out n);
+            bucket[key] = n + 1;
+        }
+    }
+}

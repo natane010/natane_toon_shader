@@ -7,6 +7,34 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added — Unity 6 の URP 対応
+- **URP で使えるシェーダーを 6 つに拡大**: `Natane/Toon Shader` に加えて Cutout / Transparent と、それぞれの Lite が URP で描ける
+  (これまではメインの Opaque のみ)。マテリアルは Built-in RP と共通。
+- **Unity 6 用の URP SubShader** (URP 17.1 以降): Forward / Forward+ / Deferred / Deferred+ のどのレンダリングパスでも描画され、
+  Adaptive Probe Volumes・ライトレイヤー・Rendering Layers・ライトクッキー・シャドウマスク・LOD クロスフェード・
+  モーションベクター (TAA / STP)・XR の Application SpaceWarp・GPU Resident Drawer に対応。
+- **Screen FX の RenderGraph 対応**: `Natane/Screen FX Overlay` を URP で描く `Natane Screen FX Renderer Feature` を追加
+  (`Tools > Natane > URP > Screen FX を Renderer に追加`)。全画面パス 1 回 + カメラカラーの差し替えで描き、
+  Effect Blend が 0 のあいだはパスごと省く。
+- `Tools > Natane > URP > シーンの URP 対応を確認`: URP で描けないバリアントを使っているマテリアルを一覧する。
+- Cutout の URP 対応に合わせて、影・深度・法線・モーションベクターのパスもアルファで抜く自前実装に置き換えた。
+- Built-in RP (VRChat) への影響はない: URP 用の SubShader は `PackageRequirements`、C# は asmdef の `defineConstraints` で
+  URP 未導入のプロジェクトから外れる。詳細は `Documentation~/URP_SUPPORT.md`。
+
+### Fixed — Unity 6 / URP
+- Unity 6.5 でパッケージのエディタスクリプトがコンパイルできなかった (`Object.GetInstanceID()` /
+  `SerializedProperty.objectReferenceInstanceIDValue` の廃止)。
+- URP: アウトラインのマスク / 幅マップ / スムーズノーマルを有効にするとアウトラインパスがコンパイルエラーになっていた
+  (存在しないサンプラーを参照)。
+- URP 17.1 以降: `_FORWARD_PLUS` の非推奨警告が出ていた (`_CLUSTER_LIGHT_LOOP` へ移行)。
+- URP Forward+: 2 灯目以降のディレクショナルライトが反映されていなかった。
+- URP: 追加ライトのループ内で勾配命令 (fwidth) を使っている、という警告が出ていた。
+
+### Changed
+- URP の SubShader を `Tests/CI/generate_urp_subshaders.py` による生成に変更 (6 シェーダーで内容を揃えるため)。
+- URP のコンパイル検証 `Tests/CI/setup-urp-validation-project.sh` を追加。
+- Screen FX の効果本体を `Effects/NataneScreenFXCore.hlsl` に切り出し、Built-in RP 版と URP 版で共有 (見た目の変更なし)。
+
 ## [1.8.0] - 2026-11-12
 
 ### Added — lilToon からの移行と「効果を試す」
