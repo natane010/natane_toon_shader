@@ -48,6 +48,10 @@ Shader "Hidden/Natane/PostFX"
             CGPROGRAM
             #pragma vertex NPFXVert
             #pragma fragment NPFXFragLens
+            #pragma multi_compile_local __ NPFX_L_WARP
+            #pragma multi_compile_local __ NPFX_L_GLITCH
+            #pragma multi_compile_local __ NPFX_L_FRINGE
+            #pragma multi_compile_local __ NPFX_L_BLUR
             ENDCG
         }
         Pass // 2
@@ -56,6 +60,9 @@ Shader "Hidden/Natane/PostFX"
             CGPROGRAM
             #pragma vertex NPFXVert
             #pragma fragment NPFXFragStyle
+            #pragma multi_compile_local __ NPFX_S_KUWAHARA
+            #pragma multi_compile_local __ NPFX_S_EDGE
+            #pragma multi_compile_local __ NPFX_S_PRINT
             ENDCG
         }
         Pass // 3
@@ -112,6 +119,12 @@ Shader "Hidden/Natane/PostFX"
             CGPROGRAM
             #pragma vertex NPFXVert
             #pragma fragment NPFXFragFinal
+            #pragma multi_compile_local __ NPFX_F_COMPOSITE
+            #pragma multi_compile_local __ NPFX_F_MASK
+            #pragma multi_compile_local __ NPFX_F_FOG
+            #pragma multi_compile_local __ NPFX_F_GRADE
+            #pragma multi_compile_local __ NPFX_F_OVERLAY
+            #pragma multi_compile_local __ NPFX_F_RETRO
             ENDCG
         }
         Pass // 10
@@ -120,6 +133,14 @@ Shader "Hidden/Natane/PostFX"
             CGPROGRAM
             #pragma vertex NPFXVert
             #pragma fragment NPFXFragTemporal
+            ENDCG
+        }
+        Pass // 11
+        {
+            Name "DOFPREP"
+            CGPROGRAM
+            #pragma vertex NPFXVert
+            #pragma fragment NPFXFragDofPrep
             ENDCG
         }
     }

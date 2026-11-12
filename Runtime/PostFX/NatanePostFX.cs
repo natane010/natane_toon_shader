@@ -56,7 +56,12 @@ namespace NataneToon
         MaterialPropertyBlock m_Block;
         readonly List<RenderTexture> m_Temps = new List<RenderTexture>();
 
+        NPFXFeature m_Features;
+        Material m_FeaturesMaterial;
+
         public NatanePostFXPlan Plan => m_Plan;
+        /// <summary>今のフレームで有効にしたシェーダーのまとまり。</summary>
+        public NPFXFeature ActiveFeatures => m_Features;
         public Material Material => m_Material;
         public Material MaskMaterial => m_MaskMaterial;
         public IReadOnlyList<Renderer> MaskRenderers => m_MaskRenderers;
@@ -219,6 +224,19 @@ namespace NataneToon
             bool historyValid = m_HistoryValid && m_History != null && m_History.width == width && m_History.height == height;
             m_Plan.Build(this, width, height, maskAvailable, historyValid, hold && historyValid);
 
+            // 使っていない効果のコードをシェーダーから外す (キーワード)。
+            NPFXFeature features = NatanePostFXKeywords.forceAll
+                ? NPFXFeature.All
+                : NatanePostFXKeywords.Needed(this, m_Plan.needsComposite, m_Plan.needsMask);
+
+            // 何も効いていないなら描かない (呼び出し側は元の画像をそのまま出す)。
+            if (features == NPFXFeature.None && m_Plan.stepCount == 1 && !m_Plan.needsHistory &&
+                overlay.flash <= 1e-4f && overlay.fade <= 1e-4f && !(beat.On && beat.flash > 1e-4f))
+            {
+                if (m_History != null) ReleaseHistory();
+                return false;
+            }
+
             if (m_Plan.needsHistory)
             {
                 history = EnsureHistory(width, height);
@@ -236,7 +254,70 @@ namespace NataneToon
                 m_MaskMaterial.SetMatrix(NatanePostFXIds.MaskVP, vp);
             }
 
-            ApplyUniforms(cam, width, height, m_Plan.needsMask || NeedsDepth ? depthMode : 0, t, hold && historyValid);
+            ApplyUniforms(m_Material, cam, width, height, m_Plan.needsMask || NeedsDepth ? depthMode : 0, t, hold && historyValid, false);
+
+            // キーワードは変わったときだけ設定し直す。
+            if (features != m_Features || m_FeaturesMaterial != m_Material)
+            {
+                NatanePostFXKeywords.Apply(m_Material, features);
+                m_Features = features;
+                m_FeaturesMaterial = m_Material;
+            }
+            return true;
+        }
+
+        // ------------------------------------------------------------------
+        // VRChat ワールド用 (Natane/PostFX World 系のシェーダー) への書き出し
+        // ------------------------------------------------------------------
+        // ワールド用シェーダーが時間や解像度を足してから使う値。マテリアルでは名前に _Mat が付く。
+        static readonly string[] s_WorldDynamic =
+        {
+            "_L_Distort", "_L_Xform", "_L_Wave", "_L_Glitch2", "_L_Misc", "_S_Edge", "_S_Halftone",
+            "_F_Flash", "_F_Lines", "_F_Crt", "_F_Film",
+        };
+        static readonly string[] s_WorldStatic =
+        {
+            "_L_RadialBlur", "_L_Mirror", "_L_Ripple", "_L_Glitch",
+            "_S_Kuwahara", "_S_EdgeColor", "_S_Paper", "_S_Extra",
+            "_F_Fog", "_F_FogColor", "_F_Grade", "_F_Grade2", "_F_Lift", "_F_Gamma", "_F_Gain",
+            "_F_SplitShadow", "_F_SplitHigh", "_F_Lut", "_F_Filter", "_F_Filter2", "_F_Duo", "_F_DuoA", "_F_DuoB",
+            "_F_Overlay", "_F_Overlay2", "_F_GradTop", "_F_GradBottom", "_F_LeakColor", "_F_OverlayTexParams",
+            "_F_Fade", "_F_Vignette", "_F_VignetteColor", "_F_LinesColor", "_F_Center", "_F_Film2",
+        };
+
+        /// <summary>ワールド用で「レンズ」段が要るか。</summary>
+        public bool WorldNeedsLens => lens.Active || glitch.Active || beat.AffectsLens;
+        /// <summary>ワールド用で「画風」段が要るか。</summary>
+        public bool WorldNeedsStyle => style.Active;
+        /// <summary>ワールド用で深度テクスチャが要るか (フォグ、深度による輪郭線)。</summary>
+        public bool WorldNeedsDepth => fog.density > 1e-5f || (style.edge > 1e-4f && style.edgeDepth > 1e-4f);
+
+        /// <summary>
+        /// 今の設定を、ワールド用シェーダーのマテリアルに書き出す。
+        /// 中間テクスチャが要る効果 (ブルーム、被写界深度、ぼかし、マスク、残像) は書き出されない。
+        /// </summary>
+        public bool BakeWorldMaterial(Material target)
+        {
+            if (target == null || !EnsureMaterials()) return false;
+            var temp = new Material(m_Material) { hideFlags = HideFlags.HideAndDontSave };
+            try
+            {
+                // 1080p 基準 (ピクセル単位の値はシェーダーが実際の解像度に合わせて伸縮する)。
+                ApplyUniforms(temp, null, 1920, 1080, 0, 0f, false, true);
+                foreach (string name in s_WorldDynamic) target.SetVector(name + "_Mat", temp.GetVector(name));
+                foreach (string name in s_WorldStatic) target.SetVector(name, temp.GetVector(name));
+                target.SetTexture(NatanePostFXIds.LutTex, temp.GetTexture(NatanePostFXIds.LutTex));
+                target.SetTexture(NatanePostFXIds.OverlayTex, temp.GetTexture(NatanePostFXIds.OverlayTex));
+            }
+            finally
+            {
+                DestroySafe(temp);
+            }
+            target.SetVector("_W_Speeds", new Vector4(lens.waveSpeed, glitch.speed, overlay.lineFps, retro.scanlineSpeed));
+            target.SetVector("_W_Shake", new Vector4(lens.shake, lens.shakeSpeed, 0f, 0f));
+            target.SetVector("_W_Beat", new Vector4(beat.bpm, beat.offset, beat.decay, 0f));
+            target.SetVector("_W_BeatAmount", new Vector4(beat.zoom, beat.flash, beat.chromatic, beat.shake));
+            target.SetFloat("_NPFX_UseDepth", WorldNeedsDepth ? 1f : 0f);
             return true;
         }
 
@@ -315,16 +396,16 @@ namespace NataneToon
             return v;
         }
 
-        void ApplyUniforms(Camera cam, int width, int height, int depthMode, float t, bool holdFrame)
+        // world = true のとき: 時間・拍・画面揺れで動く分は入れない (ワールド用シェーダーが自分で計算する)。
+        void ApplyUniforms(Material m, Camera cam, int width, int height, int depthMode, float t, bool holdFrame, bool world)
         {
-            Material m = m_Material;
             const float d2r = Mathf.Deg2Rad;
             // 画面の高さに合わせてピクセル単位の値を伸縮する (1080p 基準)。
             float pixelScale = height / 1080f;
 
             // 拍のパルス (拍の頭で 1、そこから減衰)
             float pulse = 0f;
-            if (beat.bpm > 0.01f)
+            if (beat.bpm > 0.01f && !world)
             {
                 float secondsPerBeat = 60f / beat.bpm;
                 float since = Mathf.Repeat(t - beat.offset, secondsPerBeat);
@@ -336,7 +417,7 @@ namespace NataneToon
             m.SetFloat(NatanePostFXIds.DepthMode, depthMode);
 
             // ---- レンズ ----
-            float shakeAmount = lens.shake + beat.shake * pulse;
+            float shakeAmount = world ? 0f : lens.shake + beat.shake * pulse;
             Vector2 shakeOffset = Vector2.zero;
             float shakeRot = 0f;
             if (shakeAmount > 1e-4f)
@@ -374,7 +455,7 @@ namespace NataneToon
 
             // ---- ピント ----
             float focusDistance = focus.focusDistance;
-            if (focus.focusTarget != null)
+            if (focus.focusTarget != null && cam != null)
                 focusDistance = Mathf.Max(0.01f, Vector3.Dot(focus.focusTarget.position - cam.transform.position, cam.transform.forward));
             bool dof = focus.depthOfField && depthMode != 0;
             m.SetVector(s_FDof, new Vector4(dof ? 1f : 0f, focusDistance, focus.focusRange, focus.bokehSize * pixelScale));
@@ -459,10 +540,15 @@ namespace NataneToon
             cmd.Clear();
 
             // 一時テクスチャ (スロット 1 以降)
+            // 結果を destination へ直接描けるなら、最後のコピー 1 回を省く。
+            // destination が null (画面) のときは上下の向きを Unity に任せたいので、従来どおり Blit する。
+            bool direct = destination != null && m_Plan.resultSlot > 0 &&
+                          destination.width == width && destination.height == height;
             m_Temps.Clear();
             m_Temps.Add(source);
             for (int i = 1; i < m_Plan.slotCount; i++)
             {
+                if (direct && i == m_Plan.resultSlot) { m_Temps.Add(destination); continue; }
                 int div = m_Plan.GetDivisor(i);
                 RenderTexture rt = RenderTexture.GetTemporary(NatanePostFXPlan.Scaled(width, div), NatanePostFXPlan.Scaled(height, div), 0,
                     RenderTextureFormat.ARGBHalf, RenderTextureReadWrite.Linear);
@@ -496,9 +582,12 @@ namespace NataneToon
             }
 
             Graphics.ExecuteCommandBuffer(cmd);
-            Graphics.Blit(m_Temps[m_Plan.resultSlot], destination);
+            if (!direct) Graphics.Blit(m_Temps[m_Plan.resultSlot], destination);
 
-            for (int i = 1; i < m_Temps.Count; i++) RenderTexture.ReleaseTemporary(m_Temps[i]);
+            for (int i = 1; i < m_Temps.Count; i++)
+            {
+                if (m_Temps[i] != destination) RenderTexture.ReleaseTemporary(m_Temps[i]);
+            }
             m_Temps.Clear();
             if (maskRT != null) RenderTexture.ReleaseTemporary(maskRT);
         }

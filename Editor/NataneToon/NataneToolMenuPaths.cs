@@ -37,6 +37,7 @@ namespace NataneToon.Editor
         public const string RimLightDirectionVisualizer = "Tools/Natane/エフェクト Effects/リムライト方向ビジュアライザー Rim Light Direction Visualizer";
         public const string ScreenFXSetup = "Tools/Natane/エフェクト Effects/スクリーンエフェクト設定 Screen FX Setup";
         public const string PostFXSetup = "Tools/Natane/エフェクト Effects/ポストエフェクトをカメラに追加 Add Post FX to Camera";
+        public const string PostFXWorld = "Tools/Natane/エフェクト Effects/ワールド用ポストエフェクトを作成 Create World Post FX";
         public const string BlenderImport = "Tools/Natane/Blender/Blender から取り込む Import from Blender";
         public const string BlenderAutoImport = "Tools/Natane/Blender/書き出しファイルを自動で反映 Auto Apply Exports";
 

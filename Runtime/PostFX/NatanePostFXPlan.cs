@@ -17,6 +17,7 @@ namespace NataneToon
         public const int Dof = 8;
         public const int Final = 9;
         public const int Temporal = 10;
+        public const int DofPrep = 11;
     }
 
     /// <summary>
@@ -63,6 +64,8 @@ namespace NataneToon
         public int resultSlot { get; private set; }
         /// <summary>マスクを描く必要があるか。</summary>
         public bool needsMask { get; private set; }
+        /// <summary>仕上げのパスが中間テクスチャ (ブルーム・ぼかし・被写界深度など) を合成するか。</summary>
+        public bool needsComposite { get; private set; }
         /// <summary>履歴テクスチャ (残像) を使うか。</summary>
         public bool needsHistory { get; private set; }
         /// <summary>一時テクスチャの数 (スロット 1 から slotCount - 1)。</summary>
@@ -190,8 +193,11 @@ namespace NataneToon
 
             if (fx.focus.NeedsDof)
             {
+                // 半分の解像度に縮めつつ錯乱円を a に入れ、ボケのパスはその 1 枚だけを読む。
+                int prep = NewSlot(2);
+                Add(NatanePostFXPass.DofPrep, prep, cur);
                 dofSlot = NewSlot(2);
-                Add(NatanePostFXPass.Dof, dofSlot, cur);
+                Add(NatanePostFXPass.Dof, dofSlot, prep);
             }
 
             {
@@ -203,6 +209,7 @@ namespace NataneToon
                 if (blurSlot >= 0) s.Bind(NatanePostFXIds.BlurTex, blurSlot);
                 if (dofSlot >= 0) s.Bind(NatanePostFXIds.DofTex, dofSlot);
                 if (needsMask) s.Bind(NatanePostFXIds.MaskTex, SlotMask);
+                needsComposite = bloomSlot >= 0 || streakSlot >= 0 || shaftSlot >= 0 || blurSlot >= 0 || dofSlot >= 0;
                 cur = t;
             }
 

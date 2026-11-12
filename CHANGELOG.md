@@ -16,6 +16,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **キャラクターマスク**: 指定したオブジェクトだけを別パスで描き、背景だけをぼかす / 暗くする、縁取り、シルエット化ができる。
 - プリセット 23 種 (アニメ撮影、シネマティック、VHS、マンガ、クラブ / ライブ など)。値はすべて Timeline でアニメーションできる。
 - URP 14〜16、VR、シーンビューには非対応。詳細と入っていない効果は `Documentation~/POST_FX.md`。
+- **VRChat ワールド用**: 設定をシェーダーだけのマテリアルに書き出す `ワールド用ポストエフェクトを作成` を追加 (GrabPass 方式、Built-in RP)。
+  `Natane/PostFX World` ほか 2 種。効き・範囲・ミラー / カメラへの表示を Animator や Udon から操作できる。
+  ブルーム・被写界深度・マスク・残像など、中間バッファが要る効果は使えない。
+- **軽量化**: 使っていない効果をシェーダーキーワードで外すようにした (RenderDoc で計測。4K / RTX 5090 で、何も設定していない状態が
+  0.23 ms → 0.08 ms、被写界深度が 1.20 ms → 0.18 ms、油彩が 0.86 ms → 0.27 ms)。何も効いていないときはパスを実行しない。
 
 ### Added — Blender 連携
 - **Blender アドオン** `Blender~/natane_toon_preview` (Blender 4.2 LTS / 5.0、EEVEE): Natane Toon の基本的な陰影・スペキュラ・リム・

@@ -9,7 +9,24 @@
 
 #include "UnityCG.cginc"
 
+// 効果のまとまりごとのキーワード (NatanePostFXKeywords.cs が設定に合わせて切り替える)。
+// オフのまとまりはコンパイル時に消えるので、命令もテクスチャ読みも残らない。
+//   レンズ: NPFX_L_WARP / NPFX_L_GLITCH / NPFX_L_FRINGE / NPFX_L_BLUR
+//   画風  : NPFX_S_KUWAHARA / NPFX_S_EDGE / NPFX_S_PRINT
+//   仕上げ: NPFX_F_COMPOSITE / NPFX_F_MASK / NPFX_F_FOG / NPFX_F_GRADE / NPFX_F_OVERLAY / NPFX_F_RETRO
+// まとまりの中の個々の効果は値で分岐する。テクスチャを読む分岐には UNITY_BRANCH を付けること
+// (付けないと、コンパイラが「両方計算して選ぶ」形に直し、使っていなくても毎ピクセル読みに行く)。
+
+// NPFX_WORLD: VRChat ワールド用 (NatanePostFXWorld.hlsl)。C# が動かないので、入力は GrabPass、
+// 画面サイズと時間は Unity の組み込み値、時間で動く値はシェーダー内で作る。
+#ifdef NPFX_WORLD
+UNITY_DECLARE_SCREENSPACE_TEXTURE(_GrabTexture);
+// マテリアルの値 (name_Mat) を元に、フレームごとの値 (name) を NPFXWorldSetup() が作る。
+#define NPFX_DYN(name) float4 name##_Mat; static float4 name;
+#else
 sampler2D _NPFX_Source;
+#define NPFX_DYN(name) float4 name;
+#endif
 sampler2D _NPFX_Aux;
 sampler2D _NPFX_BloomTex;
 sampler2D _NPFX_BlurTex;
@@ -20,19 +37,32 @@ sampler2D _NPFX_MaskTex;
 sampler2D _NPFX_HistoryTex;
 sampler2D _NPFX_LutTex;
 sampler2D _NPFX_OverlayTex;
+#ifndef NPFX_WORLD
 UNITY_DECLARE_DEPTH_TEXTURE(_NPFX_DepthTex);
+#endif
 UNITY_DECLARE_DEPTH_TEXTURE(_CameraDepthTexture);
 
+#ifdef NPFX_WORLD
+#define _NPFX_SourceSize float4(1.0 / _ScreenParams.xy, _ScreenParams.xy)
+#define _NPFX_ScreenSize float4(1.0 / _ScreenParams.xy, _ScreenParams.xy)
+#define _NPFX_Time (_Time.y)
+static float _NPFX_DepthMode = 0.0;
+#else
 float4 _NPFX_SourceSize;   // xy = 1 / サイズ, zw = サイズ (このパスの入力)
 float4 _NPFX_ScreenSize;   // xy = 1 / サイズ, zw = サイズ (カメラの解像度)
-float4 _NPFX_StepParams;   // パスごとの値 (ぼかしの向きなど)
 float _NPFX_Time;
 float _NPFX_DepthMode;     // 0 = 深度なし, 1 = _CameraDepthTexture, 2 = _NPFX_DepthTex
+#endif
+float4 _NPFX_StepParams;   // パスごとの値 (ぼかしの向きなど)
 
 struct NPFXVaryings
 {
     float4 pos : SV_POSITION;
     float2 uv : TEXCOORD0;
+#ifdef NPFX_WORLD
+    float weight : TEXCOORD1;
+    UNITY_VERTEX_OUTPUT_STEREO
+#endif
 };
 
 // 画面を覆う三角形 1 枚。中間テクスチャ同士のコピーで上下が変わらない向きにしてある。
@@ -48,8 +78,19 @@ NPFXVaryings NPFXVert(uint vertexID : SV_VertexID)
     return o;
 }
 
-inline float3 NPFXSample(float2 uv) { return tex2Dlod(_NPFX_Source, float4(uv, 0, 0)).rgb; }
+#ifdef NPFX_WORLD
+inline float4 NPFXSample4(float2 uv)
+{
+#if defined(UNITY_STEREO_INSTANCING_ENABLED) || defined(UNITY_STEREO_MULTIVIEW_ENABLED)
+    return UNITY_SAMPLE_TEX2DARRAY_LOD(_GrabTexture, float3(uv, unity_StereoEyeIndex), 0);
+#else
+    return tex2Dlod(_GrabTexture, float4(uv, 0, 0));
+#endif
+}
+#else
 inline float4 NPFXSample4(float2 uv) { return tex2Dlod(_NPFX_Source, float4(uv, 0, 0)); }
+#endif
+inline float3 NPFXSample(float2 uv) { return NPFXSample4(uv).rgb; }
 inline float NPFXLuma(float3 c) { return dot(c, float3(0.2126, 0.7152, 0.0722)); }
 // 見た目の明るさ (網点や 2 値化のしきい値は、リニアの輝度のままだと暗い側に寄りすぎる)。
 inline float NPFXPerceptual(float l)
@@ -64,9 +105,13 @@ inline float NPFXPerceptual(float l)
 float NPFXEyeDepth(float2 uv)
 {
     if (_NPFX_DepthMode < 0.5) return 1000.0;
+#ifdef NPFX_WORLD
+    float raw = SAMPLE_DEPTH_TEXTURE_LOD(_CameraDepthTexture, float4(uv, 0, 0));
+#else
     float raw = _NPFX_DepthMode > 1.5
         ? SAMPLE_DEPTH_TEXTURE_LOD(_NPFX_DepthTex, float4(uv, 0, 0))
         : SAMPLE_DEPTH_TEXTURE_LOD(_CameraDepthTexture, float4(uv, 0, 0));
+#endif
     return LinearEyeDepth(raw);
 }
 
@@ -124,21 +169,22 @@ float4 NPFXFragCopy(NPFXVaryings i) : SV_Target
 // ============================================================================
 // 1: レンズ (UV を動かす効果と、色ずれ・方向ブラー)
 // ============================================================================
-float4 _L_Distort;     // x 歪曲, y 色収差, z RGB ずらし量, w RGB ずらし角度
-float4 _L_Xform;       // x ズーム, y 回転, zw オフセット
+NPFX_DYN(_L_Distort)     // x 歪曲, y 色収差, z RGB ずらし量, w RGB ずらし角度
+NPFX_DYN(_L_Xform)       // x ズーム, y 回転, zw オフセット
 float4 _L_RadialBlur;  // x 放射ブラー, yz 中心, w 方向ブラー
 float4 _L_Mirror;      // x ミラー (0 なし 1 左右 2 上下 3 四分割), y 万華鏡の分割数, z 万華鏡の回転, w タイル X
-float4 _L_Wave;        // x 波の振幅, y 波の周波数, z 波の位相, w 陽炎
+NPFX_DYN(_L_Wave)        // x 波の振幅, y 波の周波数, z 波の位相, w 陽炎
 float4 _L_Ripple;      // xy 中心, z 半径, w 強さ
 float4 _L_Glitch;      // x ブロックずれ, y ブロック数, z 走査線ずれ, w 縦ジャンプ
-float4 _L_Glitch2;     // x 色ずれノイズ, y シード, z VHS のうねり, w ブラウン管の湾曲
-float4 _L_Misc;        // x 方向ブラー角度, y タイル Y, z 波紋の幅, w モザイクのピクセル数
+NPFX_DYN(_L_Glitch2)     // x 色ずれノイズ, y シード, z VHS のうねり, w ブラウン管の湾曲
+NPFX_DYN(_L_Misc)        // x 方向ブラー角度, y タイル Y, z 波紋の幅, w モザイクのピクセル数
 
 float2 NPFXLensUV(float2 uv, out float outside)
 {
     outside = 0.0;
     float aspect = _NPFX_ScreenSize.z * _NPFX_ScreenSize.y;
 
+#ifdef NPFX_L_WARP
     // ブラウン管の湾曲。はみ出した所は黒。
     if (_L_Glitch2.w > 0.0001)
     {
@@ -148,6 +194,7 @@ float2 NPFXLensUV(float2 uv, out float outside)
         uv = c * 0.5 + 0.5;
         outside = step(1.0, max(abs(c.x), abs(c.y)));
     }
+#endif
 
     // ズーム・回転・平行移動 (画面中心が基準)
     float2 p = uv - 0.5;
@@ -156,6 +203,7 @@ float2 NPFXLensUV(float2 uv, out float outside)
     p.x /= aspect;
     uv = p + 0.5 + _L_Xform.zw;
 
+#ifdef NPFX_L_WARP
     // タイル
     if (_L_Mirror.w > 1.0 || _L_Misc.y > 1.0)
         uv = frac(uv * float2(max(_L_Mirror.w, 1.0), max(_L_Misc.y, 1.0)));
@@ -219,7 +267,9 @@ float2 NPFXLensUV(float2 uv, out float outside)
         dir.x /= aspect;
         uv -= dir * band * _L_Ripple.w * 0.1;
     }
+#endif
 
+#ifdef NPFX_L_GLITCH
     // グリッチ
     float seed = _L_Glitch2.y;
     if (_L_Glitch.x > 0.0001)
@@ -248,18 +298,22 @@ float2 NPFXLensUV(float2 uv, out float outside)
         float band = smoothstep(0.0, 0.06, abs(frac(uv.y - _NPFX_Time * 0.15) - 0.5) - 0.44);
         uv.x += (wob + band * 0.03) * _L_Glitch2.z;
     }
+#endif
 
+#ifdef NPFX_L_WARP
     // モザイク
     if (_L_Misc.w > 1.0)
     {
         float2 cells = _NPFX_ScreenSize.zw / _L_Misc.w;
         uv = (floor(uv * cells) + 0.5) / cells;
     }
+#endif
     return uv;
 }
 
 float3 NPFXLensTap(float2 uv, float2 center)
 {
+#ifdef NPFX_L_FRINGE
     float2 fromCenter = uv - center;
     float2 ca = fromCenter * dot(fromCenter, fromCenter) * _L_Distort.y * 0.5;
     float2 shift = float2(cos(_L_Distort.w), sin(_L_Distort.w)) * _L_Distort.z * 0.02;
@@ -270,12 +324,16 @@ float3 NPFXLensTap(float2 uv, float2 center)
     }
     float2 off = ca + shift;
     float3 c = NPFXSample(uv);
+    UNITY_BRANCH
     if (dot(off, off) >= 1e-10)
     {
         c.r = NPFXSample(uv + off).r;
         c.b = NPFXSample(uv - off).b;
     }
     return c;
+#else
+    return NPFXSample(uv);
+#endif
 }
 
 float4 NPFXFragLens(NPFXVaryings i) : SV_Target
@@ -285,6 +343,7 @@ float4 NPFXFragLens(NPFXVaryings i) : SV_Target
     float2 center = float2(0.5, 0.5);
     float3 col;
 
+#ifdef NPFX_L_BLUR
     bool radial = _L_RadialBlur.x > 0.0001;
     bool directional = _L_RadialBlur.w > 0.0001;
     if (radial || directional)
@@ -306,6 +365,9 @@ float4 NPFXFragLens(NPFXVaryings i) : SV_Target
     {
         col = NPFXLensTap(uv, center);
     }
+#else
+    col = NPFXLensTap(uv, center);
+#endif
     return float4(col * (1.0 - outside), 1.0);
 }
 
@@ -313,12 +375,18 @@ float4 NPFXFragLens(NPFXVaryings i) : SV_Target
 // 2: 画風 (近傍を読むフィルター)
 // ============================================================================
 float4 _S_Kuwahara;   // x 桑原フィルターの半径, y ポスタライズ段数, z シャープ, w レトロ減色のビット数
-float4 _S_Edge;       // x 輪郭線の強さ, y 太さ, z 深度の感度, w 色の感度
+NPFX_DYN(_S_Edge)       // x 輪郭線の強さ, y 太さ, z 深度の感度, w 色の感度
 float4 _S_EdgeColor;
 float4 _S_Paper;      // rgb 紙の色, a 線画化の度合い
-float4 _S_Halftone;   // x 網点の強さ, y 網点の大きさ, z 角度, w クロスハッチ
+NPFX_DYN(_S_Halftone)   // x 網点の強さ, y 網点の大きさ, z 角度, w クロスハッチ
 float4 _S_Extra;      // x ディザの粗さ, y 網点をカラーにする, z エンボス, w 未使用
 
+// 桑原フィルター: 4 つの象限 (それぞれ (r+1) x (r+1) テクセル) の平均と分散を取り、
+// 分散が一番小さい象限の平均を返す。
+// バイリニアの 1 タップで 2x2 テクセルをまとめて読む (半径 5 で 144 回 → 36 回)。
+// 平均は 1 テクセルずつ読んだ場合と同じ。分散は 2x2 の平均同士で比べるぶん少し小さく出るが、
+// 4 象限とも同じ条件なので、選ばれる象限はほぼ変わらない。
+#ifdef NPFX_S_KUWAHARA
 float3 NPFXKuwahara(float2 uv, float radius)
 {
     float2 texel = _NPFX_SourceSize.xy;
@@ -327,22 +395,29 @@ float3 NPFXKuwahara(float2 uv, float radius)
     int q;
     for (q = 0; q < 4; q++) { mean[q] = 0; sq[q] = 0; }
     int r = (int)clamp(radius, 1.0, 5.0);
-    float n = (float)((r + 1) * (r + 1));
-    for (int y = 0; y <= 5; y++)
+    int side = r + 1;                 // 1 象限の一辺 (テクセル数)
+    bool odd = (side & 1) != 0;       // 奇数のときは、中心の行・列だけ 1 テクセルで読む
+    int taps = (side + 1) / 2;
+    float n = (float)(side * side);
+    for (int y = 0; y < 3; y++)
     {
-        if (y > r) break;
-        for (int x = 0; x <= 5; x++)
+        if (y >= taps) break;
+        float oy = odd ? (y == 0 ? 0.0 : 2.0 * y - 0.5) : 2.0 * y + 0.5;
+        float wy = (odd && y == 0) ? 1.0 : 2.0;
+        for (int x = 0; x < 3; x++)
         {
-            if (x > r) break;
-            float2 o = float2(x, y) * texel;
+            if (x >= taps) break;
+            float ox = odd ? (x == 0 ? 0.0 : 2.0 * x - 0.5) : 2.0 * x + 0.5;
+            float w = wy * ((odd && x == 0) ? 1.0 : 2.0);
+            float2 o = float2(ox, oy) * texel;
             float3 c0 = NPFXSample(uv + float2(-o.x, -o.y));
             float3 c1 = NPFXSample(uv + float2(o.x, -o.y));
             float3 c2 = NPFXSample(uv + float2(-o.x, o.y));
             float3 c3 = NPFXSample(uv + float2(o.x, o.y));
-            mean[0] += c0; sq[0] += c0 * c0;
-            mean[1] += c1; sq[1] += c1 * c1;
-            mean[2] += c2; sq[2] += c2 * c2;
-            mean[3] += c3; sq[3] += c3 * c3;
+            mean[0] += c0 * w; sq[0] += c0 * c0 * w;
+            mean[1] += c1 * w; sq[1] += c1 * c1 * w;
+            mean[2] += c2 * w; sq[2] += c2 * c2 * w;
+            mean[3] += c3 * w; sq[3] += c3 * c3 * w;
         }
     }
     float best = 1e10;
@@ -356,6 +431,7 @@ float3 NPFXKuwahara(float2 uv, float radius)
     }
     return result;
 }
+#endif
 
 float NPFXBayer4(float2 pixel)
 {
@@ -377,9 +453,17 @@ float4 NPFXFragStyle(NPFXVaryings i) : SV_Target
 {
     float2 uv = i.uv;
     float2 texel = _NPFX_SourceSize.xy;
-    float3 col = _S_Kuwahara.x >= 1.0 ? NPFXKuwahara(uv, _S_Kuwahara.x) : NPFXSample(uv);
+    float3 col;
+#ifdef NPFX_S_KUWAHARA
+    UNITY_BRANCH
+    if (_S_Kuwahara.x >= 1.0) col = NPFXKuwahara(uv, _S_Kuwahara.x);
+    else col = NPFXSample(uv);
+#else
+    col = NPFXSample(uv);
+#endif
 
     // シャープ (アンシャープマスク)
+    UNITY_BRANCH
     if (_S_Kuwahara.z > 0.0001)
     {
         float3 blur = (NPFXSample(uv + float2(texel.x, 0)) + NPFXSample(uv - float2(texel.x, 0))
@@ -388,6 +472,7 @@ float4 NPFXFragStyle(NPFXVaryings i) : SV_Target
     }
 
     // エンボス
+    UNITY_BRANCH
     if (_S_Extra.z > 0.0001)
     {
         float e = NPFXLuma(NPFXSample(uv + texel)) - NPFXLuma(NPFXSample(uv - texel));
@@ -401,6 +486,7 @@ float4 NPFXFragStyle(NPFXVaryings i) : SV_Target
         col = floor(saturate(col) * levels + 0.5) / levels;
     }
 
+#ifdef NPFX_S_PRINT
     // 網点
     if (_S_Halftone.x > 0.0001)
     {
@@ -440,12 +526,16 @@ float4 NPFXFragStyle(NPFXVaryings i) : SV_Target
         if (lum < 0.25) hatch = min(hatch, smoothstep(0.1, 0.3, l3));
         col = lerp(col, lerp(_S_EdgeColor.rgb, _S_Paper.rgb, hatch), _S_Halftone.w);
     }
+#endif
 
     // 輪郭線 (深度と色の Sobel)
+#ifdef NPFX_S_EDGE
+    UNITY_BRANCH
     if (_S_Edge.x > 0.0001)
     {
         float2 o = texel * max(_S_Edge.y, 0.5);
         float edge = 0.0;
+        UNITY_BRANCH
         if (_S_Edge.w > 0.0001)
         {
             float tl = NPFXLuma(NPFXSample(uv + float2(-o.x, o.y)));
@@ -460,6 +550,7 @@ float4 NPFXFragStyle(NPFXVaryings i) : SV_Target
             float gy = (tl + 2.0 * t + tr) - (bl + 2.0 * b + br);
             edge = max(edge, saturate(sqrt(gx * gx + gy * gy) * _S_Edge.w * 2.0 - 0.2));
         }
+        UNITY_BRANCH
         if (_S_Edge.z > 0.0001 && _NPFX_DepthMode > 0.5)
         {
             float d = NPFXEyeDepth(uv);
@@ -473,11 +564,14 @@ float4 NPFXFragStyle(NPFXVaryings i) : SV_Target
         float3 base = lerp(col, _S_Paper.rgb, _S_Paper.a);
         col = lerp(base, _S_EdgeColor.rgb, saturate(edge * _S_Edge.x));
     }
-    else if (_S_Paper.a > 0.0001 && _S_Halftone.x < 0.0001 && _S_Halftone.w < 0.0001)
+    else
+#endif
+    if (_S_Paper.a > 0.0001 && _S_Halftone.x < 0.0001 && _S_Halftone.w < 0.0001)
     {
         col = lerp(col, _S_Paper.rgb, _S_Paper.a);
     }
 
+#ifdef NPFX_S_PRINT
     // レトロ減色 (ベイヤーディザ)
     if (_S_Kuwahara.w > 0.5)
     {
@@ -486,6 +580,7 @@ float4 NPFXFragStyle(NPFXVaryings i) : SV_Target
         float threshold = NPFXBayer4(floor(uv * _NPFX_ScreenSize.zw / scale)) - 0.5;
         col = floor(saturate(col) * levels + threshold + 0.5) / levels;
     }
+#endif
     return float4(col, 1.0);
 }
 
@@ -591,12 +686,22 @@ float NPFXCoc(float2 uv)
     return coc;
 }
 
+// 11: 被写界深度の下ごしらえ。半分の解像度に縮めながら、a に錯乱円の大きさを入れる。
+// ボケのパスは 1 タップにつきこの 1 枚を読むだけで済む (以前は元の解像度の色 + 深度を毎タップ読んでいた)。
+float4 NPFXFragDofPrep(NPFXVaryings i) : SV_Target
+{
+    return float4(NPFXSample(i.uv), NPFXCoc(i.uv));
+}
+
+// 入力は NPFXFragDofPrep の出力 (rgb 色, a 錯乱円)。
 float4 NPFXFragDof(NPFXVaryings i) : SV_Target
 {
-    float coc = NPFXCoc(i.uv);
+    float4 center = NPFXSample4(i.uv);
+    float coc = center.a;
     float radius = coc * _F_Dof.w;
-    float3 sum = NPFXSample(i.uv);
+    float3 sum = center.rgb;
     float total = 1.0;
+    UNITY_BRANCH
     if (radius > 0.5)
     {
         const int kTaps = 28;
@@ -607,12 +712,12 @@ float4 NPFXFragDof(NPFXVaryings i) : SV_Target
             float r = sqrt((k + 0.5) / kTaps);
             float a = k * golden + jitter;
             float2 uv = i.uv + float2(cos(a), sin(a)) * r * radius * _NPFX_ScreenSize.xy;
+            float4 c = NPFXSample4(uv);
             // 手前のピントが合った物体がボケに滲まないよう、ピントの合ったタップは重みを落とす。
-            float w = lerp(0.1, 1.0, NPFXCoc(uv));
-            float3 c = NPFXSample(uv);
+            float w = lerp(0.1, 1.0, c.a);
             // 明るい点を強めて玉ボケを出す。
-            w *= 1.0 + NPFXLuma(c) * 2.0;
-            sum += c * w;
+            w *= 1.0 + NPFXLuma(c.rgb) * 2.0;
+            sum += c.rgb * w;
             total += w;
         }
     }
@@ -651,15 +756,15 @@ float4 _F_GradTop;
 float4 _F_GradBottom;
 float4 _F_LeakColor;
 float4 _F_OverlayTexParams; // x テクスチャの強さ, y 合成, zw スクロール
-float4 _F_Flash;        // rgb 色, a 強さ
+NPFX_DYN(_F_Flash)        // rgb 色, a 強さ
 float4 _F_Fade;         // rgb 色, a 強さ
 float4 _F_Vignette;     // x 強さ, y なめらかさ, z 丸さ
 float4 _F_VignetteColor;
-float4 _F_Lines;        // x 集中線の強さ, y 本数, z 内側の半径, w シード
+NPFX_DYN(_F_Lines)        // x 集中線の強さ, y 本数, z 内側の半径, w シード
 float4 _F_LinesColor;
 float4 _F_Center;       // xy 集中線・光芒の中心
-float4 _F_Crt;          // x 走査線, y 走査線の本数, z 走査線の位相, w RGB マスク
-float4 _F_Film;         // x 粒子, y 粒子の大きさ, z 縦傷, w ちらつき
+NPFX_DYN(_F_Crt)          // x 走査線, y 走査線の本数, z 走査線の位相, w RGB マスク
+NPFX_DYN(_F_Film)         // x 粒子, y 粒子の大きさ, z 縦傷, w ちらつき
 float4 _F_Film2;        // x ほこり, y レターボックスの縦横比, z 枠の丸み (未使用), w ノイズ (砂嵐)
 
 float3 NPFXBlend(float3 base, float3 over, float amount, float mode)
@@ -727,9 +832,13 @@ float4 NPFXFragFinal(NPFXVaryings i) : SV_Target
     float2 uv = i.uv;
     float aspect = _NPFX_ScreenSize.z * _NPFX_ScreenSize.y;
     float3 col = NPFXSample(uv);
+#if defined(NPFX_F_COMPOSITE) || defined(NPFX_F_MASK)
     float3 blurred = tex2Dlod(_NPFX_BlurTex, float4(uv, 0, 0)).rgb;
+#endif
 
+#ifdef NPFX_F_COMPOSITE
     // 被写界深度・チルトシフト
+    UNITY_BRANCH
     if (_F_Dof.x > 0.5 || _F_Tilt.x > 0.0001)
     {
         float4 dof = tex2Dlod(_NPFX_DofTex, float4(uv, 0, 0));
@@ -737,8 +846,11 @@ float4 NPFXFragFinal(NPFXVaryings i) : SV_Target
     }
     // 画面全体のぼかし
     col = lerp(col, blurred, saturate(_F_Tilt.w));
+#endif
 
+#ifdef NPFX_F_MASK
     // キャラクターマスク (指定したオブジェクトだけ / それ以外だけに効かせる)
+    UNITY_BRANCH
     if (_F_Mask2.z > 0.5)
     {
         float sceneDepth = NPFXEyeDepth(uv);
@@ -751,6 +863,7 @@ float4 NPFXFragFinal(NPFXVaryings i) : SV_Target
         col *= 1.0 - bg * saturate(_F_Mask.y);
         col = lerp(col, _F_MaskFillColor.rgb, inside * _F_Mask2.y * _F_MaskFillColor.a);
 
+        UNITY_BRANCH
         if (_F_Mask2.x > 0.0001 && _F_Mask.w > 0.01)
         {
             // マスクを周囲 8 + 8 方向に広げ、マスクの外側だけに縁を描く。
@@ -769,8 +882,11 @@ float4 NPFXFragFinal(NPFXVaryings i) : SV_Target
             col = lerp(col, _F_MaskOutlineColor.rgb, saturate(rim * _F_Mask2.x) * _F_MaskOutlineColor.a);
         }
     }
+#endif
 
+#ifdef NPFX_F_FOG
     // 距離フォグ
+    UNITY_BRANCH
     if (_F_Fog.x > 0.00001 && _NPFX_DepthMode > 0.5)
     {
         float depth = NPFXEyeDepth(uv);
@@ -779,11 +895,16 @@ float4 NPFXFragFinal(NPFXVaryings i) : SV_Target
         f *= lerp(1.0 - sky, 1.0, _F_Fog.z);
         col = lerp(col, _F_FogColor.rgb, saturate(f) * _F_FogColor.a);
     }
+#endif
 
+#ifdef NPFX_F_COMPOSITE
     // 光の足し込み
-    col += tex2Dlod(_NPFX_BloomTex, float4(uv, 0, 0)).rgb * _F_Bloom.x * _F_BloomTint.rgb;
-    col += tex2Dlod(_NPFX_StreakTex, float4(uv, 0, 0)).rgb * _F_Bloom.y * _F_StreakTint.rgb;
-    col += tex2Dlod(_NPFX_ShaftTex, float4(uv, 0, 0)).rgb * _F_Bloom.z * _F_ShaftTint.rgb;
+    UNITY_BRANCH
+    if (_F_Bloom.x > 0.00001) col += tex2Dlod(_NPFX_BloomTex, float4(uv, 0, 0)).rgb * _F_Bloom.x * _F_BloomTint.rgb;
+    UNITY_BRANCH
+    if (_F_Bloom.y > 0.00001) col += tex2Dlod(_NPFX_StreakTex, float4(uv, 0, 0)).rgb * _F_Bloom.y * _F_StreakTint.rgb;
+    UNITY_BRANCH
+    if (_F_Bloom.z > 0.00001) col += tex2Dlod(_NPFX_ShaftTex, float4(uv, 0, 0)).rgb * _F_Bloom.z * _F_ShaftTint.rgb;
 
     // ディフュージョン (ぼかした絵をスクリーンで重ねる、アニメ撮影の定番)
     if (_F_Bloom.w > 0.0001)
@@ -792,7 +913,9 @@ float4 NPFXFragFinal(NPFXVaryings i) : SV_Target
         float3 screen = 1.0 - (1.0 - saturate(col)) * (1.0 - soft * soft);
         col = lerp(col, max(col, screen), _F_Bloom.w);
     }
+#endif
 
+#ifdef NPFX_F_GRADE
     // ---- カラーグレーディング ----
     col *= _F_Grade.x;
     col *= float3(1.0 + _F_Grade2.x * 0.2, 1.0 - _F_Grade2.y * 0.1, 1.0 - _F_Grade2.x * 0.2)
@@ -827,6 +950,7 @@ float4 NPFXFragFinal(NPFXVaryings i) : SV_Target
     }
     col = max(col, 0.0);
 
+    UNITY_BRANCH
     if (_F_Lut.x > 0.0001)
         col = lerp(col, NPFXApplyLut(col, max(_F_Lut.y, 2.0)), _F_Lut.x);
 
@@ -853,7 +977,9 @@ float4 NPFXFragFinal(NPFXVaryings i) : SV_Target
         col = lerp(col, float3(0.1, 1.0, 0.2) * (nv + (n - 0.5) * 0.15), _F_Filter2.z);
     }
     if (_F_Filter2.w > 0.0001) col = lerp(col, NPFXThermal(NPFXLuma(col)), _F_Filter2.w);
+#endif
 
+#ifdef NPFX_F_OVERLAY
     // ---- 重ねもの ----
     if (_F_Overlay.a > 0.0001) col = NPFXBlend(col, _F_Overlay.rgb, _F_Overlay.a, _F_Overlay2.x);
     if (_F_Overlay2.y > 0.0001)
@@ -862,6 +988,7 @@ float4 NPFXFragFinal(NPFXVaryings i) : SV_Target
         float t = saturate(dot(uv - 0.5, dir) + 0.5);
         col = NPFXBlend(col, lerp(_F_GradBottom.rgb, _F_GradTop.rgb, t), _F_Overlay2.y, _F_Overlay2.x);
     }
+    UNITY_BRANCH
     if (_F_OverlayTexParams.x > 0.0001)
     {
         float4 tex = tex2Dlod(_NPFX_OverlayTex, float4(uv + _F_OverlayTexParams.zw * _NPFX_Time, 0, 0));
@@ -902,7 +1029,9 @@ float4 NPFXFragFinal(NPFXVaryings i) : SV_Target
         float v = pow(saturate(1.0 - dot(d, d) * _F_Vignette.x * 0.5), 1.0 / max(_F_Vignette.y, 0.01) * 0.5 + 0.5);
         col = lerp(_F_VignetteColor.rgb, col, lerp(1.0, v, _F_VignetteColor.a));
     }
+#endif
 
+#ifdef NPFX_F_RETRO
     // 走査線・RGB マスク
     float2 pixel = uv * _NPFX_ScreenSize.zw;
     if (_F_Crt.x > 0.0001)
@@ -950,17 +1079,20 @@ float4 NPFXFragFinal(NPFXVaryings i) : SV_Target
         float n = NPFXHash(floor(pixel * 0.5) + frac(_NPFX_Time * 3.7) * 200.0);
         col = lerp(col, n.xxx, _F_Film2.w);
     }
+#endif
 
     // フラッシュ・フェード
     col = lerp(col, col + _F_Flash.rgb, _F_Flash.a);
     col = lerp(col, _F_Fade.rgb, _F_Fade.a);
 
+#ifdef NPFX_F_OVERLAY
     // レターボックス
     if (_F_Film2.y > 0.01)
     {
         if (_F_Film2.y > aspect) col *= step(abs(uv.y - 0.5) * 2.0, aspect / _F_Film2.y);
         else col *= step(abs(uv.x - 0.5) * 2.0, _F_Film2.y / aspect);
     }
+#endif
     return float4(max(col, 0.0), 1.0);
 }
 

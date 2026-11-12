@@ -226,7 +226,7 @@ namespace NataneToon
                             data.count++;
                             builder.UseTexture(tex, AccessFlags.Read);
                         }
-                        if (hasDepth && (step.pass == NatanePostFXPass.Style || step.pass == NatanePostFXPass.Dof || step.pass == NatanePostFXPass.Final))
+                        if (hasDepth && (step.pass == NatanePostFXPass.Style || step.pass == NatanePostFXPass.DofPrep || step.pass == NatanePostFXPass.Final))
                         {
                             data.ids[data.count] = NatanePostFXIds.DepthTex;
                             data.textures[data.count] = depth;
