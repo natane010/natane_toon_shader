@@ -142,7 +142,7 @@ namespace NataneToon.Editor
         }
 
         /// <summary>いまの Quality で使われている URP Asset の既定の Renderer を返す。</summary>
-        static ScriptableRendererData FindActiveRendererData(out string problem)
+        internal static ScriptableRendererData FindActiveRendererData(out string problem)
         {
             problem = null;
             var asset = GraphicsSettings.currentRenderPipeline as UniversalRenderPipelineAsset;
