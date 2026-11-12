@@ -8,7 +8,7 @@
 (function () {
   'use strict';
 
-  var VERSION = 'v1.8.0';
+  var VERSION = 'v1.8.5';
 
   /* Feature preview images (optional): drop a screenshot at
      assets/previews/<preview>.jpg and it replaces the styled placeholder
@@ -50,6 +50,13 @@
       }
     ],
     updates: [
+      { title: { ja: 'Natane Post FX（ポストエフェクト）', en: 'Natane Post FX' }, status: 'NEW' },
+      { title: { ja: 'Unity 6 の URP 対応', en: 'Unity 6 URP Support' }, status: 'NEW' },
+      { title: { ja: 'Blender 連携アドオン', en: 'Blender Add-on' }, status: 'NEW' },
+      { title: { ja: 'VRChat ワールド用シェーダー', en: 'VRChat World Shaders' }, status: 'NEW' },
+      { title: { ja: '使っていない追加表現を省いて軽量化', en: 'Skip Unused Extras to Render Faster' }, status: 'NEW' },
+      { title: { ja: 'ステッカー風の縁取り', en: 'Sticker Outline' }, status: 'NEW' },
+      { title: { ja: '見やすくなったインスペクター', en: 'Clearer Inspector' }, status: 'UPDATE' },
       { title: { ja: 'lilToon からワンクリック移行', en: 'One-click Migration from lilToon' }, status: 'NEW' },
       { title: { ja: '「効果を試す」ウィンドウ', en: 'Try Effects Window' }, status: 'NEW' },
       { title: { ja: '幅を変えても崩れないインスペクター', en: 'Inspector That Survives Resizing' }, status: 'UPDATE' },

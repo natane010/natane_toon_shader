@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.8.5] - 2026-11-12
+
 ### Added — Natane Post FX (MV・動画制作向けのポストエフェクト)
 - カメラに付ける **Natane Post FX** コンポーネント。Built-in RP (`OnRenderImage`) と Unity 6 の URP (RenderGraph の Renderer Feature) で
   同じ設定・同じシェーダーが動く。`Tools > Natane > エフェクト Effects > ポストエフェクトをカメラに追加`。
