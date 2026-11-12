@@ -22,6 +22,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **軽量化**: 使っていない効果をシェーダーキーワードで外すようにした (RenderDoc で計測。4K / RTX 5090 で、何も設定していない状態が
   0.23 ms → 0.08 ms、被写界深度が 1.20 ms → 0.18 ms、油彩が 0.86 ms → 0.27 ms)。何も効いていないときはパスを実行しない。
 
+### Changed — 本体シェーダーの陰影計算
+- トゥーン / グラデーションの両方を計算して選んでいた箇所を、使うモードだけ計算するようにした。最終カラーブレンド (ハイライト / シャドウ) も
+  オフのときは実分岐で飛ばす。描画結果は変更前と完全に一致 (30 通りで比較)。RenderDoc での計測では 4K 全画面で約 2% の短縮にとどまる。
+
 ### Added — Blender 連携
 - **Blender アドオン** `Blender~/natane_toon_preview` (Blender 4.2 LTS / 5.0、EEVEE): Natane Toon の基本的な陰影・スペキュラ・リム・
   MatCap・発光・アウトラインをプレビューし、Unity の `.mat` を読み込める。再現できる範囲はアドオンの README に記載。

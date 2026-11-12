@@ -319,13 +319,13 @@ half3 SmoothShoulderToneMapping(half3 color, half shoulderStrength)
 // Smooths bright areas to prevent harsh white spots
 half3 ApplyFinalHighlightBlend(half3 color, half blendAmount, half threshold)
 {
-    if (blendAmount < 0.001) return color;
-
     // Calculate luminance (optimized)
     half luminance = CALC_LUMINANCE(color);
 
-    // Only process highlights above threshold
-    if (luminance > threshold)
+    // Only process highlights above threshold. blendAmount is a material constant: the
+    // real branch skips the whole block when the feature is off (it used to be flattened).
+    UNITY_BRANCH
+    if (blendAmount >= 0.001 && luminance > threshold)
     {
         // Calculate how much above threshold (protected against division by zero)
         // Formula: (luminance - threshold) / (1.0 - threshold)
@@ -349,13 +349,12 @@ half3 ApplyFinalHighlightBlend(half3 color, half blendAmount, half threshold)
 // Smooths dark areas to prevent harsh black spots
 half3 ApplyFinalShadowBlend(half3 color, half blendAmount, half threshold)
 {
-    if (blendAmount < 0.001) return color;
-
     // Calculate luminance (optimized)
     half luminance = CALC_LUMINANCE(color);
 
-    // Only process shadows below threshold
-    if (luminance < threshold)
+    // Only process shadows below threshold (real branch, see ApplyFinalHighlightBlend).
+    UNITY_BRANCH
+    if (blendAmount >= 0.001 && luminance < threshold)
     {
         // Calculate how much below threshold
         // Formula: (threshold - luminance) / threshold
