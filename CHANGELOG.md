@@ -7,6 +7,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added — Natane Post FX (MV・動画制作向けのポストエフェクト)
+- カメラに付ける **Natane Post FX** コンポーネント。Built-in RP (`OnRenderImage`) と Unity 6 の URP (RenderGraph の Renderer Feature) で
+  同じ設定・同じシェーダーが動く。`Tools > Natane > エフェクト Effects > ポストエフェクトをカメラに追加`。
+- レンズ変形 (歪曲・色収差・放射ブラー・万華鏡・波紋など)、グリッチ、画風 (油彩・輪郭線・網点・クロスハッチ・減色)、
+  光 (ブルーム・光条・光芒・ディフュージョン)、被写界深度・チルトシフト、色 (グレーディング・LUT・トーンマップ・各種フィルター)、
+  重ね (ビネット・集中線・光漏れ・フラッシュ・レターボックス)、レトロ (走査線・フィルム粒子)、残像・コマ落ち、BPM 連動。
+- **キャラクターマスク**: 指定したオブジェクトだけを別パスで描き、背景だけをぼかす / 暗くする、縁取り、シルエット化ができる。
+- プリセット 23 種 (アニメ撮影、シネマティック、VHS、マンガ、クラブ / ライブ など)。値はすべて Timeline でアニメーションできる。
+- URP 14〜16、VR、シーンビューには非対応。詳細と入っていない効果は `Documentation~/POST_FX.md`。
+
+### Added — Blender 連携
+- **Blender アドオン** `Blender~/natane_toon_preview` (Blender 4.2 LTS / 5.0、EEVEE): Natane Toon の基本的な陰影・スペキュラ・リム・
+  MatCap・発光・アウトラインをプレビューし、Unity の `.mat` を読み込める。再現できる範囲はアドオンの README に記載。
+- **Unity 向けの書き出し** (アドオン) と **取り込み** (`Tools > Natane > Blender`): `Name.fbx` + `Name.natanetoon.json` + `textures/` を
+  Assets に入れると、Natane Toon のマテリアルをパラメーターごと作成・更新して FBX に割り当てる。詳細は `Documentation~/BLENDER.md`。
+
 ### Changed — lilToon からの移行を無調整で近づける
 - 移行ツールが、Natane の既存パラメーターを lilToon と同じ結果になる値に設定するようになった (`LilToonLookMatcher`)。
   陰影の境界・ぼかし・影色・ライトの上下限・MatCap / リム / 発光 / スペキュラの強さを式から求める。

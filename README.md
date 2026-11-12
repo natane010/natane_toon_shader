@@ -326,6 +326,8 @@ VRChat運用を意識した機能（AudioLink、VRC Light Volumes、LTCGI、最�
 - ScreenFX詳細: `Shaders/NataneToon/Effects/NataneScreenFX_README.md`
 - ランプテクスチャ: `Documentation~/RAMP_TEXTURE_GUIDE.md`
 - パーティクル: `Documentation~/PARTICLE_SYSTEM_GUIDE.md`
+- ポストエフェクト (MV・動画制作向け、Built-in RP / URP): `Documentation~/POST_FX.md`
+- Blender 連携 (プレビュー用アドオン、書き出しと取り込み): `Documentation~/BLENDER.md`
 - コントリビュート: `Documentation~/CONTRIBUTING.md`
 
 ## ライセンス
