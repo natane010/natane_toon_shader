@@ -1,5 +1,6 @@
 using UnityEngine;
 using UnityEditor;
+using System.Collections.Generic;
 using NataneToon.MaterialSystem;
 
 namespace NataneToon.Editor
@@ -72,7 +73,60 @@ namespace NataneToon.Editor
                 content = new GUIContent(label, tooltip ?? "");
             }
 
-            editor.ShaderProperty(prop, content);
+            ShaderPropertyNoHeader(editor, prop, content);
+        }
+
+        // シェーダーの [Header(...)] は既定インスペクター向けの英語見出し。専用インスペクターでは
+        // セクション名と小見出しを自前で（日本語で）出しているので、重複して表示しない。
+        private static readonly Dictionary<Shader, HashSet<string>> HeaderOnlyCache =
+            new Dictionary<Shader, HashSet<string>>();
+
+        /// <summary>[Header] / [Space] 以外の属性（[Toggle] などのドロワー）を持たない、見出し付きプロパティか。</summary>
+        private static bool IsHeaderOnlyProperty(Shader shader, string propertyName)
+        {
+            if (shader == null || string.IsNullOrEmpty(propertyName)) return false;
+            if (!HeaderOnlyCache.TryGetValue(shader, out HashSet<string> names))
+            {
+                names = new HashSet<string>();
+                int propertyCount = shader.GetPropertyCount();
+                for (int i = 0; i < propertyCount; i++)
+                {
+                    string[] attributes = shader.GetPropertyAttributes(i);
+                    if (attributes == null || attributes.Length == 0) continue;
+                    bool hasHeader = false, hasOther = false;
+                    foreach (string attribute in attributes)
+                    {
+                        if (string.IsNullOrEmpty(attribute)) continue;
+                        if (attribute.StartsWith("Header(")) hasHeader = true;
+                        else if (!attribute.StartsWith("Space")) hasOther = true;
+                    }
+                    if (hasHeader && !hasOther) names.Add(shader.GetPropertyName(i));
+                }
+                HeaderOnlyCache[shader] = names;
+            }
+            return names.Contains(propertyName);
+        }
+
+        /// <summary>
+        /// MaterialEditor.ShaderProperty と同じだが、シェーダーの [Header(...)] 見出しを描かない。
+        /// 見出しと一緒に [Toggle] などのドロワーが付くプロパティは、ドロワーを優先してそのまま描く。
+        /// </summary>
+        public static void ShaderPropertyNoHeader(MaterialEditor editor, MaterialProperty prop, string label)
+        {
+            ShaderPropertyNoHeader(editor, prop, new GUIContent(label));
+        }
+
+        public static void ShaderPropertyNoHeader(MaterialEditor editor, MaterialProperty prop, GUIContent label)
+        {
+            if (editor == null || prop == null) return;
+            Material material = editor.target as Material;
+            if (material != null && IsHeaderOnlyProperty(material.shader, prop.name))
+            {
+                // 型どおりの既定表示（デコレーターなし）。
+                editor.DefaultShaderProperty(prop, label.text);
+                return;
+            }
+            editor.ShaderProperty(prop, label);
         }
 
         /// <summary>

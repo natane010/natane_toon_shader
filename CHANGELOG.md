@@ -38,6 +38,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `Tools > Natane > 最適化 Optimization > 未使用の追加表現を省く`: 選択中 (なければプロジェクト全体) のマテリアルのうち、追加表現を
   使っていないものだけをまとめてオンにする。アニメーションクリップが追加表現を動かしている場合は確認ダイアログで知らせる。Undo 対応。
 
+### Changed — インスペクターの見やすさ
+- セクション見出しの描画を修正。見出しの文字の後ろに灰色の帯が出て、左のアクセントバーと色帯が途中で隠れていた。
+  バーと色帯が見出しの端から端まで通り、折りたたみの矢印もバーに重ならない。
+- 日本語表示のとき、項目の上に英語の見出し (`Main Texture` / `Color Preservation` / `Final Color Blending` / `Surface Finish` など) が
+  日本語の小見出しと重複して出ていたのをやめた (シェーダーの `[Header]` を専用インスペクターでは描かない)。
+- 「軽量化（使っていない追加表現を省く）」の説明を、専門用語を使わない文面にした。
+
 ### Added — Blender 連携
 - **Blender アドオン** `Blender~/natane_toon_preview` (Blender 4.2 LTS / 5.0、EEVEE): Natane Toon の基本的な陰影・スペキュラ・リム・
   MatCap・発光・アウトラインをプレビューし、Unity の `.mat` を読み込める。再現できる範囲はアドオンの README に記載。

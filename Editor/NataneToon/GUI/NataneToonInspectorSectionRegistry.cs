@@ -350,7 +350,7 @@ namespace NataneToon.Editor
                 D("BackgroundLightmap", NataneInspectorTab.Output, "バリアント設定", "Variant", "背景ライトマップ", "Background Lightmap", 432,
                     "背景用にベイクした光を反映します。", "Applies baked lighting for backgrounds.", NataneInspectorDifficulty.Advanced,
                     terms: "background lightmap bake gi 背景 ベイク"),
-                D("ExtrasOff", NataneInspectorTab.Output, "バリアント設定", "Variant", "未使用の追加表現を省く", "Strip Unused Extras", 435,
+                D("ExtrasOff", NataneInspectorTab.Output, "バリアント設定", "Variant", "軽量化（使っていない追加表現を省く）", "Optimize (Skip Unused Extras)", 435,
                     "使っていない肌・顔・布などの追加表現をシェーダーから取り除いて軽くします。", "Removes unused skin, face and cloth extras from the shader to make it lighter.", NataneInspectorDifficulty.Advanced,
                     terms: "optimize performance strip extras lightweight keyword 最適化 軽量化 負荷 追加表現 省く"),
                 D("Rendering", NataneInspectorTab.Output, "出力", "Output", "レンダリング設定", "Rendering Settings", 440,

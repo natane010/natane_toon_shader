@@ -134,7 +134,7 @@ namespace NataneToon.Editor
             MaterialProperty property = FindProperty(propertyName, properties, false);
             if (property != null)
             {
-                materialEditor.ShaderProperty(property, label);
+                NataneToonShaderGUIUtility.ShaderPropertyNoHeader(materialEditor, property, label);
             }
         }
 
