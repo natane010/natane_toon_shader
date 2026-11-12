@@ -1,0 +1,18 @@
+schema_version = "1.0.0"
+
+id = "natane_toon_preview"
+version = "1.0.0"
+name = "Natane Toon Preview"
+tagline = "Preview the Natane Toon Shader (Unity) look in EEVEE"
+maintainer = "Natane"
+type = "add-on"
+
+blender_version_min = "4.2.0"
+
+license = ["SPDX:MIT"]
+copyright = ["2025 Natane Engine"]
+
+tags = ["Material", "Import-Export"]
+
+[permissions]
+files = "Read Unity .mat files and textures from disk"
